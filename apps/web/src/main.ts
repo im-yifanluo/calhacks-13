@@ -164,6 +164,10 @@ async function main(): Promise<void> {
     if (elapsed >= 1) { element("fps").textContent = `${Math.round(frames / elapsed)} fps`; frames = 0; elapsed = 0; }
     session.update(dt);
     renderer.render(scene, camera);
+    // In VR, Spark sorts splats on a timer between frames and then restores whatever render target was current. After a
+    // VR frame that is the headset's frame surface, which expires with the frame, so the restore fails with a WebGL
+    // INVALID_OPERATION about 120 times a second. Leave no target current; three sets the VR one again next frame.
+    if (renderer.xr.isPresenting) renderer.setRenderTarget(null);
   });
   document.addEventListener("visibilitychange", () => { previous = 0; if (document.hidden) currentViewer.release(); });
   addEventListener("pagehide", () => { renderer.setAnimationLoop(null); audio?.dispose(); currentViewer.dispose(); spark.dispose(); renderer.dispose(); }, { once: true });
