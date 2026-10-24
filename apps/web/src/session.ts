@@ -725,7 +725,9 @@ export class Session {
   private showUpload(open: boolean): void {
     this.ui.upload.hidden = !open;
     this.ui.uploadToggle.setAttribute("aria-expanded", String(open));
-    if (open) this.expand(true);
+    if (!open) return;
+    this.expand(true);
+    this.ui.upload.scrollIntoView({ block: "nearest" });
   }
 
   private render(): void {
