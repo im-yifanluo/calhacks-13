@@ -12,6 +12,8 @@ export interface Keyframe {
   q: Quat;
   /** uniform scale, default 1 */
   s?: number;
+  /** linear velocity in m/s (objects). Handed to physics when time is paused, so a thrown thing keeps flying. */
+  v?: Vec3;
 }
 
 export type SplatFormat = "spz" | "ply" | "splat" | "ksplat" | "sog";
@@ -24,6 +26,7 @@ export interface MemoryManifest {
   source: {
     device: string; // e.g. "ray-ban-meta-gen2"
     videoUrl?: string; // original clip (optional, for the "watch original" panel)
+    audioUrl?: string; // the clip's audio (.m4a), played in sync with the timeline
     durationSec: number;
     fps: number;
     width: number;
@@ -47,7 +50,7 @@ export interface MemoryManifest {
     url: string;
     format: SplatFormat;
     splatCount: number;
-    /** optional coarse collision mesh for the room (walls, tables) */
+    /** coarse collision surface for the room (floor + tables as a heightfield mesh), so thrown things land on tables */
     colliderUrl?: string; // .glb
   };
   /** The wearer's head path, for "see it from my eyes" mode. */
@@ -64,11 +67,17 @@ export interface DynamicObject {
   visual:
     | { kind: "mesh"; url: string } // .glb, preferred for physics objects
     | { kind: "splat"; url: string; format: SplatFormat }
-    | { kind: "splat-sequence"; urlPattern: string; frameCount: number; format: SplatFormat }; // per-frame splats (people, deforming things)
+    | { kind: "splat-sequence"; urlPattern: string; frameCount: number; format: SplatFormat } // per-frame splats (people, deforming things)
+    // A simple tinted shape. size = full extents in meters (x, y, z); cylinder axis is +Y.
+    | { kind: "primitive"; shape: "sphere" | "box" | "cylinder"; size: Vec3; color: string }
+    // Per-frame colored points (people "ghosts") already in world coordinates, so the object's track stays identity.
+    // Frame k is at t = k / sampleHz from clip start. One binary file; layout in pipeline/memreplay/handoff.py.
+    | { kind: "points-sequence"; url: string; frameCount: number; sampleHz: number };
   collider:
     | { kind: "box"; halfExtents: Vec3 }
     | { kind: "sphere"; radius: number }
     | { kind: "capsule"; halfHeight: number; radius: number }
+    | { kind: "cylinder"; halfHeight: number; radius: number }
     | { kind: "convex"; url: string }; // .glb simplified hull
   /** kg, rough guess from label/size. Used once time is paused. */
   mass: number;

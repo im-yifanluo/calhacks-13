@@ -1,0 +1,102 @@
+:root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; color: #e7f0f3; background: #0c151e; font-synthesis: none; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+[hidden] { display: none !important; }
+canvas { display: block; touch-action: none; }
+header { position: absolute; top: 32px; left: 36px; pointer-events: none; max-width: calc(100% - 180px); }
+.eyebrow { display: flex; align-items: center; gap: 10px; color: #b6ced4; font-size: 11px; letter-spacing: .14em; font-weight: 650; }
+.brand-dot { width: 9px; height: 9px; border: 2px solid #99e5d8; border-radius: 50%; box-shadow: 0 0 20px #6fffcf66; }
+#mode { margin-left: 10px; font-size: 9px; letter-spacing: .08em; border: 1px solid #37505a; padding: 5px 7px; border-radius: 5px; }
+h1 { font-size: clamp(22px, 3.2vw, 39px); font-weight: 500; letter-spacing: -.045em; margin: 16px 0 8px; }
+header p { font-size: 13px; color: #94acb7; margin: 0; }
+.scene-meta { position: absolute; top: 34px; right: 36px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; font: 10px ui-monospace, monospace; color: #94acb7; letter-spacing: .05em; }
+#state { color: #9de6d8; }
+#hud { position: absolute; bottom: max(25px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: min(980px, calc(100% - 48px)); padding: 18px 22px 14px; background: #101e29ed; border: 1px solid #30434e; border-radius: 16px; box-shadow: 0 12px 50px #0005; backdrop-filter: blur(16px); }
+.hud-top { display: flex; justify-content: space-between; gap: 10px; font-size: 10px; color: #91a9b6; letter-spacing: .025em; margin-bottom: 14px; }
+.local-label { color: #d6b686; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.transport, .tools { display: flex; gap: 10px; align-items: center; }
+.tools { margin-top: 16px; flex-wrap: wrap; }
+button, select { font: inherit; font-size: 12px; border: 1px solid #3a505f; background: #1d2d3a; color: #d7e7ed; padding: 9px 12px; border-radius: 7px; cursor: pointer; }
+button:hover, select:hover { background: #2b4150; border-color: #7998a4; }
+button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid #b4f6e6; outline-offset: 4px; }
+button.primary { background: #a2e8d6; color: #0c2927; border-color: #a2e8d6; font-weight: 650; min-width: 90px; }
+button.primary:hover { background: #c1f8ea; }
+button:disabled, fieldset:disabled { opacity: .5; }
+.scrubber { position: relative; flex: 1; min-width: 50px; }
+input[type=range] { width: 100%; accent-color: #a2e8d6; cursor: pointer; display: block; margin: 0; }
+#markers { position: absolute; top: 15px; left: 7px; right: 7px; height: 9px; }
+.fork-marker { position: absolute; transform: translateX(-50%); border: none; background: none; padding: 0; font-size: 9px; color: #ffc58e; line-height: 10px; }
+#time { font: 11px ui-monospace, monospace; min-width: 91px; text-align: right; color: #b6cbd5; }
+.take-label { font-size: 9px; letter-spacing: .1em; color: #9bb3c0; }
+select { max-width: 260px; flex: 1; min-width: 130px; }
+.toggle { display: inline-flex; gap: 6px; align-items: center; font-size: 11px; white-space: nowrap; color: #bbced6; }
+input[type=checkbox] { accent-color: #a2e8d6; }
+#status { font-size: 12px; color: #e0c7a9; margin: 15px 0 11px; line-height: 1.5; }
+.help { display: flex; justify-content: space-between; gap: 14px; border-top: 1px solid #293d49; padding-top: 12px; color: #9bb1bc; font-size: 10px; line-height: 1.6; }
+.help details { max-width: 330px; } summary { cursor: pointer; white-space: nowrap; } .help p { margin: 6px 0 0; }
+kbd { font: inherit; background: #263944; padding: 1px 4px; border-radius: 3px; }
+#warning { background: #493924; border: 1px solid #75603c; padding: 10px; border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; }
+#loading { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 14px; font-size: 14px; color: #c5dbdf; }
+.spinner { width: 20px; height: 20px; border: 2px solid #34525b; border-top-color: #a2e8d6; border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#vr-entry > * { position: absolute !important; bottom: auto !important; top: 105px !important; left: auto !important; right: 36px !important; width: 120px !important; font: 11px system-ui !important; border-color: #597582 !important; border-radius: 8px !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+.in-xr #hud, .in-xr header, .in-xr .scene-meta { display: none; }
+@media (max-width: 650px) {
+  header { top: 20px; left: 20px; max-width: calc(100% - 40px); } header p { max-width: 260px; font-size: 12px; }
+  h1 { max-width: 310px; } #mode { display: none; }
+  .scene-meta { top: 20px; right: 20px; } #fps { display: none; }
+  #hud { width: calc(100% - 24px); bottom: max(12px, env(safe-area-inset-bottom)); padding: 14px; }
+  #vr-entry > * { top: 138px !important; right: 20px !important; }
+  .transport { gap: 7px; } #restart { display: none; } .tools { gap: 8px; } #time { min-width: 80px; font-size: 10px; }
+  #play { min-width: 73px; padding: 9px; } #status { font-size: 11px; } .help { flex-direction: column; gap: 6px; }
+}
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+/* Shared room panel (session.ts), from jerry's #panel. Scoped to #room-panel so it never restyles the HUD. */
+.local-label.shared { color: #a2e8d6; }
+#room-panel { position: absolute; top: 150px; right: 36px; width: 304px; max-height: max(150px, calc(100dvh - 162px - var(--hud-space, 250px))); display: flex; flex-direction: column; background: #101e29ed; border: 1px solid #30434e; border-radius: 16px; box-shadow: 0 12px 50px #0005; backdrop-filter: blur(16px); font-size: 12px; color: #d7e7ed; }
+#room-panel .room-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 14px; }
+#room-toggle { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; min-height: 36px; padding: 4px 0; border: 0; background: none; text-align: left; }
+#room-toggle:hover { background: none; color: #fff; }
+#room-toggle::after { content: "▾"; color: #91a9b6; font-size: 10px; }
+#room-panel.collapsed #room-toggle::after { content: "▸"; }
+.room-eyebrow { font-size: 10px; letter-spacing: .14em; font-weight: 650; color: #a2e8d6; }
+#room-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d7e7ed; }
+#room-connection { font: 10px ui-monospace, monospace; color: #91a9b6; text-align: right; max-width: 52%; }
+#room-body { overflow: auto; padding: 0 16px 12px; border-top: 1px solid #293d49; }
+#room-panel.collapsed #room-body { display: none; }
+#room-panel details { border-bottom: 1px solid #293d49; padding: 10px 0; }
+#room-panel summary { font-weight: 600; font-size: 12px; margin-bottom: 4px; }
+#room-panel label { display: block; font-size: 11px; letter-spacing: .02em; color: #b4c5cc; margin: 10px 0; }
+#room-panel input:not([type=checkbox]), #room-panel select { display: block; width: 100%; max-width: none; min-width: 0; min-height: 42px; margin-top: 4px; padding: 8px; font: inherit; font-size: 13px; color: #e7f2f1; background: #0b141e; border: 1px solid #3a505f; border-radius: 8px; }
+#room-panel .row input { margin-top: 0; }
+#room-panel button { min-height: 42px; }
+#room-panel #library-add { width: 100%; }
+#room-panel .row { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
+#room-panel .row > * { flex: 1; min-width: 0; }
+#room-label { display: block; margin-top: 12px; font-size: 12px; }
+#room-people { list-style: none; margin: 6px 0 0; padding: 0; color: #b6cbd5; }
+#room-people li { display: flex; align-items: center; gap: 8px; padding: 3px 0; overflow-wrap: anywhere; }
+#room-people .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; }
+#room-panel p { font-size: 11px; color: #9bb1bc; margin: 8px 0; line-height: 1.5; }
+#room-panel p:empty { display: none; }
+#room-panel a { color: #a2e8d6; }
+#room-message { overflow-wrap: anywhere; }
+#room-panel #room-error, #room-panel #library-errors { color: #ffad9e; white-space: pre-wrap; overflow-wrap: anywhere; }
+#upload-panel { border-bottom: 1px solid #293d49; padding-bottom: 10px; }
+#upload-panel h2 { font-size: 13px; margin: 12px 0 4px; }
+#upload-panel video { display: block; width: 100%; max-height: 180px; margin: 8px 0; border-radius: 8px; background: #000; }
+#upload-panel button { margin-right: 8px; }
+#upload-start { background: #a2e8d6; color: #0c2927; border-color: #a2e8d6; font-weight: 650; }
+#upload-panel progress { display: block; width: 100%; margin-top: 12px; accent-color: #a2e8d6; }
+/* Phone WALK pad (phone-joystick.ts): touch devices only, never in VR or the wearer's view. */
+#joystick { position: absolute; left: 24px; bottom: calc(var(--hud-space, 250px) + 16px); width: 88px; height: 88px; display: none; place-items: center; border-radius: 50%; border: 1px solid #a2e8d677; background: radial-gradient(circle, #a2e8d633 20%, #162834aa 23%); touch-action: none; user-select: none; -webkit-user-select: none; }
+.touch #joystick { display: grid; }
+#joystick .knob { grid-area: 1 / 1; width: 34px; height: 34px; border-radius: 50%; background: #a2e8d640; border: 1px solid #a2e8d6aa; pointer-events: none; }
+#joystick .joystick-label { grid-area: 1 / 1; font-size: 9px; letter-spacing: .1em; color: #d7e7ed; pointer-events: none; }
+.in-xr #room-panel, .in-xr #joystick, .wearer-view #joystick { display: none; }
+@media (max-width: 650px) {
+  #room-panel { top: 198px; right: 12px; width: min(304px, calc(100% - 24px)); max-height: max(120px, calc(100dvh - 210px - var(--hud-space, 300px))); }
+  #joystick { left: 16px; bottom: calc(var(--hud-space, 300px) + 12px); }
+}

@@ -1,164 +1,184 @@
-// Viewer skeleton: one codebase for Quest 3S (WebXR) and phones (touch).
-// Owners: P3 (rendering, physics, XR), P4 (networking, touch). See docs/PLAN.md section 2.3.
 import * as THREE from "three";
+import { VRButton } from "three/examples/jsm/webxr/VRButton.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { SparkRenderer, SparkXr, SplatMesh } from "@sparkjsdev/spark";
-import type { MemoryManifest, Keyframe } from "@memreplay/shared";
+import { SparkRenderer } from "@sparkjsdev/spark";
+import { loadMemory } from "./loader.js";
+import { initPhysics } from "./physics.js";
+import { Viewer } from "./viewer.js";
+import { XRInput } from "./input-xr.js";
+import { desktopInput } from "./input-desktop.js";
+import { sampleTrack } from "./tracks.js";
+import { Session } from "./session.js";
+import { PhoneJoystick, isTouchDevice } from "./phone-joystick.js";
+import "./style.css";
 
-const params = new URLSearchParams(location.search);
-const manifestUrl = params.get("memory") ?? "/mock/memory.json";
-// Asset URLs inside memory.json may be relative to the manifest itself.
-const manifestBase = new URL(manifestUrl, location.href);
-const resolve = (u: string) => new URL(u, manifestBase).href;
+declare global { interface Window { memoryReplay?: Viewer; __memreplay?: unknown } }
+const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const status = element("status"), loading = element("loading"), warning = element("warning");
+const play = element<HTMLButtonElement>("play"), scrub = element<HTMLInputElement>("scrub");
+const branches = element<HTMLSelectElement>("branches"), debug = element<HTMLInputElement>("debug");
+const eyes = element<HTMLInputElement>("eyes");
+let viewer: Viewer | undefined;
 
-const renderer = new THREE.WebGLRenderer({ antialias: false });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
-renderer.xr.enabled = true;
-document.body.appendChild(renderer.domElement);
-
-const scene = new THREE.Scene();
-// Spark draws every SplatMesh through one SparkRenderer; nothing renders without it.
-// maxStdDev sqrt(5) trims splat footprints for Quest frame rate (Spark default is sqrt(8)).
-scene.add(new SparkRenderer({ renderer, maxStdDev: Math.sqrt(5) }));
-
-// The camera lives in a rig. In VR the headset pose is applied relative to the rig,
-// so moving the rig is how we put the viewer on the memory's floor at the wearer's start spot.
-const rig = new THREE.Group();
-scene.add(rig);
-const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 200);
-camera.position.set(0, 1.6, 2);
-rig.add(camera);
-
-// Enter-VR button: reuse #vr in the HUD so Spark doesn't add its own big button over the scrubber.
-// Spark shows it only where immersive VR is supported.
-new SparkXr({ renderer, mode: "vr", elementId: "vr", enableHands: true, fixedFoveation: 1, referenceSpaceType: "local-floor" });
-
-const controls = new OrbitControls(camera, renderer.domElement); // phone + desktop
-controls.target.set(0, 1.2, 0);
-
-let vrSpawn = { x: 0, y: 0, z: 2, yaw: 0 };
-const desktopPose = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
-renderer.xr.addEventListener("sessionstart", () => {
-  desktopPose.pos.copy(camera.position);
-  desktopPose.quat.copy(camera.quaternion);
-  controls.enabled = false;
-  rig.position.set(vrSpawn.x, vrSpawn.y, vrSpawn.z);
-  rig.rotation.set(0, vrSpawn.yaw, 0);
-});
-renderer.xr.addEventListener("sessionend", () => {
-  rig.position.set(0, 0, 0);
-  rig.rotation.set(0, 0, 0);
-  camera.position.copy(desktopPose.pos);
-  camera.quaternion.copy(desktopPose.quat);
-  controls.enabled = true;
-});
-
-addEventListener("resize", () => {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
-
-// --- timeline state (later: driven by the SpacetimeDB `timeline` row so everyone shares it) ---
-let playhead = 0;
-let playing = true;
-let duration = 1;
-
-const _p = new THREE.Vector3();
-const _q = new THREE.Quaternion();
-function sampleTrack(track: Keyframe[], t: number, out: THREE.Object3D) {
-  if (track.length === 0) return;
-  let i = 0;
-  while (i < track.length - 2 && track[i + 1].t < t) i++;
-  const a = track[i], b = track[Math.min(i + 1, track.length - 1)];
-  const k = b.t > a.t ? THREE.MathUtils.clamp((t - a.t) / (b.t - a.t), 0, 1) : 0;
-  out.position.set(...a.p).lerp(_p.set(...b.p), k);
-  out.quaternion.set(...a.q).slerp(_q.set(...b.q), k);
-}
-
-const dynamic: { obj: THREE.Object3D; track: Keyframe[]; from: number; to: number }[] = [];
-
-async function loadTrack(track: Keyframe[] | { url: string }, id: string): Promise<Keyframe[]> {
-  if (Array.isArray(track)) return track;
-  try {
-    return await (await fetch(resolve(track.url))).json();
-  } catch (e) {
-    console.error("track load failed", id, e);
-    return [];
-  }
-}
-
-async function load() {
-  const m: MemoryManifest = await (await fetch(manifestUrl)).json();
-  duration = m.timeline.durationSec;
-  scene.add(new SplatMesh({ url: resolve(m.background.url) }));
-
-  // VR spawn: the wearer's first head position, standing on the memory's floor, facing where they faced.
-  const camTrack = await loadTrack(m.camera.track, "camera");
-  const k0 = camTrack[0];
-  const yaw = k0 ? new THREE.Euler().setFromQuaternion(new THREE.Quaternion(...k0.q), "YXZ").y : 0;
-  vrSpawn = { x: k0?.p[0] ?? 0, y: m.world.floorY, z: k0?.p[2] ?? 2, yaw };
-
-  const tracks = await Promise.all(m.objects.map((o) => loadTrack(o.track, o.id)));
-  m.objects.forEach((o, i) => {
-    // Placeholder visuals: boxes until GLB/splat loading lands.
-    const size = o.collider.kind === "box" ? o.collider.halfExtents.map((v) => v * 2) : [0.3, 0.3, 0.3];
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(size[0], size[1], size[2]),
-      new THREE.MeshNormalMaterial({ wireframe: true }),
-    );
-    mesh.name = o.id;
-    mesh.visible = false; // the loop applies visibleFrom/visibleTo
-    scene.add(mesh);
-    dynamic.push({ obj: mesh, track: tracks[i], from: o.visibleFrom, to: o.visibleTo });
+async function main(): Promise<void> {
+  const params = new URLSearchParams(location.search);
+  const manifestUrl = params.get("memory") ?? "/mock/memory.json";
+  const demo = !params.has("memory");
+  element("mode").textContent = demo ? "LOCAL DEMO" : "MEMORY VIEWER";
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+  renderer.setPixelRatio(1); renderer.setSize(innerWidth, innerHeight);
+  renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType("local-floor"); renderer.xr.setFoveation(1);
+  renderer.domElement.setAttribute("aria-label", "Interactive 3D memory. Pause, then drag an object to throw it.");
+  element("stage").appendChild(renderer.domElement);
+  element("vr-entry").appendChild(VRButton.createButton(renderer, { optionalFeatures: ["hand-tracking"] }));
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0c151e);
+  scene.add(new THREE.HemisphereLight(0xbfeaf4, 0x374454, 2.5));
+  const light = new THREE.DirectionalLight(0xffd7b5, 3); light.position.set(3, 5, 2); scene.add(light);
+  const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.05, 200);
+  camera.position.set(2.5, 2.1, 3.5);
+  const rig = new THREE.Group(); scene.add(rig); rig.add(camera);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, innerWidth < 650 ? 0.2 : 0.8, -1); controls.enableDamping = true; controls.maxDistance = 20; controls.minDistance = 0.4;
+  controls.maxPolarAngle = Math.PI * 0.49;
+  const spark = new SparkRenderer({ renderer, preUpdate: false, maxStdDev: Math.sqrt(5), lodSplatCount: 500_000 });
+  scene.add(spark);
+  // Shared rooms (session.ts) connect while the memory loads. Without a room the viewer stays local.
+  const session = new Session({ renderer, scene, camera, manifestUrl, showStatus: message => { status.textContent = message; } });
+  addEventListener("pagehide", () => session.dispose(), { once: true });
+  const joystick = new PhoneJoystick(element("joystick"), camera, controls);
+  document.body.classList.toggle("touch", isTouchDevice());
+  // Keep the room panel and the WALK pad clear of the bottom HUD, whatever its height.
+  const hud = element("hud");
+  const hudSpace = () => document.documentElement.style.setProperty("--hud-space", `${Math.max(0, Math.round(innerHeight - hud.getBoundingClientRect().top))}px`);
+  new ResizeObserver(hudSpace).observe(hud); addEventListener("resize", hudSpace); hudSpace();
+  const savedCamera = new THREE.Vector3(), savedTarget = new THREE.Vector3();
+  // Keep main's corrected spawn: start at the wearer's horizontal position on the scene floor.
+  let vrSpawn = { x: 0, y: 0, z: 2, yaw: 0 };
+  renderer.xr.addEventListener("sessionstart", () => {
+    savedCamera.copy(camera.position); savedTarget.copy(controls.target); controls.enabled = false;
+    rig.position.set(vrSpawn.x, vrSpawn.y, vrSpawn.z); rig.rotation.set(0, vrSpawn.yaw, 0);
+    eyes.checked = false; eyes.disabled = true; document.body.classList.add("in-xr");
   });
-}
-
-const playBtn = document.getElementById("play")!;
-const scrub = document.getElementById("scrub") as HTMLInputElement;
-const timeLabel = document.getElementById("time")!;
-function setPlaying(v: boolean) {
-  playing = v; // paused => physics mode (Rapier) takes over grabbed objects
-  playBtn.textContent = playing ? "Pause" : "Play";
-}
-playBtn.onclick = () => setPlaying(!playing);
-scrub.oninput = () => (playhead = (Number(scrub.value) / 1000) * duration);
-
-// In VR the DOM HUD is invisible, so controllers drive the timeline:
-// A or X toggles play/pause; while paused, a thumbstick left/right scrubs (2 s per second).
-let prevToggle = false;
-function pollXrInput(dt: number) {
-  const session = renderer.xr.getSession();
-  if (!session) return;
-  let toggle = false;
-  let stick = 0;
-  for (const src of session.inputSources) {
-    const gp = src.gamepad;
-    if (!gp) continue;
-    if (gp.buttons[4]?.pressed) toggle = true;
-    const x = gp.axes[2] ?? 0;
-    if (Math.abs(x) > Math.abs(stick)) stick = x;
+  renderer.xr.addEventListener("sessionend", () => {
+    rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0); camera.position.copy(savedCamera);
+    controls.target.copy(savedTarget); controls.enabled = true; eyes.disabled = false; document.body.classList.remove("in-xr");
+  });
+  addEventListener("resize", () => {
+    camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight);
+  });
+  renderer.domElement.addEventListener("webglcontextlost", event => {
+    event.preventDefault(); renderer.setAnimationLoop(null); status.textContent = "Graphics context lost. Reload to recover.";
+    element("reload").hidden = false;
+  });
+  await initPhysics();
+  const memory = await loadMemory(manifestUrl, demo, message => { warning.hidden = false; warning.textContent = message; });
+  const firstPose = memory.cameraTrack[0];
+  vrSpawn = { x: firstPose.p[0], y: memory.manifest.world.floorY, z: firstPose.p[2],
+    yaw: new THREE.Euler().setFromQuaternion(new THREE.Quaternion(...firstPose.q).normalize(), "YXZ").y };
+  if (renderer.xr.isPresenting) { rig.position.set(vrSpawn.x, vrSpawn.y, vrSpawn.z); rig.rotation.set(0, vrSpawn.yaw, 0); }
+  scene.add(memory.root);
+  const grid = new THREE.GridHelper(10, 40, 0x437979, 0x243642); grid.position.y = memory.manifest.world.floorY; scene.add(grid);
+  viewer = new Viewer(memory, message => { status.textContent = message; }); window.memoryReplay = viewer;
+  const currentViewer = viewer;
+  const xr = new XRInput(renderer, rig, camera, viewer);
+  desktopInput(renderer.domElement, camera, controls, viewer);
+  element("title").textContent = demo ? "A moment. Another possibility." : memory.manifest.title;
+  element("subtitle").textContent = demo ? "Pause the memory. Change the throw. Replay your take." : "Explore this recording, then create an alternate take.";
+  element("asset-info").textContent = `${memory.objects.length} objects · ${memory.manifest.timeline.durationSec.toFixed(1)} seconds · ${demo ? "synthetic scene" : "pipeline assets"}`;
+  status.textContent = "Playing the original. Pause, then drag the ball to make a new take.";
+  loading.hidden = true; element<HTMLFieldSetElement>("timeline-controls").disabled = false;
+  const debugLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false }));
+  debugLines.frustumCulled = false; debugLines.renderOrder = 100; scene.add(debugLines);
+  const debugBoxes = memory.objects.map(object => {
+    const proxy = viewer!.pickables.find(p => p.userData.objectId === object.definition.id)!;
+    const lines = new THREE.LineSegments(new THREE.EdgesGeometry(proxy.geometry), new THREE.LineBasicMaterial({ color: 0xa3f3ce, depthTest: false }));
+    object.root.add(lines); lines.visible = false; return lines;
+  });
+  let branchCount = 0;
+  play.onclick = () => currentViewer.togglePlay();
+  scrub.oninput = () => currentViewer.seek(Number(scrub.value) / 1000 * currentViewer.timeline.duration);
+  branches.onchange = () => currentViewer.selectBranch(branches.value);
+  element("original").onclick = () => currentViewer.selectBranch("original");
+  element("restart").onclick = () => currentViewer.seek(0);
+  element("export").onclick = () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(currentViewer.timeline.export(memory.manifest.id), null, 2)], { type: "application/json" }));
+    const a = document.createElement("a"); a.href = url; a.download = `${memory.manifest.id}-takes.json`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const preEyesPosition = new THREE.Vector3(), preEyesTarget = new THREE.Vector3();
+  eyes.onchange = () => {
+    if (eyes.checked) { preEyesPosition.copy(camera.position); preEyesTarget.copy(controls.target); }
+    else { camera.position.copy(preEyesPosition); controls.target.copy(preEyesTarget); camera.fov = 65; camera.updateProjectionMatrix(); }
+    controls.enabled = !eyes.checked;
+  };
+  let previous = 0, frames = 0, elapsed = 0, lastUI = 0;
+  renderer.setAnimationLoop(timestamp => {
+    const dt = previous ? Math.min((timestamp - previous) / 1000, 0.1) : 0; previous = timestamp;
+    xr.update(dt); currentViewer.update(dt);
+    if (eyes.checked && !renderer.xr.isPresenting) {
+      sampleTrack(memory.cameraTrack, currentViewer.timeline.time, camera);
+      camera.fov = memory.manifest.camera.fovYDeg; camera.updateProjectionMatrix();
+    } else if (!renderer.xr.isPresenting) { joystick.update(dt); if (controls.enabled) controls.update(); }
+    const tl = currentViewer.timeline;
+    if (timestamp - lastUI > 100) {
+      lastUI = timestamp; play.textContent = tl.playing ? "Pause" : "Play take";
+      scrub.value = String(tl.time / tl.duration * 1000);
+      scrub.setAttribute("aria-valuetext", `${tl.time.toFixed(1)} of ${tl.duration.toFixed(1)} seconds`);
+      element("time").textContent = `${tl.time.toFixed(1)} / ${tl.duration.toFixed(1)}s`;
+      element("state").textContent = currentViewer.held ? "HOLDING" : currentViewer.recording ? "RECORDING THROW" : tl.playing ? "PLAYING" : "PAUSED";
+      if (branchCount !== tl.branches.length) {
+        branchCount = tl.branches.length; branches.replaceChildren();
+        for (const branch of tl.branches) {
+          const option = document.createElement("option"); option.value = branch.id;
+          const parent = tl.branches.find(b => b.id === branch.parentId);
+          option.textContent = branch.parentId ? `${branch.name} · ${parent?.name ?? "Original"} at ${branch.forkTime.toFixed(1)}s` : "Original recording";
+          branches.add(option);
+        }
+        const markers = element("markers"); markers.replaceChildren();
+        for (const branch of tl.branches.slice(1)) {
+          const button = document.createElement("button"); button.className = "fork-marker";
+          button.style.left = `${branch.forkTime / tl.duration * 100}%`; button.title = `${branch.name}: fork at ${branch.forkTime.toFixed(1)}s`;
+          button.setAttribute("aria-label", button.title); button.textContent = "◆"; button.onclick = () => currentViewer.selectBranch(branch.id); markers.append(button);
+        }
+      }
+      branches.value = tl.activeId;
+      document.body.classList.toggle("wearer-view", eyes.checked);
+    }
+    debugLines.visible = debug.checked && currentViewer.physics.bodies.size > 0;
+    debugBoxes.forEach(box => { box.visible = debug.checked && !debugLines.visible; });
+    if (debugLines.visible) {
+      const { vertices, colors } = currentViewer.physics.world.debugRender();
+      debugLines.geometry.dispose(); debugLines.geometry = new THREE.BufferGeometry();
+      debugLines.geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+      debugLines.geometry.setAttribute("color", new THREE.BufferAttribute(colors, 4));
+    }
+    frames++; elapsed += dt;
+    if (elapsed >= 1) { element("fps").textContent = `${Math.round(frames / elapsed)} fps`; frames = 0; elapsed = 0; }
+    session.update(dt);
+    renderer.render(scene, camera);
+  });
+  document.addEventListener("visibilitychange", () => { previous = 0; if (document.hidden) currentViewer.release(); });
+  addEventListener("pagehide", () => { renderer.setAnimationLoop(null); currentViewer.dispose(); spark.dispose(); renderer.dispose(); }, { once: true });
+  session.attach(currentViewer);
+  if (import.meta.env.DEV) {
+    // Dev-only probe for multi-tab checks: compare positionsAt(t) across tabs of one room.
+    const probe = new THREE.Object3D();
+    window.__memreplay = {
+      viewer: currentViewer, session, memory,
+      get adapter() { return session.adapter; },
+      positionsAt: (t: number) => Object.fromEntries(memory.objects.map(o => {
+        sampleTrack(currentViewer.timeline.track(o.definition.id, o.track, t), t, probe);
+        return [o.definition.id, probe.position.toArray().map(v => Math.round(v * 1e4) / 1e4)];
+      })),
+      takes: () => currentViewer.timeline.branches.map(b => ({ id: b.id, parentId: b.parentId, name: b.name, forkTime: b.forkTime,
+        frames: Object.fromEntries([...b.tracks].map(([id, frames]) => [id, frames.length])) })),
+    };
   }
-  if (toggle && !prevToggle) setPlaying(!playing);
-  prevToggle = toggle;
-  if (!playing && Math.abs(stick) > 0.2) playhead = THREE.MathUtils.clamp(playhead + stick * 2 * dt, 0, duration);
+  window.dispatchEvent(new CustomEvent("memoryreplay:ready", { detail: currentViewer }));
 }
-
-const timer = new THREE.Timer();
-renderer.setAnimationLoop((time) => {
-  timer.update(time);
-  const dt = timer.getDelta();
-  pollXrInput(dt);
-  if (playing) playhead = (playhead + dt) % duration;
-  for (const d of dynamic) {
-    d.obj.visible = playhead >= d.from && playhead <= d.to;
-    sampleTrack(d.track, playhead, d.obj);
-  }
-  scrub.value = String(Math.round((playhead / duration) * 1000));
-  timeLabel.textContent = `${playhead.toFixed(1)}s`;
-  if (controls.enabled) controls.update();
-  renderer.render(scene, camera);
+element("reload").onclick = () => location.reload();
+main().catch(error => {
+  console.error(error); loading.hidden = true; element("reload").hidden = false;
+  status.textContent = `Could not load this memory: ${error instanceof Error ? error.message : String(error)}`;
+  warning.hidden = false; warning.textContent = "Check the manifest URL, asset URLs, and CORS access. The local demo works without pipeline assets.";
 });
-
-load().catch((e) => console.error("failed to load memory", e));

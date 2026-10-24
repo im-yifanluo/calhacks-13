@@ -11,9 +11,11 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  id: __t.u64().primaryKey(),
+  key: __t.string().primaryKey(),
   branchId: __t.u64().name("branch_id"),
   objectId: __t.string().name("object_id"),
   startMediaUs: __t.u64().name("start_media_us"),
+  endMediaUs: __t.u64().name("end_media_us"),
   keyframesJson: __t.string().name("keyframes_json"),
+  author: __t.identity(),
 });

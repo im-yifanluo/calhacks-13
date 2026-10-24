@@ -12,6 +12,7 @@ import {
 
 export default __t.row({
   id: __t.u64().primaryKey(),
+  roomId: __t.u64().name("room_id"),
   memoryId: __t.u64().name("memory_id"),
   parentId: __t.u64().name("parent_id"),
   forkMediaUs: __t.u64().name("fork_media_us"),
