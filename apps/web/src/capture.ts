@@ -1,8 +1,10 @@
-import { Multiplayer } from "./net";
+import { Multiplayer, type Memory } from "./net";
 import { uploadPanel } from "./upload";
 import { captureSimulation } from "./capture-simulation";
 import "./capture.css";
 const net = new Multiplayer();
+/** A test upload (presign with pipeline:false) is assigned to its uploader, not the worker. */
+const testUpload = (m: Memory) => m.pipelineIdentity.isEqual(m.owner);
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const select = $<HTMLSelectElement>("recordings"),
@@ -16,7 +18,12 @@ function show() {
   $("row-id").textContent = memory
     ? `#${memory.id} · confirmed in SpacetimeDB`
     : "—";
-  $("row-status").textContent = memory?.status || "—";
+  $("row-status").textContent = memory
+    ? memory.status +
+      (testUpload(memory)
+        ? " · test upload, not queued for the 3D pipeline"
+        : "")
+    : "—";
   const link = $<HTMLAnchorElement>("source-link");
   link.textContent = memory?.sourceUrl || "—";
   if (memory) {
@@ -88,7 +95,12 @@ function render() {
   signature = next;
   select.replaceChildren();
   for (const m of memories)
-    select.add(new Option(`#${m.id} · ${m.title} · ${m.status}`, m.requestId));
+    select.add(
+      new Option(
+        `#${m.id} · ${m.title} · ${m.status}${testUpload(m) ? " · test" : ""}`,
+        m.requestId,
+      ),
+    );
   if (!selected) selected = memories[0]?.requestId || "";
   select.value = selected;
   if (!memories.length) select.add(new Option("No uploaded videos yet", ""));

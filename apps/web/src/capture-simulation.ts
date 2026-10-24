@@ -132,7 +132,7 @@ export function captureSimulation(
         status.textContent = message;
       });
       phase = "passed";
-      status.textContent = `PASS — database row #${result.id}; ${result.size.toLocaleString()} bytes downloaded and identical to your recording. Press Play in Stored recordings.`;
+      status.textContent = `PASS — database row #${result.id}; ${result.size.toLocaleString()} bytes downloaded and identical to your recording. Test row, not queued for the 3D pipeline. Press Play in Stored recordings.`;
       proof.textContent = `SHA-256: ${result.sha256}`;
       onComplete(result.requestId);
     } catch (error) {
@@ -212,6 +212,7 @@ export function captureSimulation(
           identity,
           token,
           import.meta.env.VITE_UPLOAD_API || "",
+          false, // A synthetic test pattern: keep it off the GPU worker's queue.
         );
         void upload();
       };

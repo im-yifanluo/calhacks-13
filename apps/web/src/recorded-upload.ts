@@ -4,6 +4,7 @@ type Prepared = {
   requestId: string;
   receiptExpiresAt: number;
   headers: Record<string, string>;
+  pipeline?: boolean;
 };
 export type VerifiedRecording = {
   id: string;
@@ -24,6 +25,8 @@ export class RecordedUpload {
     private readonly identity: string,
     private readonly token: string,
     private readonly base = "",
+    /** false for a test clip: its row is assigned to the uploader, never to the pipeline worker. */
+    private readonly pipeline = true,
   ) {}
 
   private async api(path: string, body?: unknown) {
@@ -54,13 +57,20 @@ export class RecordedUpload {
   async run(progress: (message: string) => void): Promise<VerifiedRecording> {
     if (!this.prepared || this.prepared.receiptExpiresAt <= Date.now()) {
       progress("Preparing automatic upload…");
-      this.prepared = await this.api("uploads/presign", {
+      const prepared: Prepared = await this.api("uploads/presign", {
         name: this.file.name,
         size: this.file.size,
         type: this.file.type,
         title: this.title,
         durationSec: this.durationSec,
+        pipeline: this.pipeline,
       });
+      // An upload service without the flag would queue this test clip for the worker.
+      if (!this.pipeline && prepared.pipeline !== false)
+        throw new Error(
+          "The upload service does not support test uploads. Restart it from this build.",
+        );
+      this.prepared = prepared;
       this.uploaded = false;
     }
     const prepared = this.prepared!;
@@ -92,6 +102,13 @@ export class RecordedUpload {
     if (!row?.id || row.id !== completed.memory?.id)
       throw new Error(
         "Database lookup did not confirm this recording. Retry verification.",
+      );
+    if (
+      !this.pipeline &&
+      row.pipelineIdentity?.toLowerCase() !== this.identity.toLowerCase()
+    )
+      throw new Error(
+        `Database row #${row.id} is assigned to the pipeline worker, so this test clip may be processed.`,
       );
     progress(
       `Database row #${row.id} found. Downloading the stored video to compare bytes…`,
