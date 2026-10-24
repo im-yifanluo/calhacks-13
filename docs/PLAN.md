@@ -2,7 +2,7 @@
 
 Record a moment on Ray-Ban Meta glasses, rebuild it as a **4D scene** (3D + time), and walk back into it with friends on a **Quest 3S or a phone**. Pause time, grab things, throw them, and branch off an **alternate timeline**.
 
-*Written Fri Oct 23, 7 PM. Vision pipeline revised at 10:55 PM (one clip, ViPE / SAM 3 / SAM 3D / CoTracker3). Items marked (verify) or unverified still need checking.*
+*Written Fri Oct 23, 7 PM. Vision pipeline revised Sat Oct 24, after midnight, for one owner: ViPE on one clip, simple object shapes picked by Claude, SAM 3 and SAM 3D cut. Items marked (verify) or unverified still need checking.*
 
 ---
 
@@ -12,12 +12,12 @@ Record a moment on Ray-Ban Meta glasses, rebuild it as a **4D scene** (3D + time
 |---|---|---|
 | Unity or web? | **One WebXR web app** (three.js + Spark splats), served over HTTPS to the Quest 3S browser, phones and laptops | One URL gives you sharing, phones and multiplayer together. Unity Gaussian splats on Quest are only "reported to work" (aras-p's plugin is no longer developed), and Unity would mean a second phone build. |
 | XR framework | Default: **plain three.js + Spark 2.4 + Rapier**, already scaffolded in `apps/web`. Spike: **Meta IWSDK** (Havok physics, grab, locomotion built in), timeboxed to 90 min tonight | IWSDK saves hours of grab and hand code. The risk is that it pins `three` to `super-three@0.185`, and Spark has to share that same instance. Switch only if the spike renders a `.spz` on Quest at 72 fps. |
-| Full 4D Gaussian splatting? | **No, use a layered scene.** Static background splat, plus each moving object as its own splat with a collider and a pose track | Per-scene 4DGS (Shape of Motion, MoSca) takes hours to train, is fragile on head-mounted video, and **gives no colliders**, so no physics. Layering gets you motion and physics together. |
-| Camera solve | **NVIDIA ViPE on the single action clip. No room sweep.** | ViPE masks moving things itself, solves the lens (including a wide-angle model) and gives near-metric depth on long clips. DA3 and VGGT assume a static scene, and VGGT has no metric scale. A separate sweep would mean registering two clips, and it breaks the "footage you already shot" pitch. Go/no-go test tonight. |
-| Semantic segmentation | **SAM 3**, text-prompted video segmentation with mostly stable IDs. **Claude picks the prompts** from keyframes. | SAM 3 needs nouns ("box", "ball"), and Claude vision supplies them, along with size range, density and grabbable flags. The same nouns tell ViPE what to mask. |
+| Full 4D Gaussian splatting? | **No, use a layered scene.** A static background, people as per-frame colored points ("ghosts"), and each grabbable object as a simple shape with a collider and a position track | Per-scene 4DGS (Shape of Motion, MoSca) takes hours to train, is fragile on head-mounted video, and **gives no colliders**, so no physics. Layering gets you motion and physics together. |
+| Camera solve | **NVIDIA ViPE on the single clip. No room sweep.** Go/no-go about 3 hours after the pod starts. | One model gives the camera path, lens, metric depth for every pixel and per-frame masks. The glasses have one camera and export a single view, so there is no stereo pair: ViPE triangulates across time as the wearer moves, and a metric depth model sets the scale. DA3 and VGGT assume a static scene, and VGGT has no metric scale. A separate sweep would mean registering two clips, and it breaks the "footage you already shot" pitch. |
+| Semantic segmentation | **ViPE's own masks**, prompted with single words we type (`person`, `hand`, `ball`, `can`...). **SAM 2.1 + Grounding DINO only if ViPE's masks are poor. SAM 3 is cut.** | ViPE already writes a mask with object IDs for every frame. SAM 3 has gated weights and an environment that clashes with the rest. Dropping it takes the setup from 5 environments to 2. |
 | Multiplayer backend | **SpacetimeDB 2.13 with a TypeScript module.** It's a CalHacks 13 sponsor. | Rooms, avatars, the shared clock, grab ownership and timeline branches all map onto tables and reducers, and the browser SDK is `spacetimedb` on npm. |
 | Physics authority | **The player holding an object simulates it.** The server only arbitrates ownership. | No server physics tick and no lockstep. Everyone else interpolates the owner's transforms. |
-| GPU | **One Runpod H100 80GB pod** with a persistent volume, owned by P1. Each person has their own environments: P1 `world`, P2 `seg` and `obj`, plus a shared `core` (section 2.2). Optional second, smaller pod for P2 on the same network volume (attaching one volume to two pods is unverified). (Runpod is a sponsor, so ask for credits.) | The CUDA stacks (ViPE, SAM 3, SAM 3D, gsplat) need a box you can SSH into to debug. Separate envs keep their torch versions from colliding. |
+| GPU | **One Runpod H100 80GB pod** with a persistent volume, owned by Vision. **Two environments:** `world` (our code, ffmpeg, gsplat, open3d, Claude SDK) and `vipe` (ViPE's own uv venv) (section 2.2). (Runpod is a sponsor, so ask for credits.) | ViPE and gsplat need a CUDA box you can SSH into to debug. ViPE keeps its packages in its own uv venv, so it gets its own env. |
 | Repo | **Monorepo with npm workspaces** (this repo) | The `memory.json` contract, viewer, server module and pipeline change together in one PR. |
 
 ---
@@ -33,8 +33,8 @@ The Slack connected to Claude is **RoboTouchLab (UIUC), not CalHacks**, so none 
 
 **Tracks to target** (re-rank once the CH13 list is posted):
 1. **SpacetimeDB.** The whole shared world runs on it: rooms, a mixed Quest and phone presence, the shared clock, grab ownership, and branching timelines stored as data.
-2. **Meta.** Capture on Ray-Ban Meta, relive on Quest 3S, built on Meta's SAM 3 and SAM 3D, and Meta's Immersive Web SDK if the spike passes.
-3. **Best Use of Claude**, if it repeats. Claude discovers objects for SAM 3, estimates physical properties, titles and captions memories, and turns "what if the ball went left?" into a physics edit on a new branch.
+2. **Meta.** Capture on Ray-Ban Meta glasses, relive the moment on a Quest 3S, and Meta's Immersive Web SDK if the spike passes.
+3. **Best Use of Claude**, if it repeats. Claude picks each object's shape, size and mass from its label and a crop, titles and captions memories, and turns "what if the ball went left?" into a physics edit on a new branch.
 4. **Overall / Most Creative.** The pitch: "Hyperscape gives you a static room. We give you the moment, and you can change it."
 5. **Runpod / Supercell**, if they run tracks: GPU pipeline, and game-like physics play.
 
@@ -56,97 +56,136 @@ The Slack connected to Claude is **RoboTouchLab (UIUC), not CalHacks**, so none 
         ▼                                               ▼
  ┌─────────────────────────┐  status via HTTP   ┌──────────────────────────────────────────┐
  │ SpacetimeDB 2.13 module │ ◀───────────────── │ GPU pipeline (Runpod H100), one clip     │
- │ memory, room, player,   │                    │ S0 frames   P1  ffmpeg, sharpest/100ms   │
- │ timeline, branch,       │                    │ S1 nouns    P2  Claude: what moves       │
- │ object_state, grab,     │                    │ S2 masks    P2  SAM 3 video masks        │
- │ branch_keyframe         │                    │ S3 cameras  P1  ViPE: path, lens, depth  │
- └──────────┬──────────────┘                    │ S4 world    P1  floor, +Y up, scale      │
-            │ websocket subscriptions           │ S5 background P1 gsplat (masked) → spz   │
-            ▼                                   │ S6 ghosts   P1  people as splats         │
- ┌─────────────────────────────────────────┐    │ S7 objects  P2  SAM 3D Objects + hull    │
- │ Viewer (apps/web): one URL              │    │ S8 tracks   P2  CoTracker3 + Kabsch      │
- │  Quest 3S browser: immersive-vr, hands  │    │ S9 merge    P1  memreplay merge          │
- │  Phone: touch orbit + tap-grab          │    └──────────────────────────────────────────┘
+ │ memory, room, player,   │                    │ S1 normalize  ffmpeg: 30 fps mp4 + audio │
+ │ timeline, branch,       │                    │ S2 ViPE       camera path, depth, masks  │
+ │ object_state, grab,     │                    │ S3 world      open3d: floor, +Y up       │
+ │ branch_keyframe         │                    │ S4 L0         points, room, ghosts       │
+ └──────────┬──────────────┘                    │ S5 objects    tracks + Claude shapes     │
+            │ websocket subscriptions           │ S6 background gsplat → bg.spz            │
+            ▼                                   │ S7 merge      memreplay merge            │
+ ┌─────────────────────────────────────────┐    └──────────────────────────────────────────┘
+ │ Viewer (apps/web): one URL              │
+ │  Quest 3S browser: immersive-vr, hands  │
+ │  Phone: touch orbit + tap-grab          │
  │  three.js · Spark · Rapier · STDB SDK   │──── loads memory.json + assets from storage
  └─────────────────────────────────────────┘
 ```
 
 ### 2.1 The contract: `memory.json`
 Defined in [`packages/shared/src/manifest.ts`](../packages/shared/src/manifest.ts), with a Python mirror in [`pipeline/memreplay/manifest.py`](../pipeline/memreplay/manifest.py). It holds:
-- **World frame:** +Y up, meters, and the floor height. The pipeline gravity-aligns and scales the scene (S4), so **the viewer never sees the camera solver's raw frame.**
-- **Background:** one splat (`.spz`), plus an optional coarse collider `.glb`.
-- **Camera track:** the wearer's head path, for "see it through my eyes" mode.
-- **Objects:** visual (splat or mesh), collider (box, sphere, capsule or convex hull), mass, grabbable, visible time range, and a pose track `[{t, p, q}]` sampled at 10–30 Hz.
+- **World frame:** +Y up, meters, floor at y = 0. The pipeline gravity-aligns the scene and checks its scale (S3), so **the viewer never sees ViPE's raw frame.**
+- **Source:** clip length, fps and size, plus **`audioUrl`** (`input/audio.m4a`), played in sync with the timeline.
+- **Background:** one splat (`.ply` points at L0, a trained `.spz` later), plus **`colliderUrl`**: a room collider `.glb` (floor + tables as a 10 cm heightfield), so thrown things land on tables.
+- **Camera track:** the wearer's head path at 10 Hz plus the field of view, for "see it through my eyes" mode.
+- **Objects:** visual, collider, mass, grabbable, visible time range, and a track `[{t, p, q}]` at 10 Hz. New in this revision:
+  - visual kind **`primitive`**: a tinted sphere, box or cylinder (grabbable objects);
+  - visual kind **`points-sequence`**: per-frame colored points in one binary file (people ghosts; layout in [`pipeline/memreplay/handoff.py`](../pipeline/memreplay/handoff.py));
+  - collider kind **`cylinder`**, next to box, sphere, capsule and convex hull;
+  - per-keyframe **velocity `v`** in m/s, handed to physics on pause.
 
-The viewer develops against `apps/web/public/mock/memory.json` and never waits on the pipeline.
+The viewer develops against `apps/web/public/mock/memory.json` and never waits on the pipeline. The mock doesn't use the new fields yet.
 
 ### 2.2 Reconstruction pipeline (`pipeline/`, Python, Runpod GPU)
 
 **Step-by-step commands and Runpod setup: [pipeline/README.md](../pipeline/README.md).**
 
-**One clip per memory. There is no separate room sweep.** Each memory gets one work dir, and every stage reads and writes files in it (layout and formats in [`pipeline/memreplay/handoff.py`](../pipeline/memreplay/handoff.py)). So any stage reruns alone: `memreplay stage <name> --work work/<id>`.
+**One person ("Vision") owns the whole pipeline. One clip per memory; there is no separate room sweep.** Each memory gets one work dir, and every step reads and writes files in it (layout and formats in [`pipeline/memreplay/handoff.py`](../pipeline/memreplay/handoff.py)). So any step reruns alone: `memreplay stage <name> --work work/<id>`. S2 is ViPE's own `run.py`. S7 is `memreplay merge work/<id>`, which is done and tested; the other `memreplay` steps are still stubs.
 
-The pipeline is split by **what each person delivers**. P1 and P2 both start on real work tonight and only meet through a few frozen files.
+**Input: what the glasses give**
 
-- **P1 · World** owns the camera path, the world frame, the background and the people ghosts: S0, S3, S4, S5, S6 and S9. P1's output on its own is the L0 demo.
-- **P2 · Things** owns everything you can grab: S1, S2, S7 and S8. P2's output turns L0 into L1.
+| What | Details |
+|---|---|
+| File | One video, exported through the Meta AI app to a phone: HEVC `.mov` on iPhone, `.mp4` on Android. Clips up to 3 min, with an audio track. |
+| Camera | One 12 MP ultrawide camera, portrait 3:4. Modes listed by Ray-Ban: 3K at 30 fps, 1080p at 30 or 60 fps, 720p at 120 fps. |
+| Not in the file | Depth, camera pose, IMU data, lens model. We infer all of them. |
+| Live stream (optional) | Meta's Device Access Toolkit: at most 720×1280 over Bluetooth. Too low quality to rebuild from, so only a stretch "live" moment. |
 
-| Stage | Tool | Why this one | Output | Fallback |
-|---|---|---|---|---|
-| **S0** Frames (P1) | ffmpeg, keeping the clip's real timestamps. Keep the sharpest frame (Laplacian variance) in each 100 ms. If the checkerboard was filmed, straighten the ultrawide lens (OpenCV calibration). Write a full-size copy and a small (~640 px) copy. | Real timestamps and fewer blurry frames than plain `fps=10`. A straightened lens lets ViPE use its default mode, which writes depth. | `frames/full/`, `frames/small/`, `frames.json` | ffmpeg `fps=10` |
-| **S1** Nouns (P2) | **Claude** on 8 keyframes → ≤6 rigid, textured things that move, each with a size range, density and grabbable flag. Always adds `person` and `hand`. | A fixed vocabulary misses the props in this scene. The same list is ViPE's masking phrases. | `nouns.json` | fixed list |
-| **S2** Masks (P2) | **SAM 3** (`facebookresearch/sam3`) in video mode, one run per noun. An object that leaves and re-enters the frame can get a new ID, so stitch tracklets (same 3D centroid within 0.3 m + similar look) before writing `tracks.json`. The wearer's own hands are tagged `ego-hand` (they touch the frame edge and sit closer than 0.8 m; the depth check runs after S3). Frames where a hand covers an object get a `held` flag. Claude reviews a crop gallery. Weights are gated on Hugging Face. | A text prompt finds every instance, and the detector keeps re-finding objects through the clip. Grounded-SAM-2's own README says its new-object IDs aren't very stable, and DEVA is obsolete. Egocentric video is still SAM 3's weakest domain, so expect some misses. | `masks/tracks.json` (COCO RLE), `masks/dyn/<idx>.png` | SAM 2.1 + Grounding DINO via HF `transformers`, plus 1-click fixes |
-| **S3** Cameras + depth (P1) | **NVIDIA ViPE** (`nv-tlabs/vipe`; `pip install nvidia-vipe` or its cu128 env). `default` preset on S0's frames, via `run.py` (the `vipe infer` CLI can't set phrases). Phrases = `person`, `hand` + S1 nouns. Pass `save_artifacts=true` and `streams.frame_end=-1` (both verified). The `wide_angle` and `pose_only_long` presets write **no depth**, so use `wide_angle` only to cross-check the camera path. Don't use the UniK3D backend (BY-NC-SA). | The only released tool we found that masks moving things itself, solves the lens and gives near-metric depth on long clips. Its paper reports lower pose and focal error than MegaSaM at 3–5× the speed. DA3 and VGGT assume a static scene, and VGGT has no metric scale. | `vipe/` (poses, intrinsics, depth, masks) | In order: ① undistort with the checkerboard, then ViPE pinhole ② MapAnything (`facebook/map-anything-apache` weights) on masked keyframes ③ MegaSaM, if a GPU is free |
-| **S4** World frame (P1) | open3d RANSAC floor fit on masked depth. +Y up. Scale = measured eye height ÷ median camera height. Converts ViPE's output into the handoff files, already in the world frame (`in_world_frame=true`). | ViPE's depth is only near-metric. One physical measurement fixes the scale and sets the floor. | `world/cameras.json`, `world/depth.npz`, `world/world.json` | click 3 floor points |
-| **S5** Background (P1) | **gsplat** MCMC with a per-frame masked loss (~10-line patch), a trimmed loss on the top 5% of residuals, a 300k splat cap, appearance and pose refinement, ~15k steps (~12–15 min, estimate). Then crop, filter floaters and convert to `.spz`. **L0 version first:** fused masked depth points as splats (~2 min). | The cap applies during training, which is sharper than decimating afterwards. Explicit masks beat learned distractor handling (WildGaussians), and the trimmed loss catches shadows the masks miss. DA3's Gaussian head is non-commercial and doesn't remove movers; AnySplat is too low-resolution for VR. | `world/bg.spz` | Brush binary on the same data |
-| **S6** Ghosts (P1) | Depth inside eroded person masks, a depth-edge filter, 20–30k colored splats per frame at 10 Hz. | Simple: it reuses S2's masks and S3's depth, with no extra model. The depth-edge filter removes flying pixels, so ghosts look like people instead of noise. 4DGT only reads Aria `.vrs` files. | `world/ghosts.json` + `world/ghosts/<id>/<n>.spz` (non-grabbable splat-sequence objects) | 10k points, every 2nd frame |
-| **S7** Object asset (P2) | **SAM 3D Objects** on the best keyframe (mask area × sharpness × not covered by a hand) → splat, ≤30k. Scale fix: render the asset's depth, scale = median(observed) ÷ median(rendered), then ICP on rotation and translation only (scale locked), clamped to Claude's size range. trimesh convex hull, ≤64 vertices. Mass = density × volume. | It fills in hidden sides and also predicts a pose. TRELLIS.2 and Hunyuan3D give an unscaled asset with no pose. Letting scale float in ICP on one-sided depth collapses it, so scale comes from the depth ratio. | `objects/<id>/gs.spz`, `objects/<id>/hull.glb` | TRELLIS.2 + our own fit; or fused points + box collider |
-| **S8** 6DoF tracks (P2) | **CoTracker3** offline on points inside the mask minus hands → lift to world with P1's depth and cameras → per-frame RANSAC Kabsch (scale fixed, 2 cm inliers, at least 6) → Savitzky-Golay (window 7, order 2) → 10 Hz keyframes. `held` frames are interpolated. Until P1's world cameras land, work in camera coordinates. | Real point matches keep rotation stable; ICP on one-sided monocular depth slides, jitters or flips. FoundationPose would be better, but it needs a source build, fails when a hand wraps the object, and its license is probably non-commercial (unverified). Textureless props fail, so choose textured ones. | `objects/objects.json` | translation only (median of masked world points), then static |
-| **S9** Merge (P1; anyone can run it) | `memreplay merge <work>`, implemented and tested. Checks that cameras are in the world frame, the background splat budget, and objects below the floor. | — | `memory.json` | — |
+**One camera, so no stereo.** The second opening on the front of the glasses is the capture LED, not a second camera. Even with two cameras, the exported video is a single view, so there would be no stereo pair. Depth comes from the wearer's own movement (ViPE triangulates across time, like structure-from-motion) plus a metric depth model for scale.
 
-**Why this split.** ViPE masks moving things itself, so P1's cameras never wait for P2; P2's nouns only make them better. P1 needs P2's masks only for S5 and S6, and uses ViPE's own masks (written to `vipe/mask/`, verified) for L0. P2 works in camera coordinates until P1's world cameras land. The cut follows env and file boundaries, so nobody imports the other person's env.
+**What we add when recording:** 1080p at 30 fps with stabilization off, a scripted take, symmetric bright props, the wearer's eye height, and an optional checkerboard. Rules in section 5.
 
-**Handoffs.** Formats are frozen in [`pipeline/memreplay/handoff.py`](../pipeline/memreplay/handoff.py). Change them only when P1 and P2 both agree.
+**Output: what the viewer needs** (`memory.json`; meters, +Y up, floor at y = 0)
 
-| When | P1 · World | P2 · Things |
+| Part | What the pipeline writes |
+|---|---|
+| Room visual | L0: static points as small splats in `world/bg_points.ply` (Spark reads `.ply`). Later: a trained `world/bg.spz`, ≤ 300k splats (merge warns above the 350k Quest budget). |
+| Room collider | `world/room_collider.glb`: floor + tables as a 10 cm heightfield, in `background.colliderUrl`. |
+| Head path | Camera keyframes at 10 Hz, plus the field of view. |
+| People | Per-frame colored points ("ghosts"), not grabbable: kind `points-sequence`, one binary per person (`world/ghosts/<id>.bin`). |
+| Grabbable objects | Visual: kind `primitive` (tinted sphere, box or cylinder), chosen by Claude. Collider: sphere, box or cylinder. A mass. A 10 Hz position track with velocity `v`, handed to physics on pause. |
+| Audio | `source.audioUrl` = `input/audio.m4a`, played in sync with the timeline. |
+
+These format additions are already in `manifest.ts` and `manifest.py` (section 2.1).
+
+**Steps**
+
+| Step | Tool | Result | Demo |
+|---|---|---|---|
+| **S0** Record | the glasses | scripted clip + the wearer's eye height | — |
+| **S1** Normalize | ffmpeg | `input/clip.mp4` (upright, constant 30 fps, long side 1280 px), `input/audio.m4a`, `input/frames.json`. Type `nouns.json` by hand: single words (`person`, `hand`, `ball`, `can`...). | — |
+| **S2** Cameras, depth, masks | **NVIDIA ViPE**, `default` preset via `run.py` with our phrases | `vipe/`: per-frame camera path, lens, metric depth for every pixel, and per-frame masks with object IDs (verified in ViPE's source) | **go/no-go** |
+| **S3** World frame | numpy + open3d | Up = mean camera up, refined by a floor plane within 15°. Floor at y = 0. Trust ViPE's scale; check it against the eye height. Writes `world/world.json`, `world/cameras.json`. | — |
+| **S4** L0 export | numpy + trimesh | Static points (drop sky and every instance ID) → `bg_points.ply`; heightfield room collider; ghosts from eroded person masks + depth; head path; merge | **L0:** walk into the memory |
+| **S5** Objects | numpy + Claude | Merge ViPE IDs by phrase + 3D position; smoothed 10 Hz position track + velocity. Claude maps label + crop → shape, size, density, color. Size is clamped to the observed extent; mass = density × volume. Writes `objects/objects.json`. | **L1:** pause, grab, throw |
+| **S6** Background splat | gsplat (~7k steps, seeded with ViPE's points, with masks, `normalize_world_space` off) + splat-transform | `world/bg.spz` replaces the points | L1, better looking |
+| **S7** Merge | `memreplay merge` (done, tested) | `memory.json` | — |
+
+**If a step fails**
+- **S2 (ViPE)**, in order: ① fix the lens with the checkerboard, then rerun ViPE ② MapAnything (Apache weights variant) ③ MegaSaM.
+- **S6:** the L0 points stay as the background. Merge uses `bg.spz` only when it exists.
+- **S4 ghosts or S5 objects missing:** merge warns and continues without them.
+
+**Upgrades, only if time**
+
+| Upgrade | Gives | When it matters |
 |---|---|---|
-| Fri 11:15 PM | — | Request Hugging Face access to `sam3.1`, `sam3` and `sam-3d-objects`. Formats frozen in `handoff.py`. |
-| Fri 11:30 PM | `frames/` + `frames.json` for the test clip → P2 | `nouns.json` v0 → P1 |
-| Sat 1:00 AM | ViPE go/no-go; `cameras.json` + `depth.npz` + `world.json` v0 → P2 | masks v0 → P1 (SAM 2.1 clicks if access is still pending) |
-| **Sat 2:30 AM** | **Checkpoint 1:** L0 `memory.json` → P3 (fused-point background + ghosts + head path) | translation-only tracks + box colliders |
-| Overnight | gsplat on the test clip | SAM 3D batch + Kabsch tracker |
-| Sat 9:00 AM | **Everyone:** shoot the demo clip (3 takes) | |
-| Sat 10:00 AM | final cameras + world → P2 | final masks → P1 |
-| Sat 11:00 AM | `bg.spz` + ghosts | object assets + tracks |
-| **Sat 11:30 AM** | **Merge to `memory.json` v1.** Gate: any failing stage switches to its fallback. | |
-| **Sat 12:00 PM** | **L1 frozen (Checkpoint 2)** | |
+| CoTracker3 + RANSAC Kabsch | object rotation | only for non-symmetric props |
+| SAM 2.1 + Grounding DINO | better masks | if ViPE's masks are poor |
+| SAM 3D Objects | nicer object shapes | stretch; its own `sam3d` env and half a day of installs |
 
-**Go/no-go test tonight (by Sat 1:00 AM).** P1 runs S0 and ViPE's `default` preset on a test clip, and checks the camera path against the `wide_angle` preset. It passes if:
+**Cut from the initial plan:** SAM 3 / 3.1 (gated weights, clashing env), SAM 3D in the main path (half a day of installs), FoundationPose, full 4D splatting, and VGGT or DA3 as the camera solver.
+
+**Why this is the best initial plan for one person**
+1. **Risk first.** Everything depends on the camera path and depth from head-mounted footage. ViPE runs at S2, with a go/no-go about 3 hours in and named fallbacks (checkerboard lens fix then rerun; MapAnything; MegaSaM).
+2. **One model, four outputs.** ViPE gives the camera path, lens, metric depth and per-frame masks. That replaces SAM 3, cuts the setup from 5 environments to 2, and takes gated weights off the critical path. One person can install and debug it.
+3. **Always a demo.** L0 in a few hours, L1 by morning. Every later step improves something that already works.
+4. **Built for the demo's physics.** Grab and throw need colliders, velocity and a room to land in, not detailed meshes. With symmetric props, position-only tracking is physically correct.
+5. **Two cheap, high-impact wins:** the scripted recording and synced audio.
+
+**Go/no-go test (about H+3).** Run S1 and ViPE's `default` preset on a test clip. It passes if:
 - the floor comes out flat;
-- eye height before rescaling is 1.4–1.8 m;
+- straight lines stay straight (the lens is ultrawide);
+- the median camera height is close to the wearer's measured eye height (1.4–1.8 m);
 - two frames 3 s apart don't show the background doubled.
 
-At the same time, P2 runs SAM 3 (or SAM 2.1) with the prompt "box" on the same clip. If ViPE fails, P1 moves down the S3 fallbacks in order.
+If it fails, move down the S2 fallbacks in order.
 
-**GPU and environments.** One H100 80GB is enough if each person has their own envs. P1 owns the pod.
+**Environments.** One H100 80GB, two envs. Setup: `bash pipeline/runpod/setup.sh base world vipe warmup`.
 
-| Env | Owner | Contents |
-|---|---|---|
-| `vipe` | P1 | ViPE (its packages live in ViPE's own uv venv) |
-| `world` | P1 | gsplat, open3d, splat-transform. P1 also owns the Brush binary. |
-| `seg` | P2 | SAM 3.1, SAM 2.1, Grounding DINO, CoTracker3 (Python 3.12, torch 2.10) |
-| `obj` | P2 | SAM 3D Objects (Python 3.11, torch 2.5.1, CUDA 12.1; needs ≥ 32 GB VRAM) |
-| `core` | shared | memreplay CLI, `anthropic` |
+| Env | Contents |
+|---|---|
+| `world` | Our code (`memreplay`), ffmpeg 6, gsplat, open3d, trimesh, the Claude SDK, splat-transform. SAM 2.1 and CoTracker3 go in here too if needed (`setup.sh extras`). |
+| `vipe` | ViPE, in its own uv venv (the conda env only holds CUDA and uv). |
+| `sam3d` (optional) | SAM 3D Objects, stretch only (`setup.sh sam3d sam3d_weights`; Python 3.11, torch 2.5.1, ≥ 32 GB VRAM). |
 
-Optional: a second, smaller pod for P2 on the same network volume (attaching one volume to two pods is unverified). The storage bucket is owned by P4. Upload each work dir as-is, because `memory.json` uses URLs relative to it.
+`warmup` pre-downloads ViPE's weights. One of them comes from Google Drive and can be rate-limited, so do it at H+0. The storage bucket is owned by P4. Upload each work dir as-is, because `memory.json` uses URLs relative to it.
+
+**ViPE facts (verified in its source)**
+- Any phrases work through `run.py`; the `vipe infer` CLI takes no overrides. Our list replaces ViPE's default list, so always keep `person` and `hand`.
+- Masks are saved for every frame, at input resolution.
+- IDs carry across the video, but an object that is lost and found again gets a new ID. S5 merges them by phrase + 3D position.
+- Depth covers every pixel, including people (good for ghosts). For the background, we drop sky and instances ourselves.
+- Feed it an mp4 (real fps), not an image folder.
+- The `wide_angle` and `pose_only_long` presets write no depth.
+- `run.py` needs `streams.frame_end=-1` and `pipeline.output.save_artifacts=true`.
+- ViPE's track-anything code is AGPL-3.0.
 
 **Quality ladder.** Every level is a working demo.
-- **L0 (P1 alone):** background splat, people ghosts and the head path on a scrubber.
-- **L1 (P2's work, the target):** plus grabbable objects with splat, collider and 6DoF track, and physics while paused.
-- **L2 (stretch, unverified):** plus people as meshes (SAM 3D Body) with kinematic capsule colliders, taken by whoever is ahead.
-- **L3 (stretch):** full 4D.
+- **L0 (a few hours in):** point background, room collider, people ghosts and the head path on a scrubber, with audio.
+- **L1 (the target, by morning):** plus grabbable objects (Claude's shape, a collider, mass, a position track with velocity) and physics while paused. The trained background splat (S6) makes it look better.
+- **L2 (if time):** the upgrades above: object rotation, better masks, nicer object shapes.
 
-**Licenses** (fine for a hackathon demo; note them for later): ViPE is Apache (skip the UniK3D backend). MapAnything: use the Apache weights variant. SAM 3 and SAM 3D are under the SAM License. CoTracker3 is CC-BY-NC. TRELLIS.2 is MIT (verify).
+**Licenses** (fine for a hackathon demo; note them for later): ViPE is Apache 2.0, except the UniK3D backend (BY-NC-SA, don't use it) and its track-anything code (AGPL-3.0). gsplat and SAM 2.1 are Apache 2.0. Optional: CoTracker3 is CC-BY-NC, and SAM 3D is under the SAM License. MapAnything: use the Apache weights variant.
 
 ### 2.3 Viewer (`apps/web`)
 Modules:
@@ -160,7 +199,7 @@ Modules:
 - `ui`: scrubber, play/pause, branch tree, room code.
 
 **Quest settings:**
-- ≤500k splats total (~350k background + ~150k objects); 1M is the hard ceiling.
+- ≤500k splats total (≤300k background; objects are simple shapes and people are points, up to 15k per ghost per frame); 1M is the hard ceiling.
 - `.spz` files; `SparkRenderer` with `preUpdate:false` and `maxStdDev = √5`.
 - `antialias:false`, pixel ratio 1, foveation on.
 
@@ -172,6 +211,7 @@ Modules:
 
 ### 2.4 Multiplayer and timelines (`server/spacetime`)
 **Tables**
+
 | Table | Fields (short) | Written by |
 |---|---|---|
 | `memory` | id, owner, title, manifestUrl, status (uploaded/processing/ready/failed), progress | upload page, pipeline |
@@ -199,12 +239,11 @@ Modules:
 
 ---
 
-## 3. Team and ownership (4 people)
+## 3. Team and ownership
 
 | Person | Lane | Owns |
 |---|---|---|
-| **P1 · World** | GPU pod, frames, ViPE camera path + depth, world frame, background splat, people ghosts, merge | `pipeline/` stages S0, S3, S4, S5, S6, S9; env `world` and the Brush binary |
-| **P2 · Things** | Claude nouns, SAM 3 masks, SAM 3D object assets + colliders, CoTracker3 6DoF tracks | `pipeline/` stages S1, S2, S7, S8; envs `seg` and `obj` |
+| **Vision (one person)** | GPU pod, recording the clip, the whole vision pipeline: normalize, ViPE, world frame, L0 export, objects + Claude shapes, background splat, merge | `pipeline/` steps S0–S7 and `pipeline/runpod/`; envs `world` and `vipe` |
 | **P3 · XR client** | Quest rendering, grab and physics, timeline UX | `apps/web` loader, physics, input-xr, ui |
 | **P4 · Multiplayer & phone** | SpacetimeDB module, net sync, phone controls, upload page, storage bucket, demo and Devpost | `server/spacetime`, `apps/web` net and input-touch |
 
@@ -218,50 +257,67 @@ Modules:
 
 ## 4. Timeline (assumes the deadline is Sun 4:30 PM; verify)
 
+Vision's steps count in hours from starting the pod (**H+0**, after midnight on Sat). They slide; the clock anchors (Sat 9 AM shoot, 11:30 AM merge gate, 12 PM freeze) stay fixed.
+
 | When | Goal | Details |
 |---|---|---|
 | **Fri 7:30–8:30 PM** | Kickoff | Everyone reads this plan. Accounts: Runpod (ask for credits), `spacetime login`, Claude API key, GitHub repo, R2 bucket. **Shoot a test clip** (rules in section 5). |
-| **Fri 8:30–11:30 PM** | Spikes in parallel | **P1:** pod, `vipe` env and `world` env; `frames/` + `frames.json` for the test clip to P2 by 11:30. **P2:** request Hugging Face access (`sam3.1`, `sam3`, `sam-3d-objects`) by 11:15; `seg` env with SAM 2.1 meanwhile; `nouns.json` v0 to P1 by 11:30. **P3:** scaffold on Quest over adb; load a `.spz` at 72 fps (ours arrives with L0 at 2:30 AM); 90-min IWSDK + Spark spike. **P4:** module published locally; two browsers see each other's heads; shared play/pause. |
-| **Fri 11:30 PM–Sat 2:30 AM** | ViPE go/no-go, then L0 + physics | **P1:** ViPE go/no-go test (section 2.2); `cameras.json` + `depth.npz` + `world.json` v0 to P2 by 1 AM; then the L0 `memory.json`. **P2:** SAM 3 (or 2.1) "box" test on the same clip; masks v0 to P1 by 1 AM; then translation-only tracks + box colliders. **P3:** Rapier grab and throw while paused. **P4:** viewer wired to the shared clock and avatars. |
-| **Sat 2:30 AM** | ✅ **Checkpoint 1** | **L0 `memory.json` to P3:** our own test clip as a fused-point background, ghosts and the head path, visible in the Quest. P2 adds translation-only tracks + box colliders. Gates: if ViPE fails, **move down its fallbacks** (checkerboard + pinhole, MapAnything, MegaSaM); if SAM 3 access is still pending, **stay on SAM 2.1**; if IWSDK fails, **stay on plain three**. |
-| **Sat 2:30–9 AM** | Overnight runs, sleep in shifts | Two people sleep at a time. **P1:** gsplat on the test clip. **P2:** SAM 3D batch + Kabsch tracker. |
-| **Sat 9–10 AM** | Shoot the demo clip | **Everyone:** 3 takes (rules in section 5). |
-| **Sat 10 AM–12 PM** | L1 | **10 AM:** P1 final cameras + world; P2 final masks. **11 AM:** P1 `bg.spz` + ghosts; P2 object assets + tracks. **11:30 AM:** merge to `memory.json` v1; any failing stage switches to its fallback. **P3/P4:** fork, replay and branch keyframes; phone avatars and controls. |
+| **Fri 8:30–11:30 PM** | Spikes in parallel | **P3:** scaffold on Quest over adb; load a `.spz` at 72 fps (ours arrives at Checkpoint 1, as `.ply` points first); 90-min IWSDK + Spark spike. **P4:** module published locally; two browsers see each other's heads; shared play/pause. |
+| **H+0 to H+1** | Pod | **Vision:** start the pod; `bash pipeline/runpod/setup.sh base world vipe warmup`. |
+| **H+1 to H+3** | ViPE go/no-go | **Vision:** record a test clip (section 5), S1, ViPE go/no-go (section 2.2). **P3:** Rapier grab and throw while paused. **P4:** viewer wired to the shared clock and avatars. |
+| **H+3 to H+6** | L0 | **Vision:** S3 + S4 → L0 `memory.json`. **P3:** viewer to-dos below: `.ply` background, `points-sequence` ghosts, room collider, audio. |
+| **H+6** | ✅ **Checkpoint 1** | **L0 `memory.json` in the Quest:** our own test clip as a point background with a room collider, ghosts, the head path and audio. Gates: if ViPE fails, **move down its fallbacks** (checkerboard lens fix + rerun, MapAnything, MegaSaM); if IWSDK fails, **stay on plain three**. |
+| **H+6 to H+9** | L1 objects | **Vision:** S5 objects → L1 (pause, grab, throw). **P3:** `primitive` objects, cylinder colliders, velocity on pause. |
+| **Overnight** | S6, sleep in shifts | **Vision:** S6 background splat on the test clip. Sleep in shifts. |
+| **Sat 9–10 AM** | Shoot the demo clip | **Everyone:** 3 takes (rules in section 5). **Vision:** rerun S1–S7 on the best take. |
+| **Sat 10 AM–12 PM** | L1 | **Vision:** finish S1–S7 on the demo clip. **11:30 AM: merge gate;** any failing step switches to its fallback. **P3/P4:** fork, replay and branch keyframes; phone avatars and controls. |
 | **Sat 12 PM** | ✅ **Checkpoint 2** | **L1 frozen; lock the demo clip.** One object replays, gets grabbed in VR, and forks a branch while a second person watches on a phone. |
-| **Sat 12–6 PM** | Features | Branch tree UI; upload page and job status; Claude "what if" and captions; people (SAM 3D Body, stretch). |
+| **Sat 12–6 PM** | Features | Branch tree UI; upload page and job status; Claude "what if" and captions; vision upgrades if time (section 2.2). |
 | **Sat 6 PM** | ✅ **Checkpoint 3: feature freeze** | After this, only polish, performance and stretch work, each behind a flag. |
 | **Sat 6 PM–Sun 2 AM** | Polish | Quest frame rate, visuals for timeline branches, sounds, onboarding. Stretch: live glasses stream via Meta DAT; passthrough AR mode. |
 | **Sun 2–9 AM** | Sleep shifts, bug bash | |
 | **Sun 9 AM–1 PM** | Ship | Record the demo video (Quest cast plus phone screen recording), Devpost, per-track write-ups. |
 | **Sun 1–4:30 PM** | Buffer | Submit by 4:30 PM. Rehearse the 3-minute pitch three times. |
 
+**Viewer to-dos this creates (P3)**
+- Render `points-sequence` ghosts: three.js `Points` with a `Float16BufferAttribute` (binary layout in `handoff.py`).
+- Render `primitive` objects: tinted sphere, box or cylinder.
+- Wire Rapier: sphere, box and cylinder colliders; the room collider `.glb` as a trimesh collider; each object's velocity `v` on pause.
+- Play `source.audioUrl` in sync with the timeline; resync when it drifts past 100 ms.
+- Load the `.ply` point background first (L0), then the `.spz`.
+
 ---
 
 ## 5. Capture rules (test clip tonight, demo clip Sat 9 AM)
-- Meta AI app → Devices → Settings → Media: **1080p at 30 fps, stabilization OFF.** That is the mode where the stabilization toggle is documented; whether 3K is unstabilized is unverified. Stabilization warps each frame differently, which breaks the camera solve. The export codec is unverified (the Meta AI app may re-encode); ffmpeg decodes it either way.
-- **One clip per take, 30–60 s, 3 takes:**
-  1. About 10 s of slow look-around.
-  2. Walk 2–3 m, so the camera solve gets some baseline.
+- Meta AI app → Devices → Settings → Media: **1080p at 30 fps, stabilization OFF.** Stabilization warps each frame differently, which breaks the camera solve. 1080p is the mode where the stabilization toggle is documented; whether 3K is unstabilized is unverified. The export is HEVC `.mov` on iPhone and `.mp4` on Android; S1 converts either.
+- **One scripted take, under 30 s, 3 takes:**
+  1. Look at the floor for 3 s.
+  2. Walk 2–3 m sideways while slowly panning across the room. Turning your head in place gives ViPE no parallax to triangulate from.
   3. Then the action.
-- **Props:** 1–3 rigid, textured, matte things of 10–50 cm (a printed box, a book, a patterned ball). **Someone other than the wearer** moves or throws them. Avoid shiny, thin, deformable or plain props: the tracker needs texture.
-- **Measure the wearer's eye height.** S4 uses it to set the scale, so the wearer should stay standing.
-- **Film a checkerboard on a laptop screen for 15 s.** It is the lens fallback for S3.
-- Keep head turns slow. Light should be even; avoid windows, mirrors and glass. Textured surroundings help; blank white walls hurt the camera solve.
-- An empty-room sweep is **optional insurance only.** Nothing in the pipeline reads it.
+- **Props:** 2–3 symmetric, brightly colored things (a ball, a can, a bottle). **Someone other than the wearer** moves or throws them. Symmetric props need no rotation track, so position-only tracking is correct.
+- **One person in frame,** and slow head motion.
+- **Measure the wearer's eye height.** S3 checks ViPE's scale against it, so the wearer should stay standing.
+- **Optional: film a checkerboard on a laptop screen for 15 s.** It is the lens-fix fallback for S2.
+- Light should be even; avoid windows, mirrors and glass. Textured surroundings help; blank white walls hurt the camera solve.
+- No room sweep. Nothing in the pipeline reads one.
 
 ---
 
 ## 6. Risks
 | Risk | Mitigation |
 |---|---|
-| ViPE fails on glasses footage (the wide-angle flag is barely documented; rolling shutter) | Capture rules; go/no-go test tonight; S3 fallbacks in order: checkerboard undistort + ViPE pinhole, MapAnything, MegaSaM |
-| Gated weights (SAM 3; SAM 3D Objects may be gated too, unverified) delay P2 | Request access at 11:15 PM; SAM 2.1 + Grounding DINO meanwhile |
-| SAM 3D details unverified (whether it takes our own pointmap; whether its mesh and splat share one frame) | Fix scale afterwards in S7 (depth ratio, then rotation-and-translation ICP, clamped to Claude's size range) |
-| Textureless props break the tracker | Choose textured props; translation-only fallback, then static |
-| Wearer sits down, so the eye-height scale is wrong | Ask the wearer to stand; fallback: click 3 floor points |
+| ViPE fails on glasses footage (ultrawide lens, rolling shutter) | Capture rules; go/no-go about 3 hours in; S2 fallbacks in order: checkerboard lens fix + rerun, MapAnything, MegaSaM |
+| ViPE's `default` preset assumes an ordinary lens; the glasses are ultrawide | Check that straight lines stay straight; if not, the checkerboard lens fix, then rerun |
+| Unverified ViPE details: multi-word prompts, H100 runtime, z-depth vs ray distance | Single-word prompts; time the test clip; check that the floor comes out flat (ray distance read as z-depth bends it) |
+| A ViPE weight comes from Google Drive (rate limits) | `setup.sh warmup` downloads it at H+0 |
+| ViPE's masks are poor, or an object gets a new ID after it is lost | S5 merges IDs by phrase + 3D position; SAM 2.1 + Grounding DINO as an upgrade (`setup.sh extras`) |
+| A prop isn't symmetric, so rotation matters | Choose symmetric props; CoTracker3 + RANSAC Kabsch only if time |
+| ViPE's metric scale is off, or the wearer sits down | S3 compares the median camera height with the measured eye height and rescales only if needed; the wearer stays standing |
+| S6 gsplat fails or runs long | The L0 points stay as the background; merge uses `bg.spz` only when it exists |
+| Nothing has run on a real pod or real glasses footage yet | Setup and a test clip first (H+0 to H+3); the go/no-go decides before anything else is built |
 | Spark in WebXR on Quest 3S (unverified), or IWSDK and Spark conflicting over `three` | Test tonight; plain three is the default; ≤500k splats |
-| Scale or axis mismatch between splats and colliders | One world frame in the manifest; floor RANSAC and eye-height scale in S4; `memreplay merge` checks the world frame and objects below the floor; a debug view with collider wireframes |
-| CUDA environment problems | P1 owns the pod; separate envs per person (`world`, `seg`, `obj`, plus shared `core`); Brush binary as the gsplat fallback; cache every stage |
+| Scale or axis mismatch between splats and colliders | One world frame in the manifest; up direction and floor plane in S3; `memreplay merge` checks for objects below the floor; a debug view with collider wireframes |
+| CUDA environment problems | Two envs only (`world`, `vipe`); setup steps leave markers, so a rerun skips finished steps; every step keeps its files in the work dir |
 | Venue Wi-Fi | Own travel router or hotspot; local SpacetimeDB; assets preloaded |
 | Physics desync | Single-owner simulation; recorded branch keyframes |
 | Unknown tracks or deadline | Read the CH13 Slack tonight and update section 1 |

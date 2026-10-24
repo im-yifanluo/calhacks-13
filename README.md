@@ -3,7 +3,8 @@
 Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves over time, and you walk back into it with friends on a Quest 3S or a phone. Pause time, grab things, throw them, and branch off an alternate timeline.
 
 - **Full plan** (tracks, design, timeline, risks): [docs/PLAN.md](docs/PLAN.md)
-- **Status:** the multiplayer server works (18/18 smoke checks pass). The viewer runs in a browser with a mock scene. In the pipeline, the file formats are frozen and `memreplay merge` works; the other stages are not started.
+- **Vision pipeline runbook:** [pipeline/README.md](pipeline/README.md)
+- **Status:** the multiplayer server works (18/18 smoke checks pass). The viewer runs in a browser with a mock scene. In the pipeline, the file formats are done (including ghosts, primitive objects, velocity and audio) and `memreplay merge` is done and tested. The pipeline steps themselves (S1–S6) are not written yet, and nothing has run on a real pod or real glasses footage.
 
 ---
 
@@ -11,9 +12,8 @@ Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves 
 
 | Person | Owns | Folders | First goal tonight |
 |---|---|---|---|
-| **P1 · World** | The room: frames, ViPE camera path + depth, world frame (floor, scale), background splat, people ghosts, final merge. Owns the GPU pod. | `pipeline/` (S0, S3–S6, S9) | Test-clip frames to P2 by 11:30 PM, ViPE go/no-go + cameras, depth and `world.json` v0 by 1 AM, L0 `memory.json` to P3 by 2:30 AM |
-| **P2 · Things** | Everything you can grab: Claude nouns, SAM 3 masks, SAM 3D object splats + colliders, CoTracker3 6DoF tracks | `pipeline/` (S1, S2, S7, S8) | Hugging Face access requested by 11:15 PM, `nouns.json` v0 by 11:30, masks v0 by 1 AM, translation-only tracks + box colliders by 2:30 AM |
-| **P3 · XR client** | Quest rendering, grab + physics, timeline in VR | `apps/web/` | Viewer on the Quest at 72 fps showing P1's splat |
+| **Vision (one person)** | The whole pipeline: one glasses clip in, `memory.json` out. ViPE cameras + depth + masks, world frame, room points + collider, people ghosts, grabbable objects, background splat, merge. Owns the GPU pod. | `pipeline/` (S0–S7) | Pod up and ViPE go/no-go (about 3 hours in), then L0 `memory.json` in the Quest (Checkpoint 1) |
+| **P3 · XR client** | Quest rendering, grab + physics, timeline in VR. New formats to support: `points-sequence` ghosts (three.js Points, Float16 positions), `primitive` objects (tinted sphere / box / cylinder), Rapier with sphere / box / cylinder colliders and the room collider (`background.colliderUrl`, as a trimesh), keyframe velocity `v` handed to physics on pause, `source.audioUrl` played in sync (resync past 100 ms drift), `.ply` background first, then `.spz` | `apps/web/` | Viewer on the Quest at 72 fps, then load the L0 `memory.json` |
 | **P4 · Multiplayer & phone** | SpacetimeDB module, syncing, phone controls, upload page, storage bucket, demo | `server/spacetime/`, `apps/web/` | Two devices in one room seeing each other |
 
 Everyone does **Part 1**. Then do the part for your role.
@@ -98,53 +98,34 @@ The app and SpacetimeDB share that one link. The dev server forwards `/v1` to th
 
 ---
 
-## Part 4 · P1 / P2: Reconstruction pipeline (GPU)
+## Part 4 · Vision pipeline (GPU)
 
-**Full runbook: [pipeline/README.md](pipeline/README.md).** It covers what each step does, the tool it uses, the exact commands, and how to set up and run everything on Runpod.
+> **Full runbook: [pipeline/README.md](pipeline/README.md).** Every step, the tool it uses, the exact commands, and how to set up and run everything on Runpod.
 
-**One clip per memory, no room sweep.** **P1 · World** turns the clip into the room: frames, the camera path and depth (ViPE), the world frame, the background splat, the people ghosts and the final merge (S0, S3–S6, S9). **P2 · Things** builds everything you can grab: Claude's nouns, SAM 3.1 masks, SAM 3D object assets and CoTracker3 tracks (S1, S2, S7, S8). ViPE masks moving things itself and writes those masks to disk, so P1 never waits on P2 for cameras or for the L0 demo. P2 works in camera coordinates until P1's world cameras land.
+**The plan.** One glasses clip in, one `memory.json` out, built by one person. ViPE runs first because everything depends on it: from the single video it gives the camera path, the lens, metric depth for every pixel and per-frame object masks. It gets a go/no-go about 3 hours in. The glasses have one camera (the second opening is the capture LED), so there is no stereo pair; depth comes from the wearer's head moving over time plus ViPE's metric depth model. Two environments: `world` (our code, ffmpeg, gsplat, open3d, Claude SDK) and `vipe` (ViPE's own). L0 (room points + ghosts + head path) comes first, then L1 (pause, grab and throw objects) by morning. **Gate at Sat 11:30 AM:** any failing step switches to its fallback. **L1 is frozen at Sat 12:00 PM (Checkpoint 2).**
 
-**Quality levels.** L0 = background + ghosts + head path (P1 alone). L1 = L0 + grabbable objects with tracks (P2's work). L2 (people meshes) and L3 (full 4D) are stretch goals.
-
-**The only things that cross between you** are the files in [`pipeline/memreplay/handoff.py`](pipeline/memreplay/handoff.py). Read it first, and change it only when you both agree. The formats are frozen as of Fri 11:15 PM.
-
-| When | P1 · World | P2 · Things |
-|---|---|---|
-| Fri 11:15 PM | — | Request Hugging Face access to `sam3.1`, `sam3` and `sam-3d-objects` |
-| Fri 11:30 PM | `frames/` + `frames.json` for the test clip → P2 | `nouns.json` v0 → P1 |
-| Sat 1:00 AM | ViPE go/no-go; `world/cameras.json` + `depth.npz` + `world.json` v0 → P2 | masks v0 → P1 (SAM 2.1 clicks if access is still pending) |
-| Sat 2:30 AM | **Checkpoint 1:** L0 `memory.json` → P3 (fused-point background + ghosts + head path) | translation-only tracks + box colliders |
-| Overnight | gsplat on the test clip | SAM 3D batch + Kabsch tracker |
-| Sat 9:00 AM | Shoot the demo clip with everyone (3 takes) | Shoot the demo clip with everyone |
-| Sat 10:00 AM | final cameras + world | final masks |
-| Sat 11:00 AM | `world/bg.spz` + ghosts | object assets + tracks |
-| Sat 11:30 AM | `memreplay merge` → `memory.json` v1 | — (assets + tracks already delivered at 11:00) |
-
-**Gate at Sat 11:30 AM:** any stage that is failing switches to its fallback. **L1 is frozen at Sat 12:00 PM (Checkpoint 2).**
-
-**Quick start on the pod** (details in the runbook, section 4):
+**Quick start on the pod** (from the repo root):
 
 ```bash
-bash /workspace/memory-replay/pipeline/runpod/setup.sh base           # once, first
-bash /workspace/memory-replay/pipeline/runpod/setup.sh vipe world     # P1
-bash /workspace/memory-replay/pipeline/runpod/setup.sh seg obj        # P2
+bash pipeline/runpod/setup.sh base world vipe warmup   # warmup pre-downloads ViPE's weights; one comes from Google Drive and can be rate-limited
 ```
 
-**Recording tonight** (full rules in [docs/PLAN.md §5](docs/PLAN.md)):
-- **1080p at 30 fps, stabilization OFF.** This is the mode where the toggle is documented; 3K is unverified.
-- **One clip per take, 30–60 s:** about 10 s of slow look-around, walk 2–3 m, then the action. Turn your head slowly. Shoot 3 takes.
-- **Props:** 1–3 rigid, textured, matte things of 10–50 cm (printed box, book, patterned ball). Someone else moves or throws them. Avoid shiny, thin, deformable or plain props; textureless props can't be tracked.
-- **Measure the wearer's eye height.** It sets the scale. The wearer should stand; sitting breaks the eye-height scale.
-- **Film a checkerboard** on a laptop screen for 15 s. S0 uses it to straighten the ultrawide lens, which ViPE needs to produce depth.
-- **Even light**, and avoid windows.
-- An empty-room sweep is optional insurance only. Nothing reads it.
+**Recording rules:**
+- **1080p at 30 fps, stabilization OFF.**
+- **Scripted take, under 30 s:** look at the floor for 3 s, then walk 2–3 m sideways while slowly panning, then the action. Shoot 3 takes. (Turning your head in place gives ViPE no parallax to triangulate from.)
+- **Props:** 2–3 symmetric, brightly coloured things (ball, can, bottle). Someone else moves or throws them. Symmetric means position-only tracking is enough.
+- **One person in frame.** The wearer turns their head slowly.
+- **Measure the wearer's eye height.** It checks ViPE's scale.
+- **Optional:** film a checkerboard on a laptop screen for 15 s. It is the fallback lens fix if the ultrawide footage comes out bent.
+- Export the clip through the Meta AI app (`.mov` on iPhone, `.mp4` on Android). Its audio plays in sync in the viewer.
 
 **On a laptop without a GPU** (editing code, testing `merge` on a work folder copied from the pod):
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate   # needs Python >= 3.10; macOS's /usr/bin/python3 is 3.9 (brew install python@3.12)
 pip install -e pipeline          # add anthropic for Claude calls
 memreplay --help
+memreplay merge work/<id> --title "..."
 ```
 
 ---
@@ -171,7 +152,7 @@ apps/web/            Viewer: one web app for Quest, phones and laptops (three.js
   src/module_bindings/  generated from the server module; don't edit by hand
 server/spacetime/    SpacetimeDB module: rooms, players, clock, branches, grabbing
 packages/shared/     memory.json format (TypeScript). Python copy: pipeline/memreplay/manifest.py
-pipeline/            Python pipeline: video → masks → camera/depth → splats → tracks → memory.json
+pipeline/            Python pipeline: glasses clip → ViPE (cameras, depth, masks) → room, ghosts, objects → memory.json
 docs/PLAN.md         The plan
 ```
 

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import Literal, Union
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 Vec3 = tuple[float, float, float]
 Quat = tuple[float, float, float, float]  # x, y, z, w
@@ -14,6 +14,7 @@ class Keyframe(BaseModel):
     p: Vec3
     q: Quat
     s: float | None = None
+    v: Vec3 | None = None  # linear velocity m/s (objects), handed to physics on pause
 
 
 class UrlRef(BaseModel):
@@ -23,6 +24,7 @@ class UrlRef(BaseModel):
 class Source(BaseModel):
     device: str
     videoUrl: str | None = None
+    audioUrl: str | None = None  # clip audio (.m4a), played in sync with the timeline
     durationSec: float
     fps: float
     width: int
@@ -71,6 +73,20 @@ class SplatSequenceVisual(BaseModel):
     format: SplatFormat
 
 
+class PrimitiveVisual(BaseModel):
+    kind: Literal["primitive"] = "primitive"
+    shape: Literal["sphere", "box", "cylinder"]
+    size: Vec3  # full extents in meters; cylinder axis is +Y
+    color: str  # "#rrggbb"
+
+
+class PointsSequenceVisual(BaseModel):
+    kind: Literal["points-sequence"] = "points-sequence"
+    url: str  # binary layout in handoff.py (POINTS_SEQUENCE_LAYOUT); points in world coords, frame k at t = k / sampleHz
+    frameCount: int
+    sampleHz: float
+
+
 class BoxCollider(BaseModel):
     kind: Literal["box"] = "box"
     halfExtents: Vec3
@@ -87,6 +103,12 @@ class CapsuleCollider(BaseModel):
     radius: float
 
 
+class CylinderCollider(BaseModel):
+    kind: Literal["cylinder"] = "cylinder"
+    halfHeight: float
+    radius: float
+
+
 class ConvexCollider(BaseModel):
     kind: Literal["convex"] = "convex"
     url: str
@@ -95,8 +117,8 @@ class ConvexCollider(BaseModel):
 class DynamicObject(BaseModel):
     id: str
     label: str
-    visual: Union[MeshVisual, SplatVisual, SplatSequenceVisual]
-    collider: Union[BoxCollider, SphereCollider, CapsuleCollider, ConvexCollider]
+    visual: Union[MeshVisual, SplatVisual, SplatSequenceVisual, PrimitiveVisual, PointsSequenceVisual] = Field(discriminator="kind")
+    collider: Union[BoxCollider, SphereCollider, CapsuleCollider, CylinderCollider, ConvexCollider] = Field(discriminator="kind")
     mass: float
     grabbable: bool = True
     visibleFrom: float

@@ -2,11 +2,11 @@
 # Everything lives on the network volume (/workspace) so it survives pod stops and redeploys.
 export WS=/workspace
 export REPO=$WS/memory-replay            # this repo, cloned or rsynced here
-export SRC=$WS/src                       # third-party repos (vipe, sam3, sam2, sam-3d-objects, gsplat)
-export ENVS=$WS/envs                     # conda envs: core, vipe, world, seg, obj
+export SRC=$WS/src                       # third-party repos (vipe, gsplat; optional sam2, sam-3d-objects)
+export ENVS=$WS/envs                     # conda envs: world, vipe (optional: sam3d)
 export WORK=$WS/work                     # one folder per memory: $WORK/<memory-id>
 export HF_HOME=$WS/cache/hf              # Hugging Face weights
-export TORCH_HOME=$WS/cache/torch        # torch.hub weights (CoTracker3, ViPE's SAM/DeAOT)
+export TORCH_HOME=$WS/cache/torch        # torch.hub weights (ViPE's SAM/DeAOT, CoTracker3)
 export PIP_CACHE_DIR=$WS/cache/pip
 export UV_CACHE_DIR=$WS/cache/uv
 export UV_PYTHON_INSTALL_DIR=$WS/cache/uv-python   # uv-managed Pythons must survive stops too

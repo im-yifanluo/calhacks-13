@@ -1,530 +1,458 @@
-# Vision pipeline runbook (P1 + P2)
+# Vision pipeline runbook
 
-**One glasses clip goes in. One `memory.json` comes out.** This page says what each step does, which tool it uses, and how to run it on Runpod. The reasons behind the tool choices are in [docs/PLAN.md §2.2](../docs/PLAN.md). The exact file formats are in [`memreplay/handoff.py`](memreplay/handoff.py).
+**One glasses clip goes in. One `memory.json` comes out.** One person runs the whole pipeline. This page covers:
+- the input and the output;
+- what each step does, its tool, and how to run it;
+- how to set everything up on Runpod.
 
-Commands marked **verified** were copied from each tool's own README on Oct 23. Nothing here has run on a real pod yet, so expect to fix small things the first time.
+The reasons behind the design are in [docs/PLAN.md §2.2](../docs/PLAN.md). The file formats between steps are in [`memreplay/handoff.py`](memreplay/handoff.py).
 
-**Who's who.**
-- **P1 = World** (S0, S3–S6, S9): the room, the camera path, the people, and the final merge.
-- **P2 = Things** (S1, S2, S7, S8): everything you can grab.
-- **P3** builds the Quest viewer (`apps/web`) and is the one who loads our output.
+Commands marked **verified** come from each tool's own README or source code, checked on Oct 23–24. Nothing here has run on a real pod or real glasses footage yet, so expect small fixes the first time.
+
+**Tonight, in this order:**
+1. §6 Runpod setup (~1 h).
+2. §8 go/no-go: S0 record, S1 normalize, S2 ViPE.
+3. Write S3, then S4, as `memreplay stage world|l0` in `pipeline/memreplay/cli.py`. Today those are stubs that print "not written yet" and exit 1.
+4. S7 merge, which gives you **L0**.
+
+Only S1 (a pasteable snippet), S2 (ViPE) and S7 (merge) run today. The times in §7 are run times, not coding times.
 
 **Demo levels.**
-- **L0** is what P1 can make alone: the room as a point cloud or splat, the people ghosts and the head path. Due Sat 2:30 AM.
-- **L1** is L0 plus P2's grabbable objects.
-
-**Eye height** is measured on the wearer when the clip is shot; S4 needs it to set real-world scale.
-
----
-
-## 1. What we produce
-
-`memory.json` describes one memory that the viewer can play:
-
-- **The room:** one Gaussian splat of everything that doesn't move (`world/bg.spz`, at most 300k splats so the Quest keeps 72 fps).
-- **The head path:** where the wearer's eyes were in every frame.
-- **People:** a colored point cloud per frame ("ghosts"). You can't grab them.
-- **Things you can grab:** for each object, a splat of the object, a simple collision shape, a mass, and its position and rotation 10 times a second.
-
-Everything is in one world frame: **meters, +Y up, floor at y = 0**.
-
-## 2. The steps at a glance
-
-```
-                              clip.mp4
-                                 │
-                       S0 Frames (P1, ffmpeg)
-               ┌─────────────────┴──────────────────┐
-     S1 Nouns (P2, Claude) ──phrases──►   S3 Cameras + depth (P1, ViPE)
-     S2 Masks (P2, SAM 3)                 S4 World frame (P1)
-               │ └─────────masks───────►  S5 Background (P1, gsplat)
-               │                          S6 Ghosts (P1)
-     S7 Objects (P2, SAM 3D)  ◄──cameras, depth, world frame──┘
-     S8 Tracks (P2, CoTracker3)
-               └─────────────────┬──────────────────┘
-                       S9 Merge → memory.json
-```
-
-| Step | Owner | Tool | What it does | Writes | Env | Our code |
-|---|---|---|---|---|---|---|
-| S0 Frames | P1 | ffmpeg + OpenCV | Picks the sharpest frame in every 100 ms and straightens the lens | `frames/`, `frames.json` | `world` | to write |
-| S1 Nouns | P2 | Claude (`claude-opus-5-5`) | Names the things that move, with size and weight | `nouns.json` | `core` | to write |
-| S2 Masks | P2 | SAM 3.1 | Outlines every person, hand and object in every frame | `masks/` | `seg` | to write |
-| S3 Cameras | P1 | NVIDIA ViPE | Finds where the head was and how far away everything is | `vipe/` | `vipe` | tool only |
-| S4 World frame | P1 | open3d | Finds the floor, sets +Y up and real-world scale | `world/cameras.json`, `depth.npz`, `world.json` | `world` | to write |
-| S5 Background | P1 | gsplat | Trains the room splat, ignoring anything that moves | `world/bg.spz` | `world` | to write (patch) |
-| S6 Ghosts | P1 | numpy | Turns people into colored points per frame | `world/ghosts/` | `world` | to write |
-| S7 Objects | P2 | SAM 3D Objects | Builds each object in 3D from one good frame | `objects/<id>/` | `obj` | to write |
-| S8 Tracks | P2 | CoTracker3 | Follows each object's position and rotation over time | `objects/objects.json` | `seg` | to write |
-| S9 Merge | P1 (anyone can run it) | `memreplay merge` | Combines everything and checks it | `memory.json` | `core` | **done** |
-
-**Frame numbering rule.** S0 keeps only the sharp frames and names each one by its original index, always zero-padded to 5 digits (`frames/full/00042.jpg`, `masks/dyn/00042.png`). Tools like SAM and ViPE number frames by position in the folder instead (0, 1, 2…). **Position p always means the p-th kept frame in `frames.json`.** Convert positions back to `idx` before writing any handoff file.
+- **L0** is the room, the people ghosts and the head path: you can walk into the memory. Goal: about 6 hours in.
+- **L1** adds grabbable objects: pause, grab, throw. Goal: by morning.
+- Everything after L1 is polish.
 
 ---
 
-## 3. Each step in detail
+## 1. Input: what the glasses give us
 
-### S0 · Frames (P1, env `world`)
+- **One video file**, exported through the Meta AI app to a phone:
+  - **Format:** HEVC `.mov` on iPhone, `.mp4` on Android.
+  - **Picture:** portrait 3:4, from a 12 MP ultrawide camera.
+  - **Modes:** 3K at 30 fps, 1080p at 30 or 60 fps, or 720p at 120 fps. Clips run up to 3 minutes.
+  - **Audio:** there's an audio track.
+- **One camera, so no stereo.** The second opening on the front is the recording light. And even if there were two cameras, the exported video is a single view.
+  - **Depth from motion:** as the wearer moves, ViPE triangulates the same points across frames (structure from motion).
+  - **Depth from a model:** a depth network fills in every pixel and sets real-world scale.
+  - **What the file doesn't have:** no depth, no camera position, no motion-sensor data, no lens model. All of it is inferred.
+- **Optional live stream** (Meta's Device Access Toolkit): at most 720×1280 over Bluetooth. Too low quality to rebuild from; a stretch goal for a "live" moment only.
+- **What we add when recording** (this matters a lot):
+  - **Settings:** 1080p at 30 fps, **stabilization off**.
+  - **Script:** look at the floor for 3 s, then **walk 2–3 m sideways while slowly panning** across the room, then the action. Under 30 s; 3 takes. Turning your head in place gives ViPE no parallax, so depth would come only from the depth model.
+  - **People:** one person in frame; slow head motion.
+  - **Props:** 2–3 symmetric, brightly coloured objects (ball, can, bottle), moved or thrown by someone else.
+  - **Measure the wearer's eye height.**
+  - **Optional:** film a checkerboard on a laptop screen for 15 s, used only if the lens needs fixing.
 
-**What it does.** It decodes every frame with its real timestamp and keeps the sharpest one in each 100 ms window, which gives about 10 frames per second. If we filmed the checkerboard, it also straightens the ultrawide lens. ViPE then sees a normal (pinhole) camera and can produce depth, which its wide-angle mode does not.
+## 2. Output: what the viewer needs
 
-**Run.** Every new shell needs `source /workspace/memory-replay/pipeline/runpod/env.sh` first; it defines `$WORK`, `$SRC` and the `use` command. Use the `world` env, because its ffmpeg 6 understands `-fps_mode` and the apt ffmpeg 4.4 doesn't.
+One `memory.json` (format: [`packages/shared/src/manifest.ts`](../packages/shared/src/manifest.ts)). Everything is in meters, +Y up, floor at y = 0.
+
+| # | Part | File | Notes |
+|---|---|---|---|
+| 1 | Room you see | `world/bg_points.ply` (L0), then `world/bg.spz` | ≤ 300k splats so the Quest keeps 72 fps |
+| 2 | Room you collide with | `world/room_collider.glb` | Floor and tables as a 10 cm heightfield, so thrown things land on tables |
+| 3 | Head path | in `memory.json` | Camera at 10 Hz, plus field of view |
+| 4 | People | `world/ghosts/<id>.bin` | Coloured points per frame, not grabbable |
+| 5 | Grabbable objects | in `memory.json` | Tinted sphere, box or cylinder; collider; mass; position at 10 Hz with velocity |
+| 6 | Audio | `input/audio.m4a` | Played in sync with the timeline |
+
+## 3. The pipeline at a glance
+
+```
+clip.mov ─► S1 Normalize ─► S2 ViPE ─► S3 World frame ─► S4 L0 export ─► S7 Merge ─► memory.json  (L0)
+                                                      └─► S5 Objects ───► S7 Merge ─► memory.json  (L1)
+                                                      └─► S6 Background splat (overnight) ─► S7 Merge
+```
+
+| Step | Tool | What it does | Writes | Env | Our code |
+|---|---|---|---|---|---|
+| S0 Record | the glasses | Scripted clip and eye height | `clip.mov` | — | — |
+| S1 Normalize | ffmpeg | Upright, constant 30 fps, 1280 px; splits off the audio; lists the prompts | `input/`, `nouns.json` | `world` | small (snippet below) |
+| S2 Cameras, depth, masks | **NVIDIA ViPE** | Head path, lens, metric depth for every pixel, per-frame masks with object IDs | `vipe/` | `vipe` | tool only |
+| S3 World frame | numpy + open3d | Finds "up" and the floor; puts everything in meters with the floor at 0 | `world/world.json`, `world/cameras.json` | `world` | to write |
+| S4 L0 export | numpy + trimesh | Room points, room collider, people ghosts | `world/` | `world` | to write |
+| S5 Objects | numpy + Claude | Object positions over time; Claude picks each object's shape, size and mass | `objects/` | `world` | to write |
+| S6 Background splat | gsplat | A sharper room splat, trained overnight | `world/bg.spz` | `world` | to write (patch) |
+| S7 Merge | `memreplay merge` | Combines everything and checks it | `memory.json` | `world` | **done** |
+
+**Frame numbering.** Frame `i` is the `i`-th frame of `input/clip.mp4`, and ViPE uses the same numbers. Every 3rd frame is a keyframe, which gives 10 Hz for tracks, ghosts and the head path.
+
+**Cut on purpose:**
+- **SAM 3 / 3.1:** access approval plus a clashing environment.
+- **SAM 3D:** half a day of installs.
+- **FoundationPose.**
+- **Full 4D splatting.**
+- **VGGT and Depth Anything 3 as the camera solver:** they assume nothing moves.
+
+The upgrades in section 5 cover the gaps if there's time.
+
+---
+
+## 4. Each step in detail
+
+Every new shell on the pod starts with:
 ```bash
-use world
-W=$WORK/livingroom                       # one folder per memory
-mkdir -p $W/frames/raw && cd $W
-ffmpeg -i clip.mp4 -fps_mode passthrough -q:v 2 -start_number 0 frames/raw/%05d.jpg
-ffprobe -v error -select_streams v:0 -show_entries frame=pts_time -of csv=p=0 clip.mp4 > frames/raw_times.txt
-memreplay stage frames --work $W          # TO WRITE (P1): sharpness pick, undistort, frames/full + frames/small (640 px), frames.json
-ffmpeg -framerate 10 -pattern_type glob -i 'frames/small/*.jpg' -c:v libx264 -crf 12 -pix_fmt yuv420p frames/small.mp4   # ViPE input
+source /workspace/memory-replay/pipeline/runpod/env.sh    # defines $WORK, $SRC, $ENVS and the `use` command
+W=$WORK/kitchen                                          # one folder per memory; put clip.mov in it
 ```
 
-**Tonight, until `memreplay stage frames` exists,** use plain 10 fps frames instead. This needs no Python, and it's enough for the go/no-go test:
+### S0 · Record
+Follow the script in section 1. Copy the clip to the pod:
 ```bash
-use world && W=$WORK/livingroom && cd $W && mkdir -p frames/full frames/small
-ffmpeg -i clip.mp4 -vf fps=10 -q:v 2 -start_number 0 frames/full/%05d.jpg
-ffmpeg -i clip.mp4 -vf "fps=10,scale='if(gt(iw,ih),640,-2)':'if(gt(iw,ih),-2,640)'" -q:v 2 -start_number 0 frames/small/%05d.jpg
-ffmpeg -framerate 10 -i frames/small/%05d.jpg -c:v libx264 -crf 12 -pix_fmt yuv420p frames/small.mp4
+ssh -p <port> root@<ip> mkdir -p /workspace/work/kitchen
+rsync -avP -e "ssh -p <port>" <exported-file> root@<ip>:/workspace/work/kitchen/clip.mov   # always name it clip.mov; ffmpeg reads the container, not the extension
+ssh -p <port> root@<ip> "echo '{\"eye_height_m\": 1.65}' > /workspace/work/kitchen/capture.json"   # the wearer's measured eye height; S3 reads it
 ```
 
-**Sharpness score.** `cv2.Laplacian(gray, cv2.CV_64F).var()`. Higher is sharper.
+### S1 · Normalize (env `world`; to write: `memreplay stage normalize --work $W`; until then paste the snippet below)
+**What it does.**
+- Rotates the video upright (ffmpeg applies the phone's rotation flag when decoding).
+- Forces a constant 30 fps.
+- Scales the long side to 1280 px.
+- Splits off the audio.
+- Records the frame count and size.
 
-**Lens straightening (optional).** Run `cv2.calibrateCamera` on about 20 checkerboard frames, save the result to `calib.json`, then apply `cv2.undistort` to every kept frame.
-
-**If it fails.** Use plain `ffmpeg -vf fps=10` and skip the lens straightening.
-
-### S1 · Nouns (P2, env `core`)
-
-**What it does.** Sends 8 evenly spaced frames to Claude and gets back up to 6 rigid, textured things that move, plus `person` and `hand`. Each entry has a size range and a density. The list has two uses:
-- SAM 3's text prompts (S2);
-- ViPE's "ignore these" list (S3), so a thrown box doesn't throw off the camera path.
-
-**Run** (Claude API usage per Anthropic's docs; needs `ANTHROPIC_API_KEY` in `/workspace/secrets.sh`):
-```python
-import anthropic, base64, glob, json
-from memreplay.handoff import Nouns
-
-W = "/workspace/work/livingroom"
-files = sorted(glob.glob(f"{W}/frames/small/*.jpg"))
-keyframes = files[:: max(1, len(files) // 8)][:8]
-img = lambda p: {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
-                 "data": base64.standard_b64encode(open(p, "rb").read()).decode()}}
-PROMPT = ("These are 8 frames from a first-person video. List up to 6 rigid, textured things that move "
-          "during the clip (carried, thrown, rolled) as short noun phrases usable as segmentation prompts. "
-          "For each give the longest-side size range in meters, a density in kg/m3, and whether a person "
-          "could pick it up. Also include one entry with kind 'person' and one with kind 'hand' "
-          "(grabbable false). Leave out furniture and anything that never moves.")
-item = {"type": "object", "additionalProperties": False,
-        "required": ["noun", "kind", "size_min_m", "size_max_m", "density_kg_m3", "grabbable"],
-        "properties": {"noun": {"type": "string"}, "kind": {"type": "string", "enum": ["object", "person", "hand"]},
-                       "size_min_m": {"type": "number"}, "size_max_m": {"type": "number"},
-                       "density_kg_m3": {"type": "number"}, "grabbable": {"type": "boolean"}}}
-schema = {"type": "object", "additionalProperties": False, "required": ["nouns"],
-          "properties": {"nouns": {"type": "array", "items": item}}}
-
-client = anthropic.Anthropic()
-resp = client.beta.messages.create(
-    model="claude-opus-5-5", max_tokens=16000,
-    output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}},
-    betas=["server-side-fallback-2026-07-01"], fallbacks="default",   # retries on another model if declined
-    messages=[{"role": "user", "content": [*map(img, keyframes), {"type": "text", "text": PROMPT}]}],
-)
-if resp.stop_reason == "refusal":
-    raise SystemExit(f"declined: {resp.stop_details}")
-nouns = Nouns.model_validate_json(next(b.text for b in resp.content if b.type == "text"))
-open(f"{W}/nouns.json", "w").write(nouns.model_dump_json(indent=2))
+```bash
+use world && cd $W && mkdir -p input
+ffmpeg -i clip.mov -vf "fps=30,scale='if(gt(iw,ih),1280,-2)':'if(gt(iw,ih),-2,1280)'" -an -c:v libx264 -crf 14 -pix_fmt yuv420p input/clip.mp4
+ffmpeg -i clip.mov -vn -c:a aac -b:a 128k input/audio.m4a
+python - <<'EOF'
+import json, subprocess
+from memreplay.handoff import FramesInfo
+s = json.loads(subprocess.check_output(["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0",
+    "-show_entries", "stream=width,height,nb_read_frames", "-of", "json", "input/clip.mp4"]))["streams"][0]
+n = int(s["nb_read_frames"])
+open("input/frames.json", "w").write(FramesInfo(source="clip.mov", width=s["width"], height=s["height"],
+                                                frame_count=n, duration_sec=n / 30).model_dump_json(indent=2))
+EOF
+echo '{"nouns": ["person", "hand", "ball", "can", "bottle"]}' > nouns.json   # single words; always keep person and hand
 ```
 
-**If it fails.** Write `nouns.json` by hand. It has the same format and takes 2 minutes.
-
-### S2 · Masks (P2, env `seg`)
-
-**What it does.** For each noun, SAM 3.1 finds every instance in every frame and gives it an ID. We then fix up the results:
-- **Re-joined IDs:** an object that leaves the frame and comes back gets a new ID, so stitch them back together (same 3D position within 0.3 m and similar look).
-- **The wearer's own hands** become `ego-hand`: masks that touch the frame edge and are closer than 0.8 m. The distance check needs S3's depth.
-- **Held frames:** frames where a hand covers an object get `held: true`.
-
-**Output.** `masks/tracks.json` (COCO RLE), plus `masks/dyn/<idx>.png`: every moving pixel combined, grown by 12 px.
-
-**Run** (SAM 3.1 API, **verified** from the repo; the loop around it is ours to write; env `seg`):
-```python
-import os
-from memreplay.handoff import Nouns
-from sam3.model_builder import build_sam3_multiplex_video_predictor
-W = os.environ["WORK"] + "/livingroom"
-nouns = Nouns.model_validate_json(open(f"{W}/nouns.json").read())
-predictor = build_sam3_multiplex_video_predictor()      # needs Hugging Face access to facebook/sam3.1
-sid = predictor.handle_request(request=dict(type="start_session", resource_path=f"{W}/frames/full"))["session_id"]
-for noun in [n.noun for n in nouns.nouns]:
-    predictor.handle_request(request=dict(type="add_prompt", session_id=sid, frame_index=0, text=noun))
-    for r in predictor.handle_stream_request(request=dict(type="propagate_in_video", session_id=sid)):
-        out = r["outputs"]   # out_obj_ids [N], out_probs [N], out_binary_masks [N,H,W] bool, at frame position r["frame_index"]
-        ...                  # encode each mask with pycocotools (below) and store under f"{noun}:{obj_id}"
-    predictor.handle_request(request=dict(type="reset_session", session_id=sid))   # REQUIRED before the next noun
-predictor.handle_request(request=dict(type="close_session", session_id=sid))
-```
-```python
-from pycocotools import mask as mask_util; import numpy as np
-rle = mask_util.encode(np.array(m[:, :, None], dtype=np.uint8, order="F"))[0]
-rle["counts"] = rle["counts"].decode("utf-8")
-```
-
-**Watch out.**
-- Frame files must be named `<number>.jpg`; ours are.
-- A session expires after 20 minutes.
-- SAM 3.1 wants `flash-attn-3`. If that wheel won't install, try `build_sam3_multiplex_video_predictor(use_fa3=False)` (unverified).
-
-**If it fails** (for example, Hugging Face access isn't approved yet): use SAM 2.1 with a box per object from Grounding DINO. Neither needs approval. The complete runnable script is the P2 test in section 6; run it once per noun.
-
-### S3 · Cameras + depth (P1, env `vipe`)
-
-**What it does.** ViPE looks for the named moving things, ignores them, and solves for three things in every frame:
-- where the head was;
+### S2 · Cameras, depth and masks with ViPE (env `vipe`)
+**What it does.** ViPE finds the named things in every frame and ignores them when it works out the camera path. It writes:
+- the head path for every frame;
 - the lens settings;
-- near-metric depth for every pixel.
+- metric depth for **every** pixel, people and objects included;
+- a mask image per frame, with an ID for each person and object.
 
-It writes poses, intrinsics, depth and its own masks.
-
-**Run** (**verified**; `run.py` is the only way to set the masking phrases):
+**Run** (**verified**; `run.py` is the only way to set the prompts):
 ```bash
-cd $SRC/vipe
+use vipe && cd $SRC/vipe
 uv run python run.py pipeline=default streams=raw_mp4_stream \
-  streams.base_path=$W/frames/small.mp4 streams.frame_end=-1 \
+  streams.base_path=$W/input/clip.mp4 streams.frame_end=-1 \
   pipeline.output.path=$W/vipe pipeline.output.save_artifacts=true \
-  "pipeline.init.instance.phrases=[$(python3 -c "import json;print(','.join(json.dumps(n['noun']) for n in json.load(open('$W/nouns.json'))['nouns']))" 2>/dev/null || echo 'person,hand,box')]"
-# ^ the S1 nouns, or person,hand,box if nouns.json isn't there yet. Hydra list quoting is unverified; check ViPE's log.
+  "pipeline.init.instance.phrases=[$(python3 -c "import json;print(','.join(json.load(open('$W/nouns.json'))['nouns']))")]"
 ```
 
-**What it writes** in `$W/vipe/` (`<name>` = `small`):
+**What it writes** in `$W/vipe/` (`<name>` = `clip`; readers are in `vipe.utils.io`):
 
 | File | Contents |
 |---|---|
-| `pose/<name>.npz` | `data` (N,4,4) camera-to-world, OpenCV axes (x right, y down, z forward); `inds` frame positions |
-| `intrinsics/<name>.npz` | `data` (N,4) `[fx, fy, cx, cy]` |
-| `depth/<name>.zip` | one float16 EXR per frame, metric |
-| `mask/<name>.zip` + `mask/<name>.txt` | instance masks and their phrases. These can stand in for S2's masks in the L0 demo. |
-
-The readers are in `vipe.utils.io`.
+| `pose/clip.npz` | `data` (N,4,4) camera-to-world, OpenCV axes (x right, y down, z forward); `inds` frame numbers |
+| `intrinsics/clip.npz` | `data` (N,4) `[fx, fy, cx, cy]` |
+| `depth/clip.zip` | one float16 EXR per frame, metric, every pixel |
+| `mask/clip.zip` | one PNG per frame, pixel value = instance ID (0 = static) |
+| `mask/clip.txt` | `id: phrase` for each ID, including `sky` |
 
 **Look at it:**
-- Run `uv run vipe visualize $W/vipe` on the pod.
-- On your laptop, run `ssh -L 20540:localhost:20540 -p <port> root@<ip>`.
-- Open http://localhost:20540.
+1. On the pod, in a new tmux window (Ctrl-b c): `source /workspace/memory-replay/pipeline/runpod/env.sh; W=$WORK/kitchen; use vipe && cd $SRC/vipe && uv run vipe visualize $W/vipe`. It runs until you stop it.
+2. On your laptop, run `ssh -L 20540:localhost:20540 -p <port> root@<ip>`.
+3. Open http://localhost:20540.
 
-**Watch out.**
+**Check (verified from ViPE's source):**
+- **Prompts:** our list replaces ViPE's default one, which is why `person` and `hand` are always in it.
+- **IDs:** an object keeps its ID while ViPE tracks it. If it's lost and found again, it gets a new ID, and S5 joins those back up.
+- **Depth includes everything,** people and sky too. S4 removes them for the room.
+- **Feed it the mp4,** not a folder of images, so it reads the real frame rate.
 - **Use the `default` preset.** `wide_angle` and `pose_only_long` write **no depth**.
-- **`run.py` stops at 1000 frames** unless you pass `streams.frame_end=-1`.
-- **Without `save_artifacts=true`, nothing is written.**
-- **One weight file comes from Google Drive and can be rate-limited.** `setup.sh` doesn't pre-fetch it. Do your first run with `streams.frame_end=30` so the weights download quickly, then do the full run.
+- **The two `run.py` settings matter:** without `streams.frame_end=-1` it stops at 1000 frames, and without `save_artifacts=true` it writes nothing.
+- **Depth details (unverified):**
+  - Check that each depth EXR is the same size as `input/clip.mp4`; resize with nearest-neighbour if not.
+  - Check that the floor comes out flat. If it bends, the values are distance along each ray, not straight-ahead depth.
 
-**If it fails**, try these in order:
-1. If the lens wasn't straightened in S0, straighten it, then rerun `default`.
-2. Compare with `uv run vipe infer $W/frames/small.mp4 -p wide_angle -o $W/vipe_wide`. That gives poses only, so use it as a sanity check on the camera path.
-3. MapAnything with the `facebook/map-anything-apache` weights on masked keyframes.
-4. MegaSaM, if a GPU is free.
+**If it fails**, in order:
+1. If straight lines look bent, fix the lens with the checkerboard (`cv2.calibrateCamera`, then `cv2.undistort` on `input/clip.mp4`) and rerun.
+2. Compare the camera path with `use vipe && cd $SRC/vipe && uv run vipe infer $W/input/clip.mp4 -p wide_angle -o $W/vipe_wide` (poses only).
+3. Try MapAnything (`facebook/map-anything-apache` weights).
+4. Try MegaSaM.
 
-### S4 · World frame (P1, env `world`)
-
-**What it does.**
-1. Reads ViPE's output and fits the floor plane to static depth points: open3d `segment_plane(distance_threshold=0.02, ransac_n=3, num_iterations=1000)`.
-2. Rotates so +Y points up, with the floor at y = 0.
-3. Scales so the median head height equals the wearer's measured eye height.
-4. Writes `world/cameras.json` (with `in_world_frame: true`), `world/depth.npz` and `world/world.json` in the handoff formats.
-
-**Run:** `memreplay stage world --work $W` (TO WRITE).
-
-**Check:** before rescaling, eye height should come out between 1.4 and 1.8 m.
+### S3 · World frame (env `world`; to write: `memreplay stage world --work $W`)
+**What it does.** Moves everything into one world frame: meters, +Y up, floor at y = 0.
+1. **Find "up":** the average of the cameras' up directions. The camera's up is the negative of its y axis in OpenCV terms.
+2. **Find the floor:** with open3d, fit a plane to static depth points (mask ID 0) from every 10th frame:
+   ```python
+   pcd.segment_plane(distance_threshold=0.02, ransac_n=3, num_iterations=1000)
+   ```
+   Only accept a plane whose normal is within 15° of "up", and take the lowest one; otherwise tabletops win.
+3. **Build the transform:** rotate the floor normal onto +Y and shift the floor to y = 0.
+4. **Scale:** trust ViPE's metric depth (`scale = 1.0`). Compare the median head height with the wearer's eye height from `capture.json`. If they differ by more than 20%, set `scale = eye_height / median_height`.
+5. **Write** `world/world.json` and `world/cameras.json` (keyframes only, already in the world frame).
 
 **If it fails:** pick 3 floor points by hand in the ViPE viewer.
 
-### S5 · Background (P1, env `world`)
+### S4 · L0 export (env `world`; to write: `memreplay stage l0 --work $W`)
+**What it does.** Builds the first walkable memory.
+- **Room points:**
+  1. From every 3rd frame, keep pixels with mask ID 0, which also drops sky because sky gets its own ID. Also drop anything deeper than 8 m.
+  2. Back-project them to world points.
+  3. Thin them to a 2 cm grid, keeping at most 300k points.
+  4. Write them as small round splats in `world/bg_points.ply`:
+     - fields `x y z f_dc_0..2 opacity scale_0..2 rot_0..3`;
+     - `f_dc = (rgb/255 − 0.5) / 0.28209`;
+     - `scale = log(0.01)`; `opacity` = logit of 0.9.
+  5. Set `bgPointsCount` in `world/world.json` to the number written; merge copies it into `background.splatCount`.
+- **Room collider:**
+  1. Lay a 10 cm grid over the floor.
+  2. Each cell's height is the 90th-percentile height of the room points below 1.2 m in it, so tables count. Empty cells stay at 0.
+  3. Turn the grid into a mesh with `trimesh` and save `world/room_collider.glb`.
+- **People ghosts:** for each `person` ID, at each keyframe:
+  1. Shrink the mask by 5 px.
+  2. Drop pixels at depth edges, where depth jumps more than 10 cm to a neighbour.
+  3. Back-project, keep at most 15k points, and keep their colours.
+  4. Write each person with `write_points_sequence()` from `handoff.py` to `world/ghosts/<id>.bin`. The positions are already in world meters.
+     - **One block per keyframe of the whole clip.** Frame k is at t = k / 10 s; frames where the person isn't visible have 0 points.
+     - **List each person in `world/ghosts.json`** with:
+       - `visual: {kind: "points-sequence", url: "world/ghosts/<id>.bin", frameCount, sampleHz: 10}`;
+       - `grabbable: false`, `mass: 0`;
+       - a `capsule` collider (`halfHeight: 0.6, radius: 0.25`);
+       - `visibleFrom` and `visibleTo` from the masks;
+       - an identity track `[{t: 0, p: [0,0,0], q: [0,0,0,1]}]`.
+- **Then:** `memreplay merge $W --title "Kitchen"`. This is the **L0 demo**.
 
-**What it does.** Trains the room as a Gaussian splat from the same clip. Every pixel that S2 (or ViPE) marked as moving is left out of the loss, so people and props leave no smears. It caps the result at 300k splats and converts it to `.spz`.
+**If it fails:** use 5k points and every 2nd keyframe for ghosts; skip the room collider (things only land on the floor).
 
-**L0 shortcut first (about 2 minutes):** fuse the static depth points into one point cloud and save each point as a small splat. It looks rougher, but it gets something into the Quest tonight.
+### S5 · Objects (env `world`; to write: `memreplay stage objects --work $W`)
+**What it does.** Turns each moving object into something you can grab.
+1. **Group IDs.** Take every mask ID whose phrase isn't `person`, `hand` or `sky`. Join IDs with the same phrase whose 3D positions are within 0.3 m and whose time ranges don't overlap; those are re-detections of the same object.
+2. **Track position.** At each keyframe:
+   - Take the object's world points: shrunk mask, depth-edge filter.
+   - Its position is their median.
+   - Smooth the positions with Savitzky-Golay (window 7, order 2).
+   - Velocity `v` in m/s: `(p[k+1] − p[k−1]) / (t[k+1] − t[k−1])` on the smoothed positions, one-sided at the first and last keyframe.
+   - Rotation stays fixed. That's correct for symmetric props.
+3. **Ask Claude what it is.** Crop the frame where the object's mask is biggest and sharpest into `objects/crops/<id>.jpg`, then send the crop and the label to Claude (snippet below). It returns a shape, size, density, colour and whether it's grabbable.
+4. **Sanity-check and finish.**
+   - **Size:** keep Claude's size within 0.5–2× of the largest extent we actually saw.
+   - **Mass:** density × volume.
+   - **Write** `objects/objects.json` with:
+     - a `primitive` visual;
+     - a matching `sphere`, `box` or `cylinder` collider;
+     - the track, with `v` on every keyframe.
+5. **Then** merge again. This is the **L1 demo**.
 
-**Run** (gsplat **verified** from its docs; the mask loader and COLMAP writer are ours to write):
+**Claude call** (Anthropic SDK; `ANTHROPIC_API_KEY` in `/workspace/secrets.sh`):
+```python
+import anthropic, base64
+from memreplay.handoff import ObjectSpec
+
+def describe(crop_path: str, label: str) -> ObjectSpec:
+    schema = {"type": "object", "additionalProperties": False,
+              "required": ["label", "shape", "size_m", "density_kg_m3", "color", "grabbable"],
+              "properties": {"label": {"type": "string"},
+                             "shape": {"type": "string", "enum": ["sphere", "box", "cylinder"]},
+                             "size_m": {"type": "array", "items": {"type": "number"}},
+                             "density_kg_m3": {"type": "number"},
+                             "color": {"type": "string"},
+                             "grabbable": {"type": "boolean"}}}
+    img = base64.standard_b64encode(open(crop_path, "rb").read()).decode()
+    prompt = (f"This crop shows a '{label}' from a first-person video. Pick the simple shape that best "
+              "approximates it for a physics engine (sphere, box, or cylinder with a vertical axis), its full "
+              "size in meters as [x, y, z] (y is up), a realistic average density in kg/m3, its main colour "
+              "as #rrggbb, and whether a person could pick it up.")
+    resp = anthropic.Anthropic().beta.messages.create(
+        model="claude-opus-5-5", max_tokens=16000,
+        output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}},
+        betas=["server-side-fallback-2026-07-01"], fallbacks="default",   # retries on another model if declined
+        messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img}},
+            {"type": "text", "text": prompt}]}],
+    )
+    if resp.stop_reason == "refusal":
+        raise RuntimeError(f"declined: {resp.stop_details}")
+    return ObjectSpec.model_validate_json(next(b.text for b in resp.content if b.type == "text"))
+```
+
+**If it fails:** write `objects.json` by hand. Two objects take 5 minutes.
+
+### S6 · Background splat (env `world`; overnight)
+**What it does.** Trains a proper Gaussian splat of the room. It starts from the L0 points and ignores every masked pixel, so people and props don't smear.
+
+**Prepare** (to write: `memreplay stage background --work $W`). It writes `$W/colmap/`:
+- `images/`: the keyframes as full-size JPGs.
+- `masks/`: one PNG per image, **white = static**; this is ViPE's mask ID 0.
+- `sparse/0/`:
+  - `cameras.txt` (`PINHOLE fx fy cx cy`);
+  - `images.txt` with **world-to-camera** poses, quaternion `QW QX QY QZ`, then an empty second line;
+  - `points3D.txt` seeded from `bg_points.ply`.
+
+**Patch gsplat** (`examples/datasets/colmap.py`, `Dataset.__getitem__`): load `masks/<stem>.png` and set `data["mask"] = torch.from_numpy(m > 127)`. The `main` branch already drops masked pixels from the loss.
+
+**Train and convert** (gsplat and splat-transform flags **verified** from their docs and scripts):
 ```bash
-memreplay stage background --work $W             # TO WRITE (P1): writes $W/colmap: images, sparse/0, masks (white = static)
-cd $SRC/gsplat/examples
+use world && cd $SRC/gsplat/examples
 python simple_trainer.py mcmc --data_dir $W/colmap --data_factor 1 --result_dir $W/gsplat \
-  --strategy.cap-max 300000 --steps_scaler 0.5 --save_ply \
+  --strategy.cap-max 300000 --steps_scaler 0.25 --save_ply \
   --app_opt --pose_opt --disable_viewer --eval_steps -1 --no-normalize-world-space
-splat-transform $W/gsplat/ply/point_cloud_14999.ply --filter-nan --decimate 300000 $W/gsplat/bg_300k.ply
+splat-transform $W/gsplat/ply/point_cloud_7499.ply --filter-nan --decimate 300000 $W/gsplat/bg_300k.ply
 splat-transform -w $W/gsplat/bg_300k.ply $W/world/bg.spz
 ```
-
-**Patch gsplat** (in `datasets/colmap.py`, `Dataset.__getitem__`): load `colmap/masks/<stem>.png` and set `data["mask"] = torch.from_numpy(m > 127)`, where True means a static pixel that is kept. The `main` branch already drops masked pixels from the loss.
-
-**Mask direction.** S2's `masks/dyn/` is **white = moving**. gsplat and Brush both want **white = static**, so `memreplay stage background` writes `colmap/masks/<stem>.png = 255 - masks/dyn/<idx>.png`. Copying `masks/dyn` across as-is would train only on the moving things.
-
-**Step count.** `--steps_scaler 0.5` gives 15k steps and also scales gsplat's refinement schedule. Setting only `--max_steps` would keep refining until the very last step.
-
-**COLMAP layout:**
-- Images go in `colmap/images/`, cameras in `colmap/sparse/0/`.
-- `images.txt` stores **world-to-camera** poses with the quaternion as `QW QX QY QZ`.
-- Seed `points3D.txt` with about 200k fused static depth points.
+Then set `bgSplatCount` in `world/world.json` and merge again. Merge picks `bg.spz` over the points automatically.
 
 **Watch out.**
-- **Turn off `normalize_world_space`,** or the splat ends up in a different frame from everything else. Check the exact flag with `python simple_trainer.py mcmc --help | grep normalize`.
-- **Other flag spellings** (`--max_steps` and so on) come from the benchmark scripts; confirm them with `--help`.
-- **Orientation:** if the splat shows up upside down in the viewer, add `-r 180,0,0` to the convert step.
-- **Splat-transform's `--decimate` must be the last action,** so decimate and convert in two separate calls.
+- **`normalize_world_space` must be off,** or the splat lands in a different frame. Confirm the flag spelling with `python simple_trainer.py mcmc --help | grep normalize`.
+- **Step count:** `--steps_scaler 0.25` gives about 7.5k steps and scales the refinement schedule to match. The last PLY is `point_cloud_<steps−1>.ply`, so check `ls $W/gsplat/ply`.
+- **Orientation:** if the splat shows up upside down, add `-r 180,0,0` to the convert step.
 
-**If it fails:** run Brush (`brush $W/colmap --max-splats 300000 --total-steps 15000 --export-path $W/brush`; reads `masks/` next to `images/`), or ship the L0 point splat.
+**If it fails:** keep the L0 points; or try Brush (`brush $W/colmap --max-splats 300000 --total-steps 7500 --export-path $W/brush`).
 
-### S6 · Ghosts (P1, env `world`)
-
-**What it does.** For each person mask, takes the depth inside the (slightly shrunk) mask and drops pixels at depth edges, which are flying pixels. The rest becomes 20–30k colored splats in world coordinates per frame, at 10 Hz.
-
-**Output:**
-- `world/ghosts/<id>/<n>.spz`;
-- an entry in `world/ghosts.json` with `visual.kind = "splat-sequence"` and `grabbable: false`.
-
-**Run:** `memreplay stage ghosts --work $W` (TO WRITE).
-
-**If it fails:** use 10k points and every second frame.
-
-### S7 · Objects (P2, env `obj`)
-
-**What it does.** For each object:
-1. Picks its best frame (big mask × sharp × not covered by a hand).
-2. Builds the full object in 3D with SAM 3D Objects, including sides we never saw.
-3. Fixes its size against our depth, and builds a convex collision shape (≤64 vertices) and a mass (density × volume).
-
-**Run** (SAM 3D API **verified** from the repo; run from `$SRC/sam-3d-objects`):
-```python
-import sys; sys.path.append("notebook")
-from inference import Inference
-inference = Inference("checkpoints/hf/pipeline.yaml", compile=False)
-out = inference(image, mask, seed=42, pointmap=P)   # P: HxWx3 torch tensor from our depth, see below
-out["gs"].save_ply(f"{W}/objects/{oid}/gs_raw.ply")
-# out["rotation"] (quaternion w,x,y,z), out["translation"], out["scale"]: object -> camera
-```
-
-**Size fix:**
-1. Render the asset's depth at the predicted pose.
-2. scale = median(our depth) ÷ median(rendered depth), over visible object pixels.
-3. A few ICP steps on rotation and position only, with scale locked.
-4. Clamp to S1's size range.
-
-**Collider:** `trimesh` convex hull of the splat centers, simplified to ≤64 vertices, saved as `hull.glb`.
-
-**Splat:** splat-transform lives in the `world` env, so call it through `conda run`:
+### S7 · Merge (env `world`; **done** and tested)
 ```bash
-conda run -p $ENVS/world splat-transform $W/objects/<id>/gs_raw.ply --decimate 30000 $W/objects/<id>/gs_30k.ply
-conda run -p $ENVS/world splat-transform -w $W/objects/<id>/gs_30k.ply $W/objects/<id>/gs.spz
+memreplay merge $W --title "Kitchen"
 ```
 
-**Watch out.**
-- **Pointmap axes:** if you pass our depth as a pointmap, flip it from OpenCV axes to PyTorch3D axes by negating X and Y (from reading the code; unverified).
-- **Separate env:** this env pins Python 3.11, CUDA 12.1 and torch 2.5.1, and must be built on the GPU pod.
-- **GPU memory:** it needs at least 32 GB.
+It combines `input/`, `world/` and `objects/`:
+- **Background:** uses `bg.spz` if it exists, otherwise `bg_points.ply`.
+- **Extras:** adds the room collider and audio when present.
+- **Stops** on duplicate IDs, missing cameras (run S3) or no background yet (run S4).
+- **Warns** about a background over 350k splats, or objects below the floor.
 
-**If it fails:** use TRELLIS.2 plus our own fit, or the object's fused depth points with a box collider.
+---
 
-### S8 · Tracks (P2, env `seg`)
+## 5. Upgrades (only after L1 works)
 
-**What it does.** For each object:
-1. CoTracker3 follows a grid of points on the object (with hands removed) through the clip.
-2. Using P1's depth and cameras, each visible point becomes a 3D world point.
-3. Each frame, a RANSAC Kabsch fit finds the rotation and position that best moves the reference points onto that frame's points (scale fixed, 2 cm inlier threshold, at least 6 inliers).
-4. Smooth with Savitzky-Golay (window 7, order 2), sample at 10 Hz, and fill held frames by interpolation.
+| Upgrade | When it's worth it | Install | Tool |
+|---|---|---|---|
+| Object rotation | A prop isn't symmetric (a book, a shoe) | `bash setup.sh extras` (into `world`) | CoTracker3 follows points on the object, lifted to 3D with ViPE depth; a RANSAC Kabsch fit per frame gives the rotation |
+| Better masks | ViPE's masks miss or bleed | `bash setup.sh extras` | SAM 2.1 with a box from Grounding DINO (no access approval needed) |
+| Real object shapes | Everything else is done | `bash setup.sh sam3d sam3d_weights` (gated; half a day) | SAM 3D Objects |
 
-**Run** (CoTracker3 **verified** from the repo):
+**CoTracker3** (**verified** from its repo):
 ```python
-import torch
 cotracker = torch.hub.load("facebookresearch/co-tracker", "cotracker3_offline").cuda()
-video = torch.from_numpy(frames).permute(0, 3, 1, 2)[None].float().cuda()     # (1, T, 3, H, W), 0..255
-segm = torch.from_numpy(mask_t0).float()[None, None].cuda()                    # object mask at frame t0
-tracks, vis = cotracker(video, grid_size=40, segm_mask=segm, grid_query_frame=t0, backward_tracking=True)
-# tracks (1, T, N, 2) pixel x,y; vis (1, T, N) bool
-```
-
-**Watch out.**
-- **Memory grows with clip length.** Run windows of about 200 frames with overlap, or use `cotracker3_online`.
-- **Textureless objects can't be tracked,** so pick printed or patterned props.
-- **Before P1's world cameras land,** run everything in camera coordinates.
-
-**If it fails:** translation only (the median of the object's world points per frame), and as a last resort a static object.
-
-### S9 · Merge (anyone, env `core`)
-
-**What it does.** Combines `world/` and `objects/` into `memory.json` and checks it:
-- **Stops** if the cameras aren't in the world frame or object IDs repeat.
-- **Warns** if the background has more than 350k splats, or an object goes more than 5 cm below the floor.
-
-**Run** (**done** and tested):
-```bash
-memreplay merge $W --title "Living room"
+tracks, vis = cotracker(video, grid_size=40, segm_mask=torch.from_numpy(mask_t0).float()[None, None].cuda(),
+                        grid_query_frame=t0, backward_tracking=True)
+# mask_t0 (H,W) bool mask of frame t0; video (1,T,3,H,W) 0-255; tracks (1,T,N,2) pixels; vis (1,T,N).
+# Run ~200-frame windows: memory grows with T.
 ```
 
 ---
 
-## 4. Set up Runpod (once)
+## 6. Set up Runpod (once)
 
-### 4.1 Accounts and access (do these first; approvals take time)
-- **P2:** request access on Hugging Face to `facebook/sam3.1`, `facebook/sam3` and `facebook/sam-3d-objects` (each is approved separately; SAM 3D is reviewed by hand). Then create an HF token. When SAM 3D is approved, run `bash setup.sh obj_weights`.
-- **Anthropic API key** for S1.
+### 6.1 Accounts
+- **Anthropic API key** for S5.
 - **Runpod account:** ask the Runpod booth about credits. Add your SSH **public** key under Account Settings → SSH public keys.
+- **Hugging Face:** only needed for the SAM 3D stretch.
 
-### 4.2 Create the storage and the pod
-1. **Storage → New Network Volume:** Secure Cloud, a datacenter that has H100s, **200 GB**. This holds everything: environments, weights and work folders. It survives restarts and redeploys.
+### 6.2 Storage and pod
+1. **Storage → New Network Volume:** Secure Cloud, a datacenter with H100s, **200 GB**. Everything lives here and survives restarts.
 2. **Pods → Deploy:**
-   - **GPU:** H100 (PCIe or SXM, 80 GB). Secure Cloud, because Community Cloud can't attach network volumes.
-   - **Network volume:** attach yours. It can only be attached at deploy time.
-   - **Image:** `runpod/pytorch:1.4.1-cu1281-torch280-ubuntu2204` (CUDA 12.8). If the template shows something else, enter this tag under Edit Template.
-   - **Ports:** leave TCP 22 exposed (the default). You need it for `scp`/`rsync`.
-3. **Connect:** on the pod page, open **Connect → Direct TCP Ports** for the IP and port, then run:
-   ```bash
-   ssh root@<ip> -p <port> -i ~/.ssh/id_ed25519
-   ```
-   The port changes on every restart. The proxy SSH address (`…@ssh.runpod.io`) can't do `scp` or `rsync`.
+   - **GPU:** H100 80 GB. Secure Cloud, because Community Cloud can't attach volumes.
+   - **Network volume:** attach yours. This only works at deploy time.
+   - **Image:** `runpod/pytorch:1.4.1-cu1281-torch280-ubuntu2204`.
+   - **Ports:** leave TCP 22 exposed.
+3. **Connect:** on the pod page, open **Connect → Direct TCP Ports** for the IP and port, then run `ssh root@<ip> -p <port> -i ~/.ssh/id_ed25519`. The port changes on every restart. The proxy SSH address can't do `scp` or `rsync`.
 
-### 4.3 Put the repo and secrets on the volume
-Make sure the latest commits are pushed to GitHub first; the pod clones whatever is on `main`.
+### 6.3 Repo and secrets
+Make sure the latest commits are pushed to GitHub; the pod clones `main`.
 ```bash
-apt-get update -qq && apt-get install -y -qq git tmux rsync    # the bare image may lack these
+apt-get update -qq && apt-get install -y -qq git tmux rsync
 cd /workspace && git clone https://github.com/im-yifanluo/calhacks-13.git memory-replay
-# private repo: create a GitHub token and use https://<token>@github.com/im-yifanluo/calhacks-13.git
-ls memory-replay/pipeline/runpod/setup.sh                     # must exist; if not, main isn't pushed yet
-# or copy it from your laptop instead:
-# rsync -avP -e "ssh -p <port>" ./ root@<ip>:/workspace/memory-replay/ --exclude node_modules
+# private repo: use https://<github-token>@github.com/im-yifanluo/calhacks-13.git
+cd memory-replay && git log -1 --oneline && ls pipeline/runpod/setup.sh pipeline/memreplay/handoff.py   # both must exist; if not, push first
 cat > /workspace/secrets.sh <<'EOF'
-export HF_TOKEN=hf_...
 export ANTHROPIC_API_KEY=sk-ant-...
+# export HF_TOKEN=hf_...          # uncomment ONLY for the SAM 3D stretch; a fake token makes public downloads fail
 EOF
 chmod 600 /workspace/secrets.sh
 ```
+Replace `sk-ant-...` with the real key before running anything.
 
-### 4.4 Install the environments
-Each person uses their own tmux session, so installs keep going if SSH drops (reconnect with `tmux attach -t p1`):
+### 6.4 Install
 ```bash
-bash /workspace/memory-replay/pipeline/runpod/on_start.sh            # system packages, incl. tmux
-tmux new -s p1                                                       # P2: tmux new -s p2
-bash /workspace/memory-replay/pipeline/runpod/setup.sh base          # ONE person only; wait until it finishes
-bash /workspace/memory-replay/pipeline/runpod/setup.sh vipe world    # P1, after base
-bash /workspace/memory-replay/pipeline/runpod/setup.sh seg obj       # P2, after base, at the same time as P1
+tmux new -s vision                                                      # reconnect later: tmux attach -t vision
+bash /workspace/memory-replay/pipeline/runpod/setup.sh base world vipe warmup
 ```
+`warmup` runs ViPE on a 2-second test video so all its weights download now, including one from Google Drive that can get rate-limited later. It ends with "ViPE warmup OK" or a warning saying what to do. Expect 30–60 minutes in total, mostly CUDA builds (estimate). A failed target can be rerun: finished steps are skipped.
 
-| Env | Owner | For | Python / torch / CUDA |
-|---|---|---|---|
-| `core` | both | our `memreplay` CLI, Claude calls (S1, S9) | 3.12, no torch |
-| `vipe` | P1 | ViPE (S3). Its Python packages live in `$SRC/vipe/.venv`; run with `uv run` | 3.12 / cu128 torch / 12.8 |
-| `world` | P1 | gsplat, open3d, splat-transform (S0, S4, S5, S6) | 3.12 / 2.9.1 / 12.8 |
-| `seg` | P2 | SAM 3.1, SAM 2.1, Grounding DINO, CoTracker3 (S2, S8) | 3.12 / 2.10.0 / 12.8 |
-| `obj` | P2 | SAM 3D Objects (S7) | 3.11 / 2.5.1 / 12.1 |
+| Env | For | Python / torch / CUDA |
+|---|---|---|
+| `world` | S1, S3–S7: our `memreplay` code, ffmpeg 6, gsplat, open3d, Claude SDK, splat-transform (plus SAM 2.1 and CoTracker3 after `extras`) | 3.12 / 2.9.1 / 12.8 |
+| `vipe` | S2: ViPE. Its packages live in `$SRC/vipe/.venv`; run with `uv run` | 3.12 / cu128 build / 12.8 |
+| `sam3d` (stretch) | SAM 3D Objects | 3.11 / 2.5.1 / 12.1 |
 
-- **Why so many environments:** the tools need different torch and CUDA versions, so they can't share one.
-- **Rerunning setup:** each finished step leaves a marker (`$ENVS/<env>/.setup-<step>`), so after fixing a failure, rerun the same target and it continues where it stopped. Delete a marker to redo that step.
-- **Install time:** expect 20–40 minutes per target, mostly CUDA builds (estimate).
-
-### 4.5 After every pod restart
+### 6.5 After every pod restart
 ```bash
-bash /workspace/memory-replay/pipeline/runpod/on_start.sh     # reinstalls ffmpeg, tmux, rsync (wiped on stop)
-source /workspace/memory-replay/pipeline/runpod/env.sh        # paths, caches, keys, and the `use <env>` helper
-use world                                                     # activate an env
+bash /workspace/memory-replay/pipeline/runpod/on_start.sh    # tmux, rsync and git are wiped on stop
+source /workspace/memory-replay/pipeline/runpod/env.sh
 ```
 
 ---
 
-## 5. Run one clip end to end
+## 7. Run one clip end to end
 
-```bash
-# 1. From your laptop: the test clip shot at kickoff (docs/PLAN.md section 5)
-ssh -p <port> root@<ip> mkdir -p /workspace/work/livingroom
-rsync -avP -e "ssh -p <port>" clip.mp4 root@<ip>:/workspace/work/livingroom/
-
-# 2. On the pod, in tmux
-source /workspace/memory-replay/pipeline/runpod/env.sh && W=$WORK/livingroom
-```
-
-| Order | Who | Env | Command | Time (estimate) |
+| Order | Step | Env | Time (estimate) | Demo after it |
 |---|---|---|---|---|
-| 1 | P1 | `world` | S0 (section 3) | 2 min |
-| 2 | P2 | `core` | S1 Claude script | 1 min |
-| 3a | P1 | `vipe` | S3 `run.py` with the S1 nouns | 5–15 min |
-| 3b | P2 | `seg` | S2 SAM 3.1, one pass per noun | 5–15 min |
-| 4 | P1 | `world` | S4 world frame → **send `world/` to P2** | 2 min |
-| 5 | P1 | `world` | L0 point background + S6 ghosts → `memreplay merge` → **L0 to P3** | 10 min |
-| 6a | P1 | `world` | S5 gsplat (needs S2 masks) | 15–20 min |
-| 6b | P2 | `obj` + `seg` | S7 objects, then S8 tracks | 10–20 min |
-| 7 | P1 (anyone can run it) | `core` | `memreplay merge $W` | 1 min |
+| 1 | S1 Normalize | `world` | 2 min | — |
+| 2 | S2 ViPE | `vipe` | 5–15 min | go/no-go |
+| 3 | S3 World frame | `world` | 1 min | — |
+| 4 | S4 L0 export, then S7 merge | `world` | 5 min | **L0** |
+| 5 | S5 Objects, then S7 merge | `world` | 5 min | **L1** |
+| 6 | S6 Background splat, then S7 merge | `world` | 15–25 min | L1, sharper room |
 
-**Get results to the viewer** (P3), with no bucket needed. Run this from the repo root on your laptop. It copies only what the viewer loads; frames, depth and checkpoints stay on the pod:
+**Get it into the viewer.** Run this from the repo root on your laptop. It copies only what the viewer loads; frames, depth and checkpoints stay on the pod:
 ```bash
-rsync -avP -e "ssh -p <port>" --include='memory.json' --include='world/' --include='world/bg.spz' \
-  --include='world/ghosts/***' --include='objects/' --include='objects/*/' --include='objects/*/gs.spz' \
-  --include='objects/*/hull.glb' --exclude='*' \
-  root@<ip>:/workspace/work/livingroom/ apps/web/public/memories/livingroom/
-# then open http://localhost:5173/?memory=/memories/livingroom/memory.json
+rsync -avP -e "ssh -p <port>" --include='memory.json' --include='input/' --include='input/audio.m4a' \
+  --include='world/' --include='world/bg_points.ply' --include='world/bg.spz' --include='world/room_collider.glb' \
+  --include='world/ghosts/***' --exclude='*' \
+  root@<ip>:/workspace/work/kitchen/ apps/web/public/memories/kitchen/
+# open http://localhost:5173/?memory=/memories/kitchen/memory.json
 ```
-`apps/web/public/memories/` is git-ignored, so none of this ends up in commits.
+`apps/web/public/memories/` is git-ignored.
 
-## 6. Tonight's go/no-go test (by Sat 1:00 AM)
+## 8. Go/no-go test (first 3 hours)
 
-The test answers one question: does ViPE give a usable camera path and depth on glasses footage? S4 isn't written yet, so judge by eye in ViPE's viewer.
-
-**P1:**
-1. Make frames with the "Tonight" commands in S0.
-2. Run S3 with `streams.frame_end=30` first, to cache weights, then the full run.
-3. Run the wide-angle preset as a cross-check: `uv run vipe infer $W/frames/small.mp4 -p wide_angle -o $W/vipe_wide`.
-4. Open `uv run vipe visualize $W/vipe`, port-forwarded as in S3.
+The test answers one question: does ViPE give a usable camera path and depth on glasses footage?
+1. Record a test clip with the script from section 1, then run S1 and S2.
+2. Open the ViPE viewer (the "Look at it" steps in S2).
 
 It passes if:
 - **the floor points form one flat sheet,** not a bowl or a ramp;
-- **the cameras sit 1.4–1.8 m above that sheet** (use the grid);
-- **with two frames 3 s apart (30 positions) shown together, walls and furniture land on one surface,** not two shifted copies;
-- **the `wide_angle` camera path roughly matches.**
+- **the cameras look about head height above the floor** (a rough visual check; the exact number is `median_camera_height_m` in `world/world.json` once S3 exists);
+- **two frames 3 s apart line up:** walls and furniture land on one surface, not two shifted copies;
+- **straight edges** (door frames, table edges) **look straight.**
 
-If it fails, go down the S3 fallbacks in order.
+If it fails, go down the S2 fallbacks in order.
 
-**P2, as soon as P1's `frames/full/` exists:** test masks with SAM 2.1 and Grounding DINO on "box". Neither needs Hugging Face approval. Use SAM 3.1 instead only if access is already approved. Run in `use seg`:
-```python
-import glob, os, torch
-from PIL import Image
-from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
-from sam2.build_sam import build_sam2_video_predictor
+## 9. What the viewer must support (for P3)
 
-SRC, W = os.environ["SRC"], os.environ["WORK"] + "/livingroom"
-img = Image.open(sorted(glob.glob(f"{W}/frames/full/*.jpg"))[0])
-proc = AutoProcessor.from_pretrained("IDEA-Research/grounding-dino-tiny")
-gd = AutoModelForZeroShotObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny").cuda()
-inputs = proc(images=img, text="a box.", return_tensors="pt").to("cuda")
-with torch.no_grad():
-    det = proc.post_process_grounded_object_detection(gd(**inputs), inputs.input_ids, target_sizes=[img.size[::-1]])[0]
-assert len(det["boxes"]), "no box found in the first frame; try another noun or frame"
-box = det["boxes"][0].cpu().numpy()                                     # x0, y0, x1, y1 in pixels
+These are new in `memory.json`, and `apps/web` doesn't handle them yet:
+- **`points-sequence` ghosts:** read the binary (layout in `handoff.py`) and draw each frame with `THREE.Points`, using a `Float16BufferAttribute` for positions and a `Uint8` colour attribute.
+- **`primitive` objects:** a tinted sphere, box or cylinder mesh.
+- **Rapier physics:**
+  - colliders: sphere, box and cylinder for objects, and a trimesh collider from `background.colliderUrl` for the room;
+  - on pause, give each body the velocity `v` from its current keyframe.
+- **Audio:** an `<audio>` element on `source.audioUrl` that follows play, pause and seek, and resyncs if it drifts more than 100 ms.
+- **Background format:** load `.ply` (L0) or `.spz`; Spark reads both.
 
-pred = build_sam2_video_predictor("configs/sam2.1/sam2.1_hiera_l.yaml", f"{SRC}/sam2/checkpoints/sam2.1_hiera_large.pt")
-with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-    state = pred.init_state(f"{W}/frames/full")
-    pred.add_new_points_or_box(state, frame_idx=0, obj_id=1, box=box)
-    hits = [int((logits > 0).any()) for _, _, logits in pred.propagate_in_video(state)]
-print(f"box masked in {sum(hits)} of {len(hits)} frames")
-```
-It passes if the box is masked in most frames where it's visible. To see the masks, save a few `logits > 0` arrays as PNGs and look at them.
+## 10. Costs
 
-## 7. Costs and pod hygiene
-
-| Option | Price | Notes |
+| GPU | Price | Notes |
 |---|---|---|
-| H100 PCIe, Secure Cloud | about $2.89/h | About $120 for the weekend if left on. |
-| L40S | $1.09/h | Fine for everything except big ViPE or gsplat runs. SAM 3D needs ≥32 GB, which the L40S's 48 GB covers. `env.sh` builds CUDA code for A100, L40S and H100, so envs work on all three. SAM 3.1's flash-attn-3 is H100-only; on an L40S pass `use_fa3=False`. |
+| H100, Secure Cloud | about $2.89/h | About $70 for 24 hours |
+| L40S | $1.09/h | Can run everything; `env.sh` builds CUDA code for A100, L40S and H100 |
 
-- **Stop the pod when nobody is running anything.** `/workspace` survives a stop; everything else (apt packages, running jobs) does not.
-- **If a restart comes back with 0 GPUs,** the machine is full. Terminate and redeploy with the same network volume; nothing on the volume is lost.
-- **A second pod for P2** on the same volume is possible. Whether two pods can mount it at the same time is unverified, so test it first, and have each person write only to their own folders.
-- **Docker doesn't work inside a pod.** Everything is installed with conda, pip or uv.
+- **Stop the pod when idle.** `/workspace` survives; nothing else does.
+- **If a restart comes back with 0 GPUs,** terminate and redeploy with the same network volume; nothing is lost.
+- **No Docker inside pods.** Everything is installed with conda, pip or uv.
 
-## 8. Licenses (fine for a hackathon demo; check before any commercial use)
+## 11. Licenses (fine for a hackathon demo; check before any commercial use)
 
 | Tool | License |
 |---|---|
-| ViPE | Apache 2.0. Don't use its UniK3D backend (BY-NC-SA). Its `default` preset depth models are fine. |
-| MapAnything | Apache weights variant |
-| SAM 3 / 3.1, SAM 3D Objects | SAM License (gated) |
-| SAM 2.1 | Apache 2.0 |
-| CoTracker3 | CC-BY-NC 4.0 |
+| ViPE | Apache 2.0, except its UniK3D backend (BY-NC-SA, don't use) and its track-anything code (AGPL-3.0) |
 | gsplat | Apache 2.0 |
-| TRELLIS.2 | MIT (verify) |
+| CoTracker3 (upgrade) | CC-BY-NC 4.0 |
+| SAM 2.1 (upgrade) | Apache 2.0 |
+| SAM 3D (stretch) | SAM License |

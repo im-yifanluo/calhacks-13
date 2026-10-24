@@ -1,35 +1,35 @@
-"""Frozen file formats between P1 (World) and P2 (Things). See docs/PLAN.md section 2.2.
+"""File formats between the steps of the one-person vision pipeline. See pipeline/README.md.
 
-Change a model here only when P1 and P2 both agree; both sides import from this file.
-One clip per memory (no separate room sweep). One work dir per memory; upload it as-is,
-because memory.json uses URLs relative to it:
+One glasses clip per memory, one work dir per memory. Upload or copy the work dir as-is,
+because memory.json uses URLs relative to it.
 
-  <work>/clip.mp4                   the original glasses video
-  <work>/frames/full/<idx>.jpg      S0  P1  full resolution (SAM 3, SAM 3D, gsplat)
-  <work>/frames/small/<idx>.jpg     S0  P1  long side ~640 px (ViPE)
-  <work>/frames.json                S0  P1  FramesIndex: every stage keys frames on `idx`
-  <work>/nouns.json                 S1  P2  Nouns: also ViPE's masking phrases
-  <work>/masks/tracks.json          S2  P2  MaskTracks (COCO RLE per object per frame)
-  <work>/masks/dyn/<idx>.png        S2  P2  union of all moving pixels, dilated 12 px (255 = moving, 0 = static).
-                                            gsplat/Brush want the INVERSE (255 = static); S5 writes colmap/masks/ = 255 - dyn.
-  <work>/frames/small.mp4           S0  P1  kept small frames as a 10 fps video (ViPE input)
-  <work>/vipe/                      S3  P1  ViPE's raw output: pose/, intrinsics/, depth/, mask/ (frame = position)
-  <work>/world/cameras.json         S4  P1  Cameras
-  <work>/world/depth.npz            S4  P1  depth: float16 meters [N,H,W]; idx: int32 [N] (same order as cameras)
-  <work>/world/world.json           S4  P1  WorldInfo
-  <work>/world/bg.spz               S5  P1  background splat (L0: fused depth points; L1: gsplat)
-  <work>/world/ghosts.json          S6  P1  ObjectsFragment: people as non-grabbable splat sequences
-  <work>/world/ghosts/<id>/<n>.spz  S6  P1  per-frame ghost splats; ghosts.json urlPattern points here
-  <work>/objects/<id>/gs.spz        S7  P2  object splat in its own metric frame
-  <work>/objects/<id>/hull.glb      S7  P2  convex hull collider (<= 64 vertices)
-  <work>/objects/objects.json       S8  P2  ObjectsFragment: visuals, colliders, mass, tracks
-  <work>/memory.json                S9  merge
+  <work>/clip.mov                     S0  the original glasses video (always named clip.mov; ffmpeg reads any container)
+  <work>/capture.json                S0  CaptureInfo: the wearer's measured eye height
+  <work>/input/clip.mp4               S1  upright, constant 30 fps, long side 1280 px, no audio (ViPE input)
+  <work>/input/audio.m4a              S1  the clip's audio, played in sync by the viewer
+  <work>/input/frames.json            S1  FramesInfo
+  <work>/nouns.json                   S1  Nouns: single-word ViPE prompts, typed by hand
+  <work>/vipe/                        S2  ViPE's raw output: pose/, intrinsics/, depth/, mask/
+                                          (frame index = frame number in input/clip.mp4)
+  <work>/world/world.json             S3  WorldInfo
+  <work>/world/cameras.json           S3  Cameras (keyframes, world frame)
+  <work>/world/bg_points.ply          S4  L0 background: static points written as small splats (Spark reads .ply)
+  <work>/world/room_collider.glb      S4  floor + tables as a 10 cm heightfield mesh
+  <work>/world/ghosts/<id>.bin        S4  people as per-frame points (POINTS_SEQUENCE_LAYOUT below)
+  <work>/world/ghosts.json            S4  ObjectsFragment: the people
+  <work>/objects/crops/<id>.jpg       S5  best crop of each object, sent to Claude
+  <work>/objects/objects.json         S5  ObjectsFragment: grabbable objects
+  <work>/colmap/, <work>/gsplat/      S6  background training inputs and checkpoints
+  <work>/world/bg.spz                 S6  trained background splat; merge prefers it over bg_points.ply
+  <work>/memory.json                  S7  merge
 
-<idx> in file names is always zero-padded to 5 digits: f"{idx:05d}" (frames/full/00042.jpg, masks/dyn/00042.png).
-Tools that number frames by folder position: position p = the p-th kept frame in frames.json.
+World frame everywhere after S3: meters, +Y up, floor at y = 0.
+Camera matrices use OpenCV camera axes (x right, y down, z forward); merge converts for three.js.
 """
 from __future__ import annotations
 
+import struct
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -40,104 +40,118 @@ Mat3 = list[float]  # row-major 3x3
 Mat4 = list[float]  # row-major 4x4
 
 
-# --- S0 · P1 -> everyone -------------------------------------------------------------------
-class FrameEntry(BaseModel):
-    idx: int  # stable index; never renumbered, even if `kept` changes
-    t_us: int  # media time from the clip's own timestamps, microseconds
-    file: str  # "frames/full/<idx>.jpg"; the small copy has the same name under frames/small/
-    blur: float  # Laplacian variance; higher = sharper
-    kept: bool  # False = not the sharpest in its 100 ms window; skip it everywhere
+# --- S0 -------------------------------------------------------------------------------------
+class CaptureInfo(BaseModel):
+    eye_height_m: float  # measured on the wearer; S3 compares ViPE's camera height against it
 
 
-class FramesIndex(BaseModel):
-    source: str  # "clip.mp4"
-    target_fps: float = 10.0  # one kept frame per 1/target_fps seconds
-    width: int  # full-resolution frame size
+# --- S1 -------------------------------------------------------------------------------------
+class FramesInfo(BaseModel):
+    source: str  # original file name, e.g. "clip.mov"
+    fps: float = 30.0  # input/clip.mp4 is constant frame rate
+    width: int
     height: int
-    small_long_side: int = 640
-    frames: list[FrameEntry]
-
-
-# --- S1 · P2 -> P1 (ViPE masking phrases) and P2 (SAM 3 prompts) ----------------------------
-class Noun(BaseModel):
-    noun: str  # SAM 3 / ViPE text prompt, e.g. "cardboard box"
-    kind: Literal["object", "person", "hand"]
-    size_min_m: float  # longest side, used to clamp SAM 3D scale
-    size_max_m: float
-    density_kg_m3: float  # mass = density x hull volume
-    grabbable: bool
+    frame_count: int
+    key_stride: int = 3  # every 3rd frame is a keyframe -> 10 Hz tracks, ghosts and camera path
+    duration_sec: float
 
 
 class Nouns(BaseModel):
-    nouns: list[Noun]  # always includes "person" and "hand"
+    """ViPE masking prompts. Use single words (multi-word handling in ViPE is unverified).
+    ViPE replaces its default list, so always keep "person" and "hand"."""
+
+    nouns: list[str] = ["person", "hand"]
 
 
-# --- S2 · P2 -> P1 (background + ghosts) ----------------------------------------------------
-class Rle(BaseModel):
-    size: tuple[int, int]  # [height, width], COCO convention
-    counts: str  # pycocotools.mask.encode(...)["counts"].decode()
-
-
-class MaskFrame(BaseModel):
-    idx: int
-    rle: Rle
-    held: bool = False  # a hand covers it here; S8 interpolates instead of trusting this frame
-
-
-class MaskTrack(BaseModel):
-    id: str  # "<noun>:<n>", e.g. "cardboard box:0". Stitch re-entries so one object keeps one id.
-    # Folder names and DynamicObject.id use object_slug(id), e.g. "cardboard-box-0".
-    noun: str
-    kind: Literal["object", "person", "ego-hand", "hand"]  # ego-hand = the wearer's own
-    frames: list[MaskFrame]
-
-
-class MaskTracks(BaseModel):
-    width: int  # mask resolution (= full frames)
-    height: int
-    tracks: list[MaskTrack]
-
-
-# --- S3/S4 · P1 -> P2 (lift masks and points into the world) --------------------------------
+# --- S3 -------------------------------------------------------------------------------------
 class CameraFrame(BaseModel):
-    idx: int
-    t_us: int
-    w: int  # resolution K and depth refer to
+    idx: int  # frame number in input/clip.mp4
+    t: float  # seconds
+    w: int
     h: int
-    model: Literal["pinhole", "mei"]  # mei = ViPE's unified wide-angle model
     K: Mat3 = Field(min_length=9, max_length=9)
-    dist: list[float] = []  # mei: [alpha]; pinhole: []
-    # Camera-to-world. Camera axes use the OpenCV convention (x right, y down, z forward).
-    c2w: Mat4 = Field(min_length=16, max_length=16)
+    c2w: Mat4 = Field(min_length=16, max_length=16)  # camera-to-world, OpenCV camera axes, world frame
 
 
 class Cameras(BaseModel):
-    solve: Literal["v0", "final"]
-    # True once S4 has been applied (+Y up, meters, floor at WorldInfo.floorY).
-    # Before that P2 should keep working in camera coordinates.
-    in_world_frame: bool
-    frames: list[CameraFrame]
+    frames: list[CameraFrame]  # keyframes only (every key_stride-th frame)
 
 
 class WorldInfo(BaseModel):
-    T_vipe_to_world: Mat4 = Field(min_length=16, max_length=16)  # already applied to cameras/depth
-    scale: float  # metric correction already applied (eye height / median camera height)
-    eye_height_m: float  # measured on the wearer
+    T_vipe_to_world: Mat4 = Field(min_length=16, max_length=16)  # rotation + translation (+ scale) applied to ViPE output
+    scale: float = 1.0  # 1.0 = trust ViPE's metric depth; set from eye height only if ViPE's scale looks wrong
     floorY: float = 0.0
     up: tuple[float, float, float] = (0.0, 1.0, 0.0)
+    median_camera_height_m: float  # sanity check: should be close to the wearer's eye height
+    eye_height_m: float | None = None  # measured on the wearer at capture time
     boundsMin: tuple[float, float, float]
     boundsMax: tuple[float, float, float]
-    bgSplatCount: int = 0  # filled in by S5
+    bgPointsCount: int = 0  # filled by S4 (bg_points.ply)
+    bgSplatCount: int = 0  # filled by S6 (bg.spz)
 
 
-# --- S6/S8 -> merge -----------------------------------------------------------------------
-def object_slug(mask_track_id: str) -> str:
-    """MaskTrack.id -> path-safe id for objects/<id>/ and DynamicObject.id: "cardboard box:0" -> "cardboard-box-0"."""
-    return "-".join("".join(c if c.isalnum() else " " for c in mask_track_id.lower()).split())
+# --- S5 -------------------------------------------------------------------------------------
+class ObjectSpec(BaseModel):
+    """What Claude returns for one object (label + crop -> simple shape for physics)."""
+
+    label: str
+    shape: Literal["sphere", "box", "cylinder"]
+    size_m: tuple[float, float, float]  # full extents x, y, z; cylinder axis is +Y
+    density_kg_m3: float
+    color: str  # "#rrggbb", for the tinted primitive
+    grabbable: bool
 
 
+# --- S4/S5 -> S7 --------------------------------------------------------------------------
 class ObjectsFragment(BaseModel):
-    """The `objects` part of memory.json, produced separately by P2 (objects) and P1 (ghosts).
-    All url fields are relative to <work>, e.g. "objects/cardboard-box-0/gs.spz"."""
+    """The `objects` part of memory.json, written by S4 (people) and S5 (grabbable objects).
+    All url fields are relative to <work>, e.g. "world/ghosts/person-0.bin"."""
 
     objects: list[DynamicObject]
+
+
+def object_slug(label: str, n: int) -> str:
+    """Path-safe id for a merged object: ("cardboard box", 0) -> "cardboard-box-0"."""
+    return "-".join("".join(c if c.isalnum() else " " for c in f"{label} {n}".lower()).split())
+
+
+# --- points-sequence binary (people ghosts) --------------------------------------------------
+POINTS_SEQUENCE_LAYOUT = """
+Little-endian. Header: b"MRPS", u32 version (=1), u32 frameCount, f32 sampleHz,
+then u32 count[frameCount]. Then one block per frame:
+  positions: float16[count * 3]   (x, y, z in world meters)
+  colors:    uint8[count * 3]     (r, g, b)
+  padding:   zero bytes to the next multiple of 4
+Every block starts 4-byte aligned, so the viewer can wrap positions in a Uint16Array
+(three.js Float16BufferAttribute) and colors in a Uint8Array without copying.
+"""
+
+
+def write_points_sequence(path: Path, frames: list[tuple["object", "object"]], sample_hz: float) -> None:
+    """frames: list of (xyz float array [N,3], rgb uint8 array [N,3]); N may differ per frame."""
+    import numpy as np
+
+    counts = [len(xyz) for xyz, _ in frames]
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(b"MRPS" + struct.pack("<IIf", 1, len(frames), sample_hz))
+        f.write(np.asarray(counts, dtype="<u4").tobytes())
+        for xyz, rgb in frames:
+            block = np.asarray(xyz, dtype="<f2").tobytes() + np.asarray(rgb, dtype=np.uint8).tobytes()
+            f.write(block + b"\0" * (-len(block) % 4))
+
+
+def read_points_sequence(path: Path) -> tuple[float, list[tuple["object", "object"]]]:
+    import numpy as np
+
+    data = Path(path).read_bytes()
+    assert data[:4] == b"MRPS", "not a points-sequence file"
+    _version, n, hz = struct.unpack_from("<IIf", data, 4)
+    counts = np.frombuffer(data, dtype="<u4", count=n, offset=16)
+    off, frames = 16 + 4 * n, []
+    for c in counts:
+        xyz = np.frombuffer(data, dtype="<f2", count=int(c) * 3, offset=off).reshape(-1, 3)
+        rgb = np.frombuffer(data, dtype=np.uint8, count=int(c) * 3, offset=off + int(c) * 6).reshape(-1, 3)
+        frames.append((xyz, rgb))
+        off += int(c) * 9 + (-(int(c) * 9) % 4)
+    return hz, frames
