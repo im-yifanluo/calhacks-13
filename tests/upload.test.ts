@@ -29,6 +29,13 @@ test("upload metadata rejects oversized, nonvideo and invalid duration", () => {
   expect(() => metadata({ ...body, size: 3 * 1024 ** 3 }, owner, "")).toThrow();
   expect(() => metadata({ ...body, type: "text/plain" }, owner, "")).toThrow();
   expect(() => metadata({ ...body, durationSec: NaN }, owner, "")).toThrow();
+  const browserClip = metadata(
+    { ...body, name: "simulation.webm", type: "video/webm" },
+    owner,
+    "https://assets.test",
+  );
+  expect(browserClip.sourceUrl).toMatch(/\.webm$/);
+  expect(browserClip.type).toBe("video/webm");
 });
 test("presign/complete requires identity, matching object and creates memory only after upload", async () => {
   let saved: any,

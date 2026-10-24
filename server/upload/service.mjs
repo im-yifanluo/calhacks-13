@@ -30,9 +30,9 @@ export function readTicket(value, secret) {
 }
 export function metadata(body, owner, base) {
   const { name, type, size, title, durationSec } = body;
-  if (typeof name !== "string" || !/^.+\.(mp4|mov)$/i.test(name))
-    throw new Error("Select an MP4 or MOV");
-  if (!["video/mp4", "video/quicktime"].includes(type))
+  if (typeof name !== "string" || !/^.+\.(mp4|mov|webm)$/i.test(name))
+    throw new Error("Select an MP4, MOV or WebM");
+  if (!["video/mp4", "video/quicktime", "video/webm"].includes(type))
     throw new Error("Unsupported video type");
   if (!Number.isSafeInteger(size) || size <= 0 || size > 2 * 1024 ** 3)
     throw new Error("Video must be 1 byte to 2 GiB");
@@ -41,7 +41,8 @@ export function metadata(body, owner, base) {
   if (!Number.isFinite(durationSec) || durationSec <= 0 || durationSec > 3600)
     throw new Error("Video duration must be 0–3600 seconds");
   const requestId = randomUUID();
-  const key = `videos/${owner}/${requestId}.${name.toLowerCase().endsWith(".mov") ? "mov" : "mp4"}`;
+  const extension = name.toLowerCase().split(".").pop();
+  const key = `videos/${owner}/${requestId}.${extension}`;
   return {
     owner,
     requestId,

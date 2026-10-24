@@ -22,7 +22,7 @@ data/                Local scratch (git-ignored). Big assets go to object storag
 
 Jerry's multiplayer/phone lane is implemented: SpacetimeDB tables/reducers and generated SDK bindings, rooms and presence, shared timeline/branches, phone grab/throw, trajectory replay, authenticated upload service and worker status handoff. The local demo uses clearly labeled debug geometry. GPU reconstruction and production Quest object rendering/hand input remain P1–P3 work.
 
-Setup, cloud configuration and the Wayfarer → phone → Quest test: **[docs/P4.md](docs/P4.md)**. **Live iPhone preview, O/F controls, and video/database verification: [docs/CAPTURE_TEST.md](docs/CAPTURE_TEST.md)**. Rehearsal and honest Devpost draft: **[docs/DEMO.md](docs/DEMO.md)**.
+Setup, cloud configuration and the Wayfarer → phone → Quest test: **[docs/P4.md](docs/P4.md)**. **Browser O/F simulation, live iPhone preview, and video/database verification: [docs/CAPTURE_TEST.md](docs/CAPTURE_TEST.md)**. Rehearsal and honest Devpost draft: **[docs/DEMO.md](docs/DEMO.md)**.
 
 ## Quick start
 

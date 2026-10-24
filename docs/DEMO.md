@@ -21,7 +21,7 @@
 | P3 scene    | Actual object assets/colliders render; headset hands/controllers work; measured frame rate is acceptable |
 | Demo assets | Only intended demo recordings and public URLs; no binary assets or credentials in Git                    |
 
-The local branch was tested with 14 automated module/upload/client/storage tests, the real SpacetimeDB 2.13 network suite, and a browser session at desktop and 390×844 viewport sizes. A real two-second synthetic MP4 also passed upload, independent database lookup, byte-for-byte retrieval, repeated-completion and browser playback checks; see [CAPTURE_TEST.md](CAPTURE_TEST.md). The native iPhone O/F app is implemented but its full SDK build and hardware test require newer Xcode and the devices. Cloud storage, GPU reconstruction and physical-device gates remain unverified. A resized browser is not evidence of a real phone test.
+The local branch was tested with 16 automated module/upload/client/storage tests, the real SpacetimeDB 2.13 network suite, and a browser session at desktop and 390×844 viewport sizes. A real two-second synthetic MP4 also passed upload, independent database lookup, byte-for-byte retrieval, repeated-completion and browser playback checks; see [CAPTURE_TEST.md](CAPTURE_TEST.md). The native iPhone O/F app is implemented but its full SDK build and hardware test require newer Xcode and the devices. Cloud storage, GPU reconstruction and physical-device gates remain unverified. A resized browser is not evidence of a real phone test.
 
 ## Devpost copy (draft; review before submitting)
 

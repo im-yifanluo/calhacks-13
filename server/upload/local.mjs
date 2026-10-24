@@ -15,7 +15,7 @@ import { dirname, resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { databaseConfig, makeHandler, ticket, readTicket } from "./service.mjs";
 
-const validKey = /^videos\/[a-f0-9]{64}\/[a-f0-9-]{36}\.(mp4|mov)$/i;
+const validKey = /^videos\/[a-f0-9]{64}\/[a-f0-9-]{36}\.(mp4|mov|webm)$/i;
 export async function localStorage({ directory, secret, publicOrigin }) {
   await mkdir(directory, { recursive: true });
   const pathFor = (key) => {

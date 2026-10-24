@@ -2,7 +2,24 @@
 
 This test proves three things separately: a camera produces a clip, SpacetimeDB contains its record, and the stored clip can be retrieved and played. Video bytes live in local disk storage (or configured S3/R2); the `memory` table contains the ID, title, source URL, duration and processing status. `uploaded` is the expected final status for this test without a GPU worker.
 
-The branch includes an iPhone app with a live glasses preview and **O · ON / F · OFF** recording buttons. The browser page at `/capture.html` uploads exported recordings and verifies/playbacks stored video. It does not control the glasses directly.
+The branch includes an iPhone app with a live glasses preview and **O · ON / F · OFF** recording buttons. The browser page at `/capture.html` includes an O/F simulation and an exported-video upload flow. It does not control the glasses directly.
+
+## Quick O/F simulation — no glasses or Xcode needed
+
+Use this first to test the recording and automatic-upload experience. Keep the local database, upload service and web app running as described in section 1 below. If they are already running, reuse them.
+
+1. On your **Mac**, open or refresh **http://127.0.0.1:5173/capture.html**. Wait for **Connected**. The **O / F simulation** panel shows an animated sample scene labeled **SIMULATED CAMERA · NO GLASSES**.
+2. Leave the test title or enter your own. Click **O · ON**. The badge should change to **RECORDING**, the ball should move, and the timer should advance. You can also press `o` on the keyboard after clicking outside the title field.
+3. Wait 3–5 seconds and click **F · OFF**, or press `f`. Recording stops and upload/verification starts automatically. Do not select a file or click the manual upload button.
+4. Expect **PASS · OFF** and **database row #…; … bytes downloaded and identical to your recording**. The test queries SpacetimeDB independently and compares the downloaded video's SHA-256 with the recording. A timer stopping alone is not a pass.
+5. In **Stored recordings**, the new `[SIMULATION]` row is automatically selected. Press **Play**. You should see the animated scene and its recorded timer. Reload to confirm the row and playback persist; the in-memory PASS badge resets on reload.
+6. Press O/F again for another recording. Each completed recording should get its own database ID. Pressing F while off does nothing; repeated O while recording does not create extra clips.
+
+The scene is simulated, but the browser encodes a real MP4 (or WebM where needed), uploads real bytes, and creates a real database row. This tests the O/F → recording → upload → database → playback path. It does **not** verify Meta pairing, camera permissions, glasses streaming, the native app, or 3D reconstruction.
+
+Keep the tab visible. Recording stops after 30 seconds or when the page is hidden. Keyboard shortcuts are ignored while editing text. This simulator needs localhost or trusted HTTPS; plain HTTP to a Mac hostname from an iPhone does not provide the browser security features used for hashing.
+
+**Failure/retry test:** stop only the upload-service terminal with Ctrl-C, record another clip and press F. Expect an error plus **Retry upload / verify**, with **Download this test clip** available. Keep the tab open, restart `npm run upload:local` using the same settings, then click Retry. The clip should pass without recording again. If confirmation fails after transfer, the retry reuses its receipt and database request ID while the receipt remains valid. A new signed upload may be needed after expiry or a failed transfer. The browser retains a failed clip only in the current tab; download it before leaving. The native iPhone app has a separate persistent queue.
 
 ## 1. Start the local services
 
@@ -61,7 +78,7 @@ Open `http://YOUR-MAC.local:5173/capture.html` in iPhone Safari first. Allow loc
 ## 2. Test a real glasses recording now, without building iOS
 
 1. Pair the Wayfarers in Meta AI. Wear them, point at a distinct object or a card saying `Wayfarer test 01`, and record 10–15 seconds. For the glasses' built-in recorder, press and hold the capture button to start, then press it again to stop. Import through Meta AI, save/export the clip and confirm it plays on the iPhone. These controls and import/export are documented in [Ray-Ban's FAQ](https://www.ray-ban.com/usa/c/frequently-asked-questions-ray-ban-meta-smart-glasses).
-2. In Safari at `/capture.html`, enter a unique title such as `Wayfarer desk 01` and choose that exported MP4/MOV. Alternatively AirDrop it to the Mac and use the Mac page. The selected-video preview should show your test object.
+2. In Safari at `/capture.html`, expand **Test a real Wayfarer video instead**, enter a unique title such as `Wayfarer desk 01` and choose that exported MP4/MOV. Alternatively AirDrop it to the Mac and use the Mac page. The selected-video preview should show your test object.
 3. Press **Upload video**. Wait for 100% and the **Uploaded. Database row #… verified.** message. A progress bar alone is not a pass.
 4. In **Stored recordings**, select the same title. Check its database ID and `uploaded` status. Press **Verify stored file**; local storage should report a nonzero byte count and SHA-256 hash.
 5. Press **Play** in the stored video player. Confirm the test object and movement match your recording. This player loads the database's source URL, not the file picker preview.
@@ -131,7 +148,7 @@ Choose a fresh output filename. This creates a two-second animated test pattern 
 
 ## Evidence and troubleshooting
 
-Verified during implementation: 14 automated tests, TypeScript checks, production web build, real local SpacetimeDB multiplayer/HTTP integration, the recorder's playable two-second MP4, real upload/SQL/SHA-256/idempotency checks, and browser upload plus stored-video playback. The tested MP4 was 27,967 bytes, SHA-256 `6e1e5488ae4d538cb816a8c6ece63fbfbb427944d097fb5987d3c08aece30ebe`. Native transport/recorder Swift typechecking and UI syntax parsing passed; full Meta SDK/iOS compilation and physical-device acceptance remain unverified.
+Verified during implementation: 16 automated tests, TypeScript checks, production web build, real local SpacetimeDB multiplayer/HTTP integration, the recorder's playable two-second MP4, real upload/SQL/SHA-256/idempotency checks, and browser upload plus stored-video playback. The tested MP4 was 27,967 bytes, SHA-256 `6e1e5488ae4d538cb816a8c6ece63fbfbb427944d097fb5987d3c08aece30ebe`. Native transport/recorder Swift typechecking and UI syntax parsing passed; full Meta SDK/iOS compilation and physical-device acceptance remain unverified.
 
 | Symptom                       | Check                                                                                                                                    |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |

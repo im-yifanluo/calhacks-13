@@ -32,7 +32,11 @@ async function api(path: string, body: unknown) {
 const prepared = await api("/api/uploads/presign", {
   name: basename(file),
   type:
-    extname(file).toLowerCase() === ".mov" ? "video/quicktime" : "video/mp4",
+    extname(file).toLowerCase() === ".webm"
+      ? "video/webm"
+      : extname(file).toLowerCase() === ".mov"
+        ? "video/quicktime"
+        : "video/mp4",
   size: bytes.length,
   title: `Video verification ${new Date().toISOString()}`,
   durationSec,

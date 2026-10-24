@@ -1,5 +1,6 @@
 import { Multiplayer } from "./net";
 import { uploadPanel } from "./upload";
+import { captureSimulation } from "./capture-simulation";
 import "./capture.css";
 const net = new Multiplayer();
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
@@ -10,7 +11,6 @@ let selected = new URLSearchParams(location.search).get("request") || "",
   signature = "",
   proofGeneration = 0;
 function show() {
-  selected = select.value;
   proofGeneration++;
   const memory = net.memories.find((m) => m.requestId === selected);
   $("row-id").textContent = memory
@@ -33,7 +33,10 @@ function show() {
     : "Select a recording to check its file.";
   $("playback-proof").textContent = "";
 }
-select.onchange = show;
+select.onchange = () => {
+  selected = select.value;
+  show();
+};
 $("check-storage").onclick = async () => {
   const memory = net.memories.find((m) => m.requestId === selected);
   if (!memory) return;
@@ -64,11 +67,16 @@ video.onerror = () => {
   $("playback-proof").textContent =
     "Video could not be played. Check that storage is running and the browser supports its codec.";
 };
-uploadPanel(net, $("upload-panel"), (requestId) => {
+function selectRecording(requestId: string) {
   selected = requestId;
+  const url = new URL(location.href);
+  url.searchParams.set("request", requestId);
+  history.replaceState(null, "", url);
   signature = "";
   render();
-});
+}
+uploadPanel(net, $("upload-panel"), selectRecording);
+captureSimulation(net, selectRecording);
 function render() {
   $("connection").textContent = net.status;
   $("error").textContent = net.error;
@@ -81,7 +89,8 @@ function render() {
   select.replaceChildren();
   for (const m of memories)
     select.add(new Option(`#${m.id} · ${m.title} · ${m.status}`, m.requestId));
-  if (memories.some((m) => m.requestId === selected)) select.value = selected;
+  if (!selected) selected = memories[0]?.requestId || "";
+  select.value = selected;
   if (!memories.length) select.add(new Option("No uploaded videos yet", ""));
   show();
 }
