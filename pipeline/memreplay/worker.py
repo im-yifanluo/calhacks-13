@@ -19,21 +19,22 @@ import traceback
 import urllib.request
 from pathlib import Path
 
-VIEWER_FILES = ["memory.json", "memory.static.json", "input/audio.m4a", "world/bg.spz", "world/bg_static.spz",
-                "world/bg_points.ply", "world/room_collider.glb"]
-PROGRESS = {"normalize": 0.15, "nouns": 0.2, "vipe": 0.55, "world": 0.6, "l0": 0.7, "objects": 0.8, "background": 0.95}
+PROGRESS = {"normalize": 0.15, "nouns": 0.2, "vipe": 0.55, "world": 0.6, "l0": 0.7, "objects": 0.8, "background": 0.93,
+            "layers": 0.97}
 
 
 def viewer_files(work: Path) -> list[Path]:
+    """memory.json, memory.static.json and every file they reference (relative URLs)."""
     work = Path(work)
-    m = json.loads((work / "memory.json").read_text())
-    files = [f for f in VIEWER_FILES if (work / f).exists()]
-    if m["background"]["url"] == "world/bg.spz":            # don't ship the L0 points when the splat exists
-        files = [f for f in files if f != "world/bg_points.ply"]
-    for o in m["objects"]:
-        url = o["visual"].get("url")
-        if url and (work / url).exists():
-            files.append(url)
+    files = []
+    for name in ("memory.json", "memory.static.json"):
+        if not (work / name).exists():
+            continue
+        m = json.loads((work / name).read_text())
+        files.append(name)
+        refs = [m["background"]["url"], m["background"].get("colliderUrl"), m["source"].get("audioUrl")]
+        refs += [o["visual"].get("url") for o in m["objects"]]
+        files += [r for r in refs if r and (work / r).exists()]
     return [work / f for f in dict.fromkeys(files)]
 
 
@@ -164,6 +165,7 @@ def process(job: dict, root: Path) -> str:
         progress = max(progress, PROGRESS[name])
         set_status(mid, "processing", progress)
     merge(work, job.get("title") or f"Memory {mid}", str(mid), "uploaded-clip")
+    merge(work, job.get("title") or f"Memory {mid}", str(mid), "uploaded-clip", static=True)
     if os.environ.get("S3_BUCKET"):
         url = publish_s3(work, f"memories/{key}")
     else:

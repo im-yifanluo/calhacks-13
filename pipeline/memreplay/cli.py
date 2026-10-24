@@ -26,10 +26,11 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-STAGES = {"normalize": "S1", "nouns": "S1", "vipe": "S2", "world": "S3", "l0": "S4", "objects": "S5", "background": "S6"}
+STAGES = {"normalize": "S1", "nouns": "S1", "vipe": "S2", "world": "S3", "l0": "S4", "objects": "S5", "background": "S6",
+          "layers": "S6b"}
 DONE_MARKER = {"normalize": "input/frames.json", "nouns": "nouns.json", "vipe": "vipe/pose/clip.npz",
                "world": "world/cameras.json", "l0": "world/ghosts.json", "objects": "objects/objects.json",
-               "background": "world/bg.spz"}
+               "background": "world/bg_static.spz", "layers": "world/bg_room.spz"}
 KF_GAP_SEC = 0.5   # ViPE re-runs detection every 0.5 s (default 2 s leaves new things unmasked too long)
 
 
@@ -85,9 +86,14 @@ def run_stage(name: str, work: Path, args: argparse.Namespace | None = None) -> 
         if not (work / "objects" / "observations.json").exists():
             objects.observe(work)
         objects.run(work)
+    elif name == "layers":
+        from . import layers
+        layers.run(work)
     elif name == "background":
         from . import background
-        background.run(work, steps_scaler=getattr(args, "steps_scaler", None), static=getattr(args, "static", False))
+        # `memreplay run` trains the static room (props stay in; S6b carves them out); `stage background` without
+        # --static trains the older room-without-props splat
+        background.run(work, steps_scaler=getattr(args, "steps_scaler", None), static=getattr(args, "static", True))
     else:
         raise SystemExit(f"unknown step {name}")
 
@@ -106,9 +112,11 @@ def run_all(work: Path, title: str, args: argparse.Namespace) -> Path:
         print(f"[run] {name} ...", flush=True)
         run_stage(name, work, args)
         timings[name] = round(time.time() - t0, 1)
-        if name in ("l0", "objects", "background"):        # a viewable memory after every layer
+        if name in ("l0", "objects", "layers"):            # a viewable memory after every layer
             merge(work, title, args.memory_id or work.name, args.device)
     out = merge(work, title, args.memory_id or work.name, args.device)
+    if (work / "world" / "bg_static.spz").exists():
+        merge(work, title, args.memory_id or work.name, args.device, static=True)
     log = work / "run_log.json"
     old = json.loads(log.read_text()) if log.exists() else {}
     old.update({k: v for k, v in timings.items()})
@@ -160,6 +168,9 @@ def merge(work: Path, title: str, memory_id: str, device: str, static: bool = Fa
     if static and (work / "world" / "bg_static.spz").exists():
         background = Background(url="world/bg_static.spz", format="spz",
                                 splatCount=int(world.diagnostics.get("static_splat_count", 0)))
+    elif (work / "world" / "bg_room.spz").exists():           # the static room with the props carved out (S6b)
+        background = Background(url="world/bg_room.spz", format="spz",
+                                splatCount=int(world.diagnostics.get("room_splat_count", 0)))
     elif (work / "world" / "bg.spz").exists():
         background = Background(url="world/bg.spz", format="spz", splatCount=world.bgSplatCount)
     elif (work / "world" / "bg_points.ply").exists():
