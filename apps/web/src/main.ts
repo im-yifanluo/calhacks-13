@@ -8,6 +8,7 @@ import { Viewer } from "./viewer.js";
 import { XRInput } from "./input-xr.js";
 import { desktopInput } from "./input-desktop.js";
 import { sampleTrack } from "./tracks.js";
+import { mountAudio } from "./audio.js";
 import { Session } from "./session.js";
 import { PhoneJoystick, isTouchDevice } from "./phone-joystick.js";
 import "./style.css";
@@ -97,6 +98,9 @@ async function main(): Promise<void> {
     const lines = new THREE.LineSegments(new THREE.EdgesGeometry(proxy.geometry), new THREE.LineBasicMaterial({ color: 0xa3f3ce, depthTest: false }));
     object.root.add(lines); lines.visible = false; return [lines];
   });
+  // The clip's audio follows the timeline (play, pause, seek, takes, the room's clock); the first tap or key starts it.
+  const audioUrl = memory.manifest.source?.audioUrl;
+  const audio = audioUrl ? mountAudio(new URL(audioUrl, new URL(manifestUrl, location.href)).href, document.querySelector("#timeline-controls .tools"), showWarning) : undefined;
   let branchCount = 0;
   play.onclick = () => currentViewer.togglePlay();
   scrub.oninput = () => currentViewer.seek(Number(scrub.value) / 1000 * currentViewer.timeline.duration);
@@ -118,6 +122,7 @@ async function main(): Promise<void> {
   renderer.setAnimationLoop(timestamp => {
     const dt = previous ? Math.min((timestamp - previous) / 1000, 0.1) : 0; previous = timestamp;
     xr.update(dt); currentViewer.update(dt);
+    audio?.update(currentViewer.timeline.time, currentViewer.timeline.playing, currentViewer.timeline.speed);
     if (eyes.checked && !renderer.xr.isPresenting) {
       sampleTrack(memory.cameraTrack, currentViewer.timeline.time, camera);
       camera.fov = memory.manifest.camera.fovYDeg; camera.updateProjectionMatrix();
@@ -161,13 +166,13 @@ async function main(): Promise<void> {
     renderer.render(scene, camera);
   });
   document.addEventListener("visibilitychange", () => { previous = 0; if (document.hidden) currentViewer.release(); });
-  addEventListener("pagehide", () => { renderer.setAnimationLoop(null); currentViewer.dispose(); spark.dispose(); renderer.dispose(); }, { once: true });
+  addEventListener("pagehide", () => { renderer.setAnimationLoop(null); audio?.dispose(); currentViewer.dispose(); spark.dispose(); renderer.dispose(); }, { once: true });
   session.attach(currentViewer);
   if (import.meta.env.DEV) {
     // Dev-only probe for multi-tab checks: compare positionsAt(t) across tabs of one room.
     const probe = new THREE.Object3D();
     window.__memreplay = {
-      viewer: currentViewer, session, memory,
+      viewer: currentViewer, session, memory, audio,
       get adapter() { return session.adapter; },
       positionsAt: (t: number) => Object.fromEntries(memory.objects.map(o => {
         sampleTrack(currentViewer.timeline.track(o.definition.id, o.track, t), t, probe);
