@@ -340,7 +340,10 @@ export class Multiplayer extends EventTarget {
   }
   /** Record a failure of this kind; it replaces any older one. */
   report(error: unknown, kind = "request") {
-    this.failure = { kind, message: messageOf(error) };
+    let message = messageOf(error);
+    // While SpacetimeDB is down, the dev proxy answers the SDK's token check with a 5xx.
+    if (kind === "connection" && /verify token: 5\d\d/i.test(message)) message = "The multiplayer server isn't answering; retrying.";
+    this.failure = { kind, message };
     this.changed();
   }
   /** An action of this kind succeeded: clear the failure if it is of the same kind. */

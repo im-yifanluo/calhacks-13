@@ -42,8 +42,10 @@ export function desktopInput(canvas: HTMLCanvasElement, camera: THREE.Camera, co
     updateRay(event);
     const hit = viewer.pick(ray);
     if (!hit) return;
-    event.stopImmediatePropagation(); event.preventDefault(); controls.enabled = false;
-    activePointer = event.pointerId; canvas.setPointerCapture(event.pointerId);
+    event.stopImmediatePropagation(); event.preventDefault();
+    // If the browser refuses the capture (an unknown pointer id), drop the press instead of leaving input stuck.
+    try { canvas.setPointerCapture(event.pointerId); } catch { return; }
+    controls.enabled = false; activePointer = event.pointerId;
     grabPoint.copy(hit.point);
     press = { objectId: hit.object.userData.objectId, x: event.clientX, y: event.clientY, at: performance.now(), timer: setTimeout(() => void begin(), HOLD_START_MS) };
   }, { capture: true });

@@ -56,6 +56,20 @@ test("drag-plane hits behind the camera or absurdly far away are ignored", () =>
   assert.ok(dragPoint(new Ray(new Vector3(0, 1, 3), steep), facing, out));
 });
 
+test("a press whose pointer capture fails is dropped, leaving the camera controls working", async () => {
+  // Found in the live check: an unknown pointer id made setPointerCapture throw and left input stuck.
+  const { viewer, canvas, controls } = setup();
+  canvas.setPointerCapture = () => { throw new DOMException("No active pointer", "NotFoundError"); };
+  canvas.dispatchEvent(pointer("pointerdown", 400, 300));
+  assert.equal(controls.enabled, true);
+  await sleep(200);
+  assert.equal(viewer.held, null);
+  canvas.setPointerCapture = id => canvas.captured.add(id);
+  canvas.dispatchEvent(pointer("pointerdown", 400, 300)); // the next press works normally
+  assert.equal(controls.enabled, false);
+  canvas.dispatchEvent(pointer("pointerup", 400, 300));
+});
+
 test("a quick tap on a paused object does nothing: no grab, no take, the camera controls come back", async () => {
   const { viewer, canvas, controls } = setup();
   const events = []; viewer.subscribe(e => events.push(e.type));
