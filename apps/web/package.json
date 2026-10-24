@@ -7,7 +7,8 @@
     "dev": "vite --host",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
-    "dev:lan": "HTTPS=1 vite --host"
+    "dev:lan": "HTTPS=1 vite --host",
+    "test": "tsc -p tsconfig.test.json && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",
