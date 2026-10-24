@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": { "outDir": ".test-dist", "noEmit": false },
-  "include": ["src/tracks.ts", "src/timeline.ts", "src/physics.ts", "src/loader.ts", "src/viewer.ts"]
+  "include": ["src/tracks.ts", "src/timeline.ts", "src/physics.ts", "src/loader.ts", "src/viewer.ts", "src/input-desktop.ts"]
 }
