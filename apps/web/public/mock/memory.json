@@ -21,9 +21,9 @@
   },
   "background": {
     "kind": "splat",
-    "url": "./demo-background.spz",
+    "url": "https://sparkjs.dev/assets/splats/butterfly.spz",
     "format": "spz",
-    "splatCount": 834
+    "splatCount": 0
   },
   "camera": {
     "track": [
@@ -63,8 +63,14 @@
       "id": "ball-1",
       "label": "ball",
       "visual": {
-        "kind": "mesh",
-        "url": "/mock/ball.glb"
+        "kind": "primitive",
+        "shape": "sphere",
+        "size": [
+          0.36,
+          0.36,
+          0.36
+        ],
+        "color": "#ffb975"
       },
       "collider": {
         "kind": "sphere",
@@ -134,19 +140,22 @@
       ]
     },
     {
-      "id": "cube-1",
-      "label": "cube",
+      "id": "can-1",
+      "label": "can",
       "visual": {
-        "kind": "mesh",
-        "url": "./cube.glb"
+        "kind": "primitive",
+        "shape": "cylinder",
+        "size": [
+          0.13,
+          0.24,
+          0.13
+        ],
+        "color": "#7edbd1"
       },
       "collider": {
-        "kind": "box",
-        "halfExtents": [
-          0.18,
-          0.18,
-          0.18
-        ]
+        "kind": "cylinder",
+        "halfHeight": 0.12,
+        "radius": 0.065
       },
       "mass": 0.8,
       "grabbable": true,

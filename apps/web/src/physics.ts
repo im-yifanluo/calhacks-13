@@ -12,6 +12,7 @@ export function collider(definition: DynamicObject["collider"], scale: number, h
     case "sphere": return RAPIER.ColliderDesc.ball(definition.radius * scale);
     case "box": return RAPIER.ColliderDesc.cuboid(...definition.halfExtents.map(x => x * scale) as [number, number, number]);
     case "capsule": return RAPIER.ColliderDesc.capsule(definition.halfHeight * scale, definition.radius * scale);
+    case "cylinder": return RAPIER.ColliderDesc.cylinder(definition.halfHeight * scale, definition.radius * scale);
     case "convex": {
       const shape = hull && RAPIER.ColliderDesc.convexHull(hull.map(x => x * scale));
       if (!shape) throw new Error("Convex collider has no valid hull points");

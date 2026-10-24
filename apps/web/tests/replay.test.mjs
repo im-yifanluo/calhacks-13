@@ -105,9 +105,10 @@ test("real Rapier simulation collides with a raised floor and clears bodies safe
   } finally { physics.dispose(); }
 });
 
-test("sphere, box, capsule, and convex hull colliders all support scaled bodies", () => {
+test("sphere, box, capsule, cylinder, and convex hull colliders all support scaled bodies", () => {
   for (const shape of [{ kind: "sphere", radius: 0.1 }, { kind: "box", halfExtents: [0.1, 0.1, 0.1] },
-    { kind: "capsule", radius: 0.1, halfHeight: 0.2 }, { kind: "convex", url: "hull.glb" }]) {
+    { kind: "capsule", radius: 0.1, halfHeight: 0.2 }, { kind: "cylinder", radius: 0.1, halfHeight: 0.2 },
+    { kind: "convex", url: "hull.glb" }]) {
     const { object } = fixture(); object.definition.collider = shape; object.root.position.y = 2; object.root.scale.setScalar(2);
     object.hull = new Float32Array([-0.1, 0, -0.1, 0.1, 0, -0.1, 0, 0, 0.1, 0, 0.2, 0]);
     const physics = new Physics(0, []);

@@ -46,13 +46,23 @@ export function validateManifest(m: MemoryManifest): void {
     if ((c.kind === "box" && (!tuple(c.halfExtents, 3) || !c.halfExtents.every(positive))) ||
       (c.kind === "sphere" && !positive(c.radius)) ||
       (c.kind === "capsule" && (!positive(c.radius) || !Number.isFinite(c.halfHeight) || c.halfHeight < 0)) ||
+      (c.kind === "cylinder" && (!positive(c.radius) || !positive(c.halfHeight))) ||
       (c.kind === "convex" && typeof c.url !== "string") ||
-      !["box", "sphere", "capsule", "convex"].includes(c.kind)) throw new Error(`Invalid collider: ${o.id}`);
-    if (o.visual.kind === "splat-sequence") {
-      if (!Number.isInteger(o.visual.frameCount) || o.visual.frameCount < 1 || !o.visual.urlPattern.includes("{frame}")) {
+      !["box", "sphere", "capsule", "cylinder", "convex"].includes(c.kind)) throw new Error(`Invalid collider: ${o.id}`);
+    const v = o.visual;
+    if (v.kind === "splat-sequence") {
+      if (!Number.isInteger(v.frameCount) || v.frameCount < 1 || !v.urlPattern.includes("{frame}")) {
         throw new Error(`${o.id}: sequence requires frameCount and a zero-based {frame} URL pattern`);
       }
-    } else if (!["mesh", "splat"].includes(o.visual.kind) || typeof o.visual.url !== "string") {
+    } else if (v.kind === "points-sequence") {
+      if (typeof v.url !== "string" || !Number.isInteger(v.frameCount) || v.frameCount < 1 || !positive(v.sampleHz)) {
+        throw new Error(`${o.id}: points-sequence requires url, frameCount and sampleHz`);
+      }
+    } else if (v.kind === "primitive") {
+      if (!["sphere", "box", "cylinder"].includes(v.shape) || !tuple(v.size, 3) || !v.size.every(positive) || typeof v.color !== "string") {
+        throw new Error(`${o.id}: primitive requires shape, three positive sizes and a color`);
+      }
+    } else if (!["mesh", "splat"].includes(v.kind) || typeof v.url !== "string") {
       throw new Error(`Invalid visual: ${o.id}`);
     }
   }
@@ -103,8 +113,17 @@ export function disposeObject(root: THREE.Object3D): void {
 export function proxyGeometry(c: DynamicObject["collider"]): THREE.BufferGeometry {
   if (c.kind === "sphere") return new THREE.SphereGeometry(c.radius, 24, 16);
   if (c.kind === "capsule") return new THREE.CapsuleGeometry(c.radius, c.halfHeight * 2, 6, 16);
+  if (c.kind === "cylinder") return new THREE.CylinderGeometry(c.radius, c.radius, c.halfHeight * 2, 24);
   const h = c.kind === "box" ? c.halfExtents : [0.15, 0.15, 0.15];
   return new THREE.BoxGeometry(h[0] * 2, h[1] * 2, h[2] * 2);
+}
+
+/** A simple tinted shape from the pipeline (`visual.kind === "primitive"`). size = full extents; cylinder axis is +Y. */
+export function primitiveGeometry(v: Extract<DynamicObject["visual"], { kind: "primitive" }>): THREE.BufferGeometry {
+  const [x, y, z] = v.size;
+  if (v.shape === "sphere") return new THREE.SphereGeometry(Math.max(x, y, z) / 2, 24, 16);
+  if (v.shape === "cylinder") return new THREE.CylinderGeometry(Math.max(x, z) / 2, Math.max(x, z) / 2, y, 24);
+  return new THREE.BoxGeometry(x, y, z);
 }
 
 async function splat(url: string): Promise<SplatMesh> {
@@ -188,6 +207,14 @@ export async function loadMemory(url: string, demo = false, onWarning: (message:
         loaded.updateVisual = player.update; cleanups.push(player.dispose);
       } else if (definition.visual.kind === "splat") {
         group.add(await splat(new URL(definition.visual.url, base).href));
+      } else if (definition.visual.kind === "primitive") {
+        group.add(new THREE.Mesh(primitiveGeometry(definition.visual),
+          new THREE.MeshStandardMaterial({ color: new THREE.Color(definition.visual.color), roughness: 0.45, metalness: 0.05 })));
+      } else if (definition.visual.kind === "points-sequence") {
+        // TODO(P3): render the MRPS point frames (layout: pipeline/memreplay/handoff.py). Proxy until then.
+        group.add(new THREE.Mesh(proxyGeometry(definition.collider),
+          new THREE.MeshStandardMaterial({ color: 0x9bd7ff, transparent: true, opacity: 0.35 })));
+        warn(`${definition.id}: points-sequence ghosts are not rendered yet; showing a placeholder`);
       } else {
         group.add((await gltf.loadAsync(new URL(definition.visual.url, base).href)).scene);
       }
