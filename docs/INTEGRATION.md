@@ -28,7 +28,7 @@ The team built the app on four separate branches. The `integration` branch merge
 | Left out | Where it still is | Why |
 |---|---|---|
 | Andrew's local CPU pipeline, JSON schemas, `?debug=1` overlay | `origin/part1` | The vision pipeline owner is rewriting `pipeline/`. |
-| Jerry's iOS capture app (`apps/ios/`, `scripts/generate_xcode_project.py`, `scripts/test-recorder.swift`) | `origin/stdb/jerry-p4` | Never compiled; needs Xcode 26.4+ / Swift 6.3+, which the team laptops don't have. Glasses clips come in through the Meta AI app instead. |
+| Original iOS SDK target (at integration time) | Restored in `apps/ios/` by the phone-app follow-up | The SDK target still needs Xcode 26.4+/Swift 6.3+. The new standalone `SceneCaptureDemo` target builds on Xcode 15.4 and shares the upload/library path; see [PHONE_APP.md](PHONE_APP.md). |
 | Main's old SpacetimeDB module and its `/smoke.html` test | replaced | Jerry's module replaces it; his `tests/module.test.ts` and `scripts/test-multiplayer.ts` cover the same ground. |
 | Jerry's app shell (`main.ts` render loop), `net/physics-bridge.ts`, `net/replay.ts`, touch drag in `input-touch.ts` | `origin/stdb/jerry-p4` | Nikko's viewer does rendering, physics, replay and touch drag. The room panel moved to `session.ts`, the joystick to `phone-joystick.ts`, and the bridge's timings into the adapter. |
 

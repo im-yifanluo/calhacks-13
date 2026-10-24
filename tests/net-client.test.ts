@@ -87,7 +87,7 @@ function fakeConnection() {
   };
   return {
     db: Object.fromEntries(
-      ["memory", "room", "player", "timeline", "branch", "objectState", "branchKeyframes", "clockSample"].map((n) => [n, table()]),
+      ["memory", "room", "party", "profile", "player", "timeline", "branch", "objectState", "branchKeyframes", "clockSample"].map((n) => [n, table()]),
     ),
     subscriptionBuilder: () => subscription,
     reducers: { sampleClock: async () => {} },
@@ -139,6 +139,29 @@ afterEach(() => {
 });
 
 describe("connection", () => {
+  test("Google credentials survive reconnect without becoming guest tokens; rejection never silently changes identity", () => {
+    const credential = `header.${Buffer.from(JSON.stringify({ exp: Date.now() / 1000 + 3600 })).toString("base64url")}.signature`;
+    const builds = recordBuilds();
+    const session = tab("google", { "memreplay-google-credential": credential, "memreplay-token:google": "saved-guest" });
+    const net = multiplayer(undefined);
+    net.connect();
+    expect(builds[0].token).toBe(credential);
+    const { on, conn } = builds[0];
+    on.onConnect(conn, new Identity(9n), "transport-token");
+    conn.applied();
+    on.onAutomaticReconnect(conn, new Identity(9n), "new-transport-token");
+    expect(session.getItem("memreplay-google-credential")).toBe(credential);
+    expect(session.getItem("memreplay-token:google")).toBe("saved-guest");
+    net.dispose();
+    const next = multiplayer(undefined);
+    next.connect();
+    const rejected = Object.assign(new Error("Rejected"), { name: "WebSocketTokenError", status: 401 });
+    builds[1].on.onConnectError({}, rejected);
+    expect(next.status).toContain("Google sign-in rejected");
+    expect(builds).toHaveLength(2);
+    expect(session.getItem("memreplay-google-credential")).toBe(credential);
+  });
+
   test("only a 401 token exchange counts as a rejected token", () => {
     const error = (name: string, status?: number) =>
       Object.assign(new Error("Failed to verify token"), { name, status });

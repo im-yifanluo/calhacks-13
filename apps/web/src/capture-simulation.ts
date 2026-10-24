@@ -105,7 +105,7 @@ export function captureSimulation(
     context.fillText(
       active
         ? recordingTitle.slice(0, 55)
-        : "Press O to record this animated scene",
+        : "Tap On to record this animated scene",
       24,
       66,
     );
@@ -147,7 +147,7 @@ export function captureSimulation(
     phase = "saving";
     controls();
     status.textContent =
-      "F received. Finishing the video; upload starts automatically…";
+      "Off received. Finishing the video; upload starts automatically…";
     if (timer) clearInterval(timer);
     timer = undefined;
     if (recorder.state !== "inactive") recorder.stop(); // Final data arrives before onstop.
@@ -197,7 +197,7 @@ export function captureSimulation(
           phase = "failed";
           status.textContent =
             recorderError ||
-            "Clip too short. Choose New test, press O, wait at least one second, then press F.";
+            "Clip too short. Choose New test, tap On, wait at least one second, then tap Off.";
           controls();
           return;
         }
@@ -223,7 +223,7 @@ export function captureSimulation(
       active.start(250);
       controls();
       status.textContent =
-        "Recording the animated test scene. Wait 3–5 seconds, then press F. Keep this tab visible.";
+        "Recording the animated test scene. Wait 3–5 seconds, then tap Off. Keep this tab visible.";
       timer = setInterval(() => {
         const seconds = (performance.now() - started) / 1000;
         draw(seconds, true);
@@ -245,7 +245,7 @@ export function captureSimulation(
     attempt = undefined;
     phase = "idle";
     status.textContent =
-      "Ready for a new test. The previous clip's download remains available until O is pressed.";
+      "Ready for a new test. The previous clip's download remains available until On is pressed.";
     controls();
     draw(0, false);
   };

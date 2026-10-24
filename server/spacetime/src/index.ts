@@ -6,6 +6,9 @@ import {
   type ReducerCtx,
 } from "spacetimedb/server";
 
+import { GOOGLE_CLIENT_ID } from "./google-config";
+import { googleClaimError, isGoogleIssuer } from "./google-auth";
+
 const pose = {
   px: t.f32(),
   py: t.f32(),
@@ -58,6 +61,23 @@ const db = schema({
       memoryId: t.u64(),
       joinCode: t.string().unique(),
       host: t.identity(),
+    },
+  ),
+  // Additive policy: existing collaborative rooms keep their behavior; new parties have a leader.
+  party: table(
+    { public: true },
+    {
+      roomId: t.u64().primaryKey(),
+      pendingMemoryId: t.u64(),
+      sceneRevision: t.u32(),
+    },
+  ),
+  profile: table(
+    { public: true },
+    {
+      identity: t.identity().primaryKey(),
+      provider: t.string(),
+      displayName: t.string(),
     },
   ),
   player: table(
@@ -181,7 +201,37 @@ function validPose(
 }
 /** Room ids start at 1, so roomId 0n means the player left and is in no room. */
 const NO_ROOM = 0n;
+function authenticate(ctx: Ctx) {
+  const jwt = ctx.senderAuth.jwt;
+  if (!jwt) return;
+  const error = googleClaimError(
+    jwt.issuer,
+    jwt.audience,
+    jwt.fullPayload,
+    Number(ctx.timestamp.microsSinceUnixEpoch) / 1e6,
+    GOOGLE_CLIENT_ID,
+  );
+  if (error) fail(error);
+}
+function updateProfile(ctx: Ctx) {
+  authenticate(ctx);
+  const jwt = ctx.senderAuth.jwt;
+  const google = !!jwt && isGoogleIssuer(jwt.issuer);
+  const name =
+    google && typeof jwt.fullPayload.name === "string"
+      ? clip(jwt.fullPayload.name.trim(), 40)
+      : "";
+  const row = {
+    identity: ctx.sender,
+    provider: google ? "google" : "guest",
+    displayName: name,
+  };
+  if (ctx.db.profile.identity.find(ctx.sender))
+    ctx.db.profile.identity.update(row);
+  else ctx.db.profile.insert(row);
+}
 function player(ctx: Ctx) {
+  authenticate(ctx);
   const p = ctx.db.player.identity.find(ctx.sender);
   if (!p?.online || p.roomId === NO_ROOM) return fail("Join a room first");
   return p;
@@ -281,7 +331,8 @@ function revertEmptyTake(ctx: Ctx, o: ObjectRow) {
   });
 }
 function enter(ctx: Ctx, roomId: bigint, name: string, device: string) {
-  text(name, 40);
+  updateProfile(ctx);
+  name = text(name, 40);
   if (!["phone", "quest", "desktop"].includes(device)) fail("Unknown device");
   clearOwnership(ctx);
   const existing = ctx.db.player.identity.find(ctx.sender);
@@ -315,11 +366,18 @@ function enter(ctx: Ctx, roomId: bigint, name: string, device: string) {
       online: true,
     });
   else ctx.db.player.insert(row);
+  if (existing && existing.roomId !== roomId) electLeader(ctx, existing.roomId);
+  electLeader(ctx, roomId);
 }
 function ownsBranch(ctx: Ctx, branchId: bigint) {
   const p = player(ctx);
   const b = ctx.db.branch.id.find(branchId);
-  if (!b || b.roomId !== p.roomId) return fail("Branch is outside your room");
+  if (
+    !b ||
+    b.roomId !== p.roomId ||
+    b.memoryId !== ctx.db.room.id.find(p.roomId)?.memoryId
+  )
+    return fail("Branch is outside your room");
   return b;
 }
 function noActiveSimulation(ctx: Ctx, branchId: bigint) {
@@ -391,6 +449,7 @@ export const createMemory = db.reducer(
     durationUs: t.u64(),
   },
   (ctx, args) => {
+    authenticate(ctx);
     text(args.requestId, 80);
     text(args.title, 120);
     if (args.sourceUrl) url(args.sourceUrl);
@@ -433,6 +492,7 @@ export const setMemoryStatus = db.reducer(
     error: t.string(),
   },
   (ctx, args) => {
+    authenticate(ctx);
     const m = ctx.db.memory.id.find(args.memoryId) ?? fail("No such memory");
     if (!m.pipelineIdentity.isEqual(ctx.sender))
       fail("Only the assigned pipeline identity may update status");
@@ -465,41 +525,155 @@ export const setMemoryStatus = db.reducer(
       ...args,
       manifestUrl: args.manifestUrl || m.manifestUrl,
     });
+    if (args.status === "ready") {
+      for (const p of [...ctx.db.party.iter()])
+        if (p.pendingMemoryId === m.id) activateMemory(ctx, p.roomId, m.id);
+    }
   },
 );
-export const createRoom = db.reducer(
-  { memoryId: t.u64(), name: t.string(), device: t.string() },
-  (ctx, args) => {
-    const m = ctx.db.memory.id.find(args.memoryId) ?? fail("No such memory");
-    if (m.status !== "ready") fail("Memory is not ready");
-    // ctx.random is seeded from the reducer timestamp and its first draw is badly biased
-    // (about 11% of first draws make a 000000x code), so discard it.
-    ctx.random.uint32();
-    let code = "";
-    for (let tries = 0; tries < 20; tries++) {
-      code = (ctx.random.uint32() >>> 0)
-        .toString(36)
-        .toUpperCase()
-        .padStart(7, "0");
-      if (!ctx.db.room.joinCode.find(code)) break;
-      code = "";
-    }
-    if (!code) fail("Could not allocate room code");
-    const room = ctx.db.room.insert({
-      id: 0n,
-      memoryId: m.id,
-      host: ctx.sender,
-      joinCode: code,
-    });
-    ctx.db.timeline.insert({
+const roomArgs = { memoryId: t.u64(), name: t.string(), device: t.string() };
+function makeRoom(
+  ctx: Ctx,
+  args: { memoryId: bigint; name: string; device: string },
+  party: boolean,
+) {
+  authenticate(ctx);
+  const m = ctx.db.memory.id.find(args.memoryId) ?? fail("No such memory");
+  if (m.status !== "ready") fail("Memory is not ready");
+  // ctx.random is seeded from the reducer timestamp and its first draw is badly biased
+  // (about 11% of first draws make a 000000x code), so discard it.
+  ctx.random.uint32();
+  let code = "";
+  for (let tries = 0; tries < 20; tries++) {
+    code = (ctx.random.uint32() >>> 0)
+      .toString(36)
+      .toUpperCase()
+      .padStart(7, "0");
+    if (!ctx.db.room.joinCode.find(code)) break;
+    code = "";
+  }
+  if (!code) fail("Could not allocate room code");
+  const room = ctx.db.room.insert({
+    id: 0n,
+    memoryId: m.id,
+    host: ctx.sender,
+    joinCode: code,
+  });
+  ctx.db.timeline.insert({
+    roomId: room.id,
+    branchId: 0n,
+    paused: false,
+    speed: 1,
+    anchorMediaUs: 0n,
+    anchorServerTs: ctx.timestamp,
+  });
+  if (party)
+    ctx.db.party.insert({
       roomId: room.id,
-      branchId: 0n,
-      paused: false,
-      speed: 1,
-      anchorMediaUs: 0n,
+      pendingMemoryId: 0n,
+      sceneRevision: 0,
+    });
+  enter(ctx, room.id, args.name, args.device);
+}
+export const createRoom = db.reducer(roomArgs, (ctx, args) =>
+  makeRoom(ctx, args, false),
+);
+export const createParty = db.reducer(roomArgs, (ctx, args) =>
+  makeRoom(ctx, args, true),
+);
+
+/** Only parties use leader-controlled time. Legacy collaborative rooms remain compatible. */
+function requireLeader(ctx: Ctx, roomId: bigint) {
+  if (
+    ctx.db.party.roomId.find(roomId) &&
+    !ctx.db.room.id.find(roomId)?.host.isEqual(ctx.sender)
+  )
+    fail("Only the party leader can control time or change the scene");
+}
+function electLeader(ctx: Ctx, roomId: bigint) {
+  if (!ctx.db.party.roomId.find(roomId)) return;
+  const room = ctx.db.room.id.find(roomId)!;
+  const members = [...ctx.db.player.roomId.filter(roomId)]
+    .filter((p) => p.online)
+    .sort((a, b) =>
+      a.identity.__identity__ < b.identity.__identity__ ? -1 : 1,
+    );
+  if (members.some((p) => p.identity.isEqual(room.host))) return;
+  if (members.length)
+    ctx.db.room.id.update({ ...room, host: members[0].identity });
+  else {
+    const tl = ctx.db.timeline.roomId.find(roomId)!;
+    ctx.db.timeline.roomId.update({
+      ...tl,
+      paused: true,
+      anchorMediaUs: media(ctx, tl),
       anchorServerTs: ctx.timestamp,
     });
-    enter(ctx, room.id, args.name, args.device);
+  }
+}
+export const transferLeadership = db.reducer(
+  { identity: t.identity() },
+  (ctx, { identity }) => {
+    const p = player(ctx);
+    if (!ctx.db.party.roomId.find(p.roomId)) fail("Join a party first");
+    requireLeader(ctx, p.roomId);
+    const next = ctx.db.player.identity.find(identity);
+    if (!next?.online || next.roomId !== p.roomId)
+      fail("Choose a connected party member");
+    const room = ctx.db.room.id.find(p.roomId)!;
+    ctx.db.room.id.update({ ...room, host: identity });
+  },
+);
+function activateMemory(ctx: Ctx, roomId: bigint, memoryId: bigint) {
+  const room = ctx.db.room.id.find(roomId)!;
+  const party = ctx.db.party.roomId.find(roomId)!;
+  for (const b of ctx.db.branch.roomId.filter(roomId))
+    for (const o of [...ctx.db.objectState.branchId.filter(b.id)])
+      if (o.simOwner) settle(ctx, o);
+  ctx.db.room.id.update({ ...room, memoryId });
+  ctx.db.party.roomId.update({
+    ...party,
+    pendingMemoryId: 0n,
+    sceneRevision: party.sceneRevision + 1,
+  });
+  ctx.db.timeline.roomId.update({
+    roomId,
+    branchId: 0n,
+    paused: true,
+    speed: 1,
+    anchorMediaUs: 0n,
+    anchorServerTs: ctx.timestamp,
+  });
+}
+export const attachPartyMemory = db.reducer(
+  { memoryId: t.u64() },
+  (ctx, { memoryId }) => {
+    const p = player(ctx);
+    const party =
+      ctx.db.party.roomId.find(p.roomId) ?? fail("Join a party first");
+    requireLeader(ctx, p.roomId);
+    if (memoryId === 0n) {
+      ctx.db.party.roomId.update({ ...party, pendingMemoryId: 0n });
+      return;
+    }
+    const memory = ctx.db.memory.id.find(memoryId) ?? fail("No such memory");
+    if (memory.status === "ready") activateMemory(ctx, p.roomId, memoryId);
+    else ctx.db.party.roomId.update({ ...party, pendingMemoryId: memoryId });
+  },
+);
+export const setPlaybackSpeed = db.reducer(
+  { speed: t.f32() },
+  (ctx, { speed }) => {
+    const tl = timeline(ctx);
+    requireLeader(ctx, tl.roomId);
+    if (!Number.isFinite(speed) || speed < 0.25 || speed > 2)
+      fail("Speed must be between 0.25 and 2");
+    ctx.db.timeline.roomId.update({
+      ...tl,
+      speed,
+      anchorMediaUs: media(ctx, tl),
+      anchorServerTs: ctx.timestamp,
+    });
   },
 );
 export const joinRoom = db.reducer(
@@ -512,11 +686,13 @@ export const joinRoom = db.reducer(
   },
 );
 export const leaveRoom = db.reducer((ctx) => {
+  authenticate(ctx);
   clearOwnership(ctx);
   const p = ctx.db.player.identity.find(ctx.sender);
   // NO_ROOM, not just offline: a later reconnect must not put the player back in this room.
   if (p)
     ctx.db.player.identity.update({ ...p, roomId: NO_ROOM, online: false });
+  if (p) electLeader(ctx, p.roomId);
 });
 export const setPose = db.reducer(head, (ctx, pose) => {
   finite(pose);
@@ -525,6 +701,7 @@ export const setPose = db.reducer(head, (ctx, pose) => {
 });
 export const setPaused = db.reducer({ paused: t.bool() }, (ctx, { paused }) => {
   const tl = timeline(ctx);
+  requireLeader(ctx, tl.roomId);
   ctx.db.timeline.roomId.update({
     ...tl,
     paused,
@@ -534,6 +711,7 @@ export const setPaused = db.reducer({ paused: t.bool() }, (ctx, { paused }) => {
 });
 export const seek = db.reducer({ mediaUs: t.u64() }, (ctx, { mediaUs }) => {
   const tl = timeline(ctx);
+  requireLeader(ctx, tl.roomId);
   noActiveSimulation(ctx, tl.branchId);
   const r = ctx.db.room.id.find(tl.roomId)!;
   const m = ctx.db.memory.id.find(r.memoryId)!;
@@ -546,6 +724,7 @@ export const seek = db.reducer({ mediaUs: t.u64() }, (ctx, { mediaUs }) => {
 });
 export const forkBranch = db.reducer({ name: t.string() }, (ctx, { name }) => {
   const tl = timeline(ctx);
+  requireLeader(ctx, tl.roomId);
   if (!tl.paused) fail("Pause before forking");
   fork(ctx, tl, name);
 });
@@ -553,6 +732,7 @@ export const setBranch = db.reducer(
   { branchId: t.u64() },
   (ctx, { branchId }) => {
     const tl = timeline(ctx);
+    requireLeader(ctx, tl.roomId);
     noActiveSimulation(ctx, tl.branchId);
     const b = branchId === 0n ? null : ownsBranch(ctx, branchId);
     ctx.db.timeline.roomId.update({
@@ -722,12 +902,14 @@ export const saveBranchKeyframes = db.reducer(
   },
 );
 export const onConnect = db.clientConnected((ctx) => {
+  updateProfile(ctx);
   if (ctx.connectionId)
     ctx.db.connection.insert({ id: ctx.connectionId, identity: ctx.sender });
   const p = ctx.db.player.identity.find(ctx.sender);
   // Resume the room after a dropped connection, but never after an explicit leaveRoom.
   if (p && p.roomId !== NO_ROOM)
     ctx.db.player.identity.update({ ...p, online: true });
+  if (p) electLeader(ctx, p.roomId);
 });
 export const onDisconnect = db.clientDisconnected((ctx) => {
   if (ctx.connectionId) ctx.db.connection.id.delete(ctx.connectionId);
@@ -735,11 +917,13 @@ export const onDisconnect = db.clientDisconnected((ctx) => {
   clearOwnership(ctx);
   const p = ctx.db.player.identity.find(ctx.sender);
   if (p) ctx.db.player.identity.update({ ...p, online: false });
+  if (p) electLeader(ctx, p.roomId);
 });
 
 export const sampleClock = db.reducer(
   { clientSentUs: t.u64() },
   (ctx, { clientSentUs }) => {
+    authenticate(ctx);
     const row = { identity: ctx.sender, clientSentUs, serverTs: ctx.timestamp };
     if (ctx.db.clockSample.identity.find(ctx.sender))
       ctx.db.clockSample.identity.update(row);

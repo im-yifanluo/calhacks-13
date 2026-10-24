@@ -81,6 +81,18 @@ kbd { font: inherit; background: #263944; padding: 1px 4px; border-radius: 3px; 
 #room-people .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; }
 #room-panel p { font-size: 11px; color: #9bb1bc; margin: 8px 0; line-height: 1.5; }
 #room-panel p:empty { display: none; }
+#auth-bar { padding: 14px 0 10px; border-bottom: 1px solid #30434e; }
+.account-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+#auth-status { color: #a2e8d6; font-size: 11px; }
+#google-signin[aria-disabled] { padding: 11px; border: 1px solid #3a505f; border-radius: 22px; text-align: center; color: #b4c5cc; font-size: 12px; }
+#party-role { border-left: 2px solid #a2e8d6; padding-left: 9px; }
+#party-scene-actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+#party-progress { width: 100%; accent-color: #a2e8d6; }
+#room-people li { flex-wrap: wrap; }
+#room-people button { margin-left: auto; padding: 4px 8px; font-size: 10px; min-height: 30px; }
+#room-panel #party-invite { font-size: 11px; color: #a2e8d6; }
+#room-panel { width: 330px; }
+@media (min-width: 1050px) { #hud { left: 28px; transform: none; width: calc(100% - 424px); } #room-panel { max-height: calc(100dvh - 174px); } }
 #room-panel a { color: #a2e8d6; }
 #room-message { overflow-wrap: anywhere; }
 #room-panel #room-error, #room-panel #library-errors { color: #ffad9e; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -98,5 +110,8 @@ kbd { font: inherit; background: #263944; padding: 1px 4px; border-radius: 3px; 
 .in-xr #room-panel, .in-xr #joystick, .wearer-view #joystick { display: none; }
 @media (max-width: 650px) {
   #room-panel { top: 198px; right: 12px; width: min(304px, calc(100% - 24px)); max-height: max(120px, calc(100dvh - 210px - var(--hud-space, 300px))); }
+  #room-panel:not(.collapsed) { top: max(12px, env(safe-area-inset-top)); bottom: max(12px, env(safe-area-inset-bottom)); width: calc(100% - 24px); max-height: none; z-index: 20; background: #101e29; }
+  #room-panel:not(.collapsed) ~ #vr-entry { display: none; }
+  #room-panel input:not([type=checkbox]), #room-panel select, #room-panel #party-invite { font-size: 16px; }
   #joystick { left: 16px; bottom: calc(var(--hud-space, 300px) + 12px); }
 }

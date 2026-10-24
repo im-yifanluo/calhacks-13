@@ -7,15 +7,19 @@ Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves 
 - **Viewer:** [docs/P3_VIEWER.md](docs/P3_VIEWER.md) · **Multiplayer and upload:** [docs/P4.md](docs/P4.md) · **Upload test:** [docs/CAPTURE_TEST.md](docs/CAPTURE_TEST.md)
 - **Vision pipeline runbook:** [pipeline/README.md](pipeline/README.md) (being rewritten)
 
-## Status (Sat Oct 24, morning)
+**Phone app:** open `apps/ios/SceneCaptureDemo.xcodeproj` for a native iPhone/Simulator demo with **On** and **Off**, automatic upload, database + SHA-256 verification, offline playback and retry. [Installation and test instructions](docs/PHONE_APP.md). The separate glasses SDK project requires Meta's supported Xcode toolchain. Browser demo: `/capture.html`.
+
+**Parties and Google sign-in:** [Setup and test guide](docs/PARTIES.md). Create a party with a synthetic scene, share its invite link, and let the leader control time. The native phone app has a Party tab. Google requires your own web client ID; guest parties work immediately. `npm run party:dev` starts the web/upload pair for the dedicated local party database.
+
+## Status (Sat Oct 24)
 
 | Part | State |
 |---|---|
 | Viewer: splats, physics, VR controls, timeline replay, people ghosts, audio (Nikko) | Merged. Checked in a desktop browser; never run on a Quest. |
-| Multiplayer: rooms, shared clock, avatars, grabbing, shared takes (Jerry + the new network adapter) | Merged. Checked live with two browser tabs against a local SpacetimeDB. |
+| Multiplayer: parties, leader clock, invite links, avatars, shared takes | Local database and multi-client tests pass. Google sign-in is implemented; configuring a web client ID and testing real Google consent remains required. |
 | Upload service and capture test page (Jerry) | Merged. Uploads to local disk or S3/R2 and registers the clip in SpacetimeDB. |
 | Vision pipeline (`pipeline/`) | Being rewritten. Nothing turns a clip into `memory.json` automatically yet, and no worker picks up uploads. |
-| Left out | Andrew's `origin/part1` (pipeline rewrite) and Jerry's iOS app (never compiled). See [docs/INTEGRATION.md](docs/INTEGRATION.md) §1. |
+| Native iPhone app | Standalone On/Off demo builds for Simulator. Full Meta SDK target and physical glasses remain unverified. See [docs/PHONE_APP.md](docs/PHONE_APP.md). |
 
 What's fixed and what's still open: [docs/INTEGRATION.md](docs/INTEGRATION.md) §4.
 
@@ -70,11 +74,11 @@ LOCAL_HTTP=1 npm run dev     # terminal 3: the app on http://127.0.0.1:5173
 
 Port 3055 avoids Docker, which often holds 3000/3001. Set `STDB_PORT=<port>` to use another one; the npm scripts, the Vite proxy, `upload:local` and `test:integration` all follow it. `stdb:publish:local` uses your `spacetime login`; for a throwaway test without a login, see [docs/P4.md](docs/P4.md).
 
-**Share a room** (each browser tab is its own player):
-1. In the **ROOM** panel (top right), open **Load a finished memory**, leave the URL blank (that means the mock memory) and click **Add to library**.
-2. Under **Your room**, enter a name, pick the memory and click **Create room**. The address bar gains `?room=<code>`.
-3. Open that link in a second tab (or **Copy room link**, or type the code and **Join**).
-4. Both tabs see each other's head and share play, pause and seek. Pause, drag the ball and throw it: the other tab sees it fly, and the new take appears for both. Re-grabbing an object makes another take; the original recording never changes.
+**Share a party** (guest tabs are separate players):
+1. In **PARTY**, enter a name, keep **Synthetic demo · ready to play** selected and press **Create party**.
+2. Use **Copy invite link** and open it in another tab/device, or enter the seven-character code and press **Join**.
+3. The leader controls playback, seeking, speed and take selection. Other members follow the clock and can explore/grab objects while paused.
+4. Use **Make leader** to transfer control. A leader's last disconnect elects another connected member. See [the complete party/Google test](docs/PARTIES.md).
 
 Without `?room=` the page is a solo session, exactly as before. If SpacetimeDB restarts, pages reconnect within about 5 s. Joining a room drops takes you made solo; **Leave** returns to solo. A room whose memory differs from the loaded one reloads the page with `?memory=<url>&room=<code>`. In dev builds, `window.__memreplay` exposes the viewer state for debugging.
 
@@ -90,7 +94,7 @@ npx tsx scripts/test-adapter.ts                       # live: two players + a la
 **After changing `server/spacetime/src/index.ts`:**
 
 ```bash
-npm run stdb:publish:local   # add -- --delete-data=always if you changed a table
+npm run stdb:publish:local   # preserve data; inspect migration requirements before changing existing tables
 npm run stdb:generate        # refresh apps/web/src/module_bindings (never edit by hand)
 ```
 
@@ -161,6 +165,9 @@ The app, SpacetimeDB (`/stdb`) and the upload service (`/api`) share that one li
 | `npm run build` | Production build into `apps/web/dist` |
 | `npm test` | vitest (`tests/`) + the viewer's node tests (`apps/web/tests/`) |
 | `npm run typecheck` | Type-check the module and the web app |
+| `npm run party:dev` | Start web + upload with matching party database/origin settings; publish first |
+| `npm run test:party` | Live party authority, presence, clock, handoff and worker-contract test |
+| `npm run auth:configure -- CLIENT_ID` | Configure the public Google web client ID for both web and database builds |
 | `npm run test:integration` | Live multiplayer test against a running SpacetimeDB (`STDB_DATABASE`, `STDB_WS_URL` or `STDB_PORT`) |
 | `npm run tunnel` | Public HTTPS link for phones and judges |
 | `npm run stdb:start` | Local SpacetimeDB on port 3055 (`STDB_PORT` overrides) |

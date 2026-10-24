@@ -1,0 +1,48 @@
+// !$*UTF8*$!
+{ archiveVersion = 1; classes = {}; objectVersion = 56; objects = {
+9814AAC3262759DD6966517D = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassesCapture.swift; sourceTree = "<group>"; };
+33564245F2E973BC7928F88B = { isa = PBXBuildFile; fileRef = 9814AAC3262759DD6966517D; };
+D849C2346DC28E7CF350C59C = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Recorder.swift; sourceTree = "<group>"; };
+1D3AE450F1D44EAC83751E34 = { isa = PBXBuildFile; fileRef = D849C2346DC28E7CF350C59C; };
+BA0D0DB043391AC9EA29DE12 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneCaptureApp.swift; sourceTree = "<group>"; };
+0483FF967A1552B7981E28BE = { isa = PBXBuildFile; fileRef = BA0D0DB043391AC9EA29DE12; };
+F8FC052461297BFD5610DFDD = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneLibrary.swift; sourceTree = "<group>"; };
+62B83BDF90BBE81FF1A56BEF = { isa = PBXBuildFile; fileRef = F8FC052461297BFD5610DFDD; };
+0112DAE3F84CB4DF5179BE01 = { isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+7D1043473D55BFA90E8530D3 = { isa = PBXFileReference; explicitFileType = wrapper.application; path = SceneCapture.app; sourceTree = BUILT_PRODUCTS_DIR; };
+482182478A3ECD4745BEA917 = { isa = PBXGroup; path = SceneCapture; sourceTree = "<group>"; children = (9814AAC3262759DD6966517D,D849C2346DC28E7CF350C59C,BA0D0DB043391AC9EA29DE12,F8FC052461297BFD5610DFDD,0112DAE3F84CB4DF5179BE01,); };
+FBDC4F23F93125BBEEAE800C = { isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (7D1043473D55BFA90E8530D3,); };
+B28B7AF69320201D1CF206EB = { isa = PBXGroup; sourceTree = "<group>"; children = (482182478A3ECD4745BEA917,FBDC4F23F93125BBEEAE800C,); };
+BCE16DD0260827ECF338C787 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (33564245F2E973BC7928F88B,1D3AE450F1D44EAC83751E34,0483FF967A1552B7981E28BE,62B83BDF90BBE81FF1A56BEF,); runOnlyForDeploymentPostprocessing = 0; };
+0189424A5A60FED329FA868E = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+4242AE5FE71A65C94A0E5D25 = { isa = XCSwiftPackageProductDependency; package = 5A374DCD2E5EB762B527AF3A; productName = MWDATCore; };
+CF82C0500B8D6FA801980960 = { isa = PBXBuildFile; productRef = 4242AE5FE71A65C94A0E5D25; };
+5E13FB7FCBD08086D8F1623C = { isa = XCSwiftPackageProductDependency; package = 5A374DCD2E5EB762B527AF3A; productName = MWDATCamera; };
+3FEC4601F302B0BF8300D5BD = { isa = PBXBuildFile; productRef = 5E13FB7FCBD08086D8F1623C; };
+7561BFB015D8F536760CB671 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (CF82C0500B8D6FA801980960,3FEC4601F302B0BF8300D5BD,); runOnlyForDeploymentPostprocessing = 0; };
+5A374DCD2E5EB762B527AF3A = { isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/facebook/meta-wearables-dat-ios"; requirement = { kind = exactVersion; version = 1.0.1; }; };
+89E1FD6268CC0F221A2BE178 = { isa = XCBuildConfiguration; name = Debug; buildSettings = { CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.2;
+            SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; DEBUG_INFORMATION_FORMAT = dwarf; }; };
+E6DE6C99132752C914FEF632 = { isa = XCBuildConfiguration; name = Release; buildSettings = { CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.2;
+            SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1; SWIFT_OPTIMIZATION_LEVEL = "-O"; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; }; };
+862894B703A6DEDF96A9DD6C = { isa = XCConfigurationList; buildConfigurations = (89E1FD6268CC0F221A2BE178,E6DE6C99132752C914FEF632,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+7082CC0B6FC1282FCEABD07A = { isa = XCBuildConfiguration; name = Debug; buildSettings = { CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.2;
+            SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1;PRODUCT_NAME = "$(TARGET_NAME)"; PRODUCT_BUNDLE_IDENTIFIER = com.memreplay.SceneCapture;
+                INFOPLIST_FILE = SceneCapture/Info.plist; CODE_SIGN_STYLE = Automatic;
+                CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0; GENERATE_INFOPLIST_FILE = NO;
+                LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; META_APP_ID = 0; CLIENT_TOKEN = ""; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; DEBUG_INFORMATION_FORMAT = dwarf; }; };
+639A7CA24D39909E713B47F7 = { isa = XCBuildConfiguration; name = Release; buildSettings = { CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.2;
+            SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1;PRODUCT_NAME = "$(TARGET_NAME)"; PRODUCT_BUNDLE_IDENTIFIER = com.memreplay.SceneCapture;
+                INFOPLIST_FILE = SceneCapture/Info.plist; CODE_SIGN_STYLE = Automatic;
+                CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0; GENERATE_INFOPLIST_FILE = NO;
+                LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; META_APP_ID = 0; CLIENT_TOKEN = ""; SWIFT_OPTIMIZATION_LEVEL = "-O"; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; }; };
+C57128001CE614BF8549D6BB = { isa = XCConfigurationList; buildConfigurations = (7082CC0B6FC1282FCEABD07A,639A7CA24D39909E713B47F7,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+0E8A3AD980EC179856012B7E = { isa = PBXNativeTarget; name = SceneCapture; productName = SceneCapture; productType = "com.apple.product-type.application";
+        productReference = 7D1043473D55BFA90E8530D3; buildConfigurationList = C57128001CE614BF8549D6BB;
+        buildPhases = (BCE16DD0260827ECF338C787,7561BFB015D8F536760CB671,0189424A5A60FED329FA868E,); buildRules = (); dependencies = ();
+        packageProductDependencies = (4242AE5FE71A65C94A0E5D25,5E13FB7FCBD08086D8F1623C,); };
+98F54143AB4E86B28C3AFEE0 = { isa = PBXProject; attributes = { LastUpgradeCheck = 2640; }; buildConfigurationList = 862894B703A6DEDF96A9DD6C;
+        compatibilityVersion = "Xcode 14.0"; developmentRegion = en; knownRegions = (en,Base,);
+        mainGroup = B28B7AF69320201D1CF206EB; productRefGroup = FBDC4F23F93125BBEEAE800C; projectDirPath = ""; projectRoot = "";
+        targets = (0E8A3AD980EC179856012B7E,); packageReferences = (5A374DCD2E5EB762B527AF3A,); };
+}; rootObject = 98F54143AB4E86B28C3AFEE0; }

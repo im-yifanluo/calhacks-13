@@ -17,7 +17,7 @@ const uploadTarget = process.env.UPLOAD_URL ?? `http://127.0.0.1:${process.env.U
 export default defineConfig({
   plugins: localHttp ? [] : [basicSsl()],
   server: {
-    host: localHttp ? "127.0.0.1" : true,
+    host: process.env.VITE_HOST || (localHttp ? "127.0.0.1" : true),
     port: Number(process.env.VITE_PORT ?? 5173),
     allowedHosts: [
       ".trycloudflare.com",

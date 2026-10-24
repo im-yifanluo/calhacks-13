@@ -34,3 +34,8 @@ apps/ios/.build/
 apps/ios/Backend.local.xcconfig
 apps/ios/**/xcuserdata/
 !apps/ios/CameraAccess/TestResources/plant.mp4
+
+# Native iPhone builds and personal signing state
+**/xcuserdata/
+**/DerivedData/
+*.xcuserstate
