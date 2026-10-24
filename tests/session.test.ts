@@ -6,6 +6,7 @@ import {
   claimReload,
   deviceKind,
   handVisible,
+  HIDE_NEAR_M,
   loadedManifest,
   normalizeCode,
   playerColor,
@@ -166,6 +167,23 @@ describe("presence", () => {
       expect(avatars.group.children).toHaveLength(0);
       avatars.dispose();
       expect(scene.getObjectByName("avatars")).toBeUndefined();
+    });
+
+    test("an avatar sitting on your own camera is hidden until one of you moves", () => {
+      vi.stubGlobal("document", {
+        createElement: () => ({ width: 0, height: 0, getContext: () => null }),
+      });
+      const avatars = new Avatars(new THREE.Scene());
+      const me = player(1n);
+      const other = player(2n); // head at (1, 1.6, 2), where a fresh client's camera also starts
+      avatars.update([me, other], me.identity, 1 / 60, new THREE.Vector3(1, 1.6, 2));
+      const root = avatars.group.children[0];
+      expect(root.visible).toBe(false);
+      avatars.update([me, other], me.identity, 1 / 60, new THREE.Vector3(1, 1.6, 2 + HIDE_NEAR_M + 0.1));
+      expect(root.visible).toBe(true);
+      avatars.update([me, other], me.identity, 1 / 60); // no viewpoint: always shown
+      expect(root.visible).toBe(true);
+      avatars.dispose();
     });
   });
 });

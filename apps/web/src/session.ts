@@ -101,6 +101,10 @@ interface Avatar {
   fresh: boolean;
 }
 
+/** Avatars closer than this to your own camera are hidden: everyone starts at the same camera pose, so another
+ * player who hasn't moved yet would otherwise sit on your camera and cover the view. */
+export const HIDE_NEAR_M = 0.6;
+
 /** Head spheres (with a visor showing where they look), hands and name tags for the other players. */
 export class Avatars {
   readonly group = new THREE.Group();
@@ -122,7 +126,8 @@ export class Avatars {
     return this.items.size;
   }
 
-  update(players: Player[], self: Identity | undefined, dt: number): void {
+  /** viewpoint: your camera's world position, to hide avatars that sit on it. */
+  update(players: Player[], self: Identity | undefined, dt: number, viewpoint?: THREE.Vector3): void {
     const seen = new Set<string>();
     const k = 1 - Math.exp(-Math.max(0, dt) * 12);
     for (const p of players) {
@@ -150,6 +155,7 @@ export class Avatars {
         head.quaternion.slerp(this.rotation, k);
       }
       avatar.label.position.copy(head.position).y += 0.27;
+      avatar.root.visible = !viewpoint || head.position.distanceTo(viewpoint) > HIDE_NEAR_M;
       for (const [mesh, x, y, z] of [
         [avatar.left, p.lx, p.ly, p.lz],
         [avatar.right, p.rx, p.ry, p.rz],
@@ -299,6 +305,7 @@ export class Session {
   private lastPose: number[] = [];
   private handedness: (string | undefined)[] = [];
   private head = new THREE.Vector3();
+  private readonly viewpoint = new THREE.Vector3();
   private headRotation = new THREE.Quaternion();
   private hands = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly ui = {
@@ -388,7 +395,7 @@ export class Session {
   update(dt: number): void {
     if (!this.room) this.avatars.clear();
     else if (this.net.ready && this.net.room)
-      this.avatars.update(this.net.players, this.net.identity, dt);
+      this.avatars.update(this.net.players, this.net.identity, dt, this.host.camera.getWorldPosition(this.viewpoint));
     this.sendPose();
     if (this.profileDirty) this.resendProfile();
   }
@@ -475,12 +482,10 @@ export class Session {
     );
     this.busy = false;
     if (ok) this.entered(fromUrl);
-    else if (fromUrl) {
-      // Stay a local session, and do not retry this code on reload.
-      this.urlRoom = "";
-      history.replaceState(history.state, "", roomUrl(location.href, null));
-      this.message = `Could not join room ${joinCode}. You're exploring on your own.`;
-    }
+    else if (fromUrl)
+      // Stay a local session, and do not retry this code on reload. A reconnect can put this identity back in its
+      // previous room on the server; abandonJoin leaves that too, or the others keep seeing a frozen avatar.
+      this.abandonJoin(`Could not join room ${joinCode}. You're exploring on your own.`);
     this.render();
   }
 
@@ -504,8 +509,8 @@ export class Session {
     const room = this.net.room,
       memory = this.net.memory;
     if (!room || !memory) {
-      this.net.report(
-        "Joined, but the room's memory is missing from the library",
+      this.abandonJoin(
+        "Joined, but the room's memory is missing from the library. You're exploring on your own.",
       );
       return;
     }
@@ -516,8 +521,8 @@ export class Session {
       // Nikko's viewer loads one manifest at boot: reload into the room's memory.
       const target = roomUrl(location.href, code, memory.manifestUrl);
       if (fromUrl && !claimReload(sessionStorage, target)) {
-        this.net.report(
-          `Room ${code} shows “${memory.title}”, but this page did not open it (${memory.manifestUrl}).`,
+        this.abandonJoin(
+          `Room ${code} shows “${memory.title}”, but this page could not open it (${memory.manifestUrl}). You're exploring on your own.`,
         );
         return;
       }
@@ -536,6 +541,17 @@ export class Session {
     // Keep ?room= in the address bar, so a reload rejoins and the link can be shared.
     history.replaceState(history.state, "", roomUrl(location.href, code));
     this.startAdapter();
+  }
+
+  /**
+   * The server already put us in the room, but this page can't show it: leave again, so the others don't see a
+   * ghost avatar, and stay a local session that won't retry this room on reload.
+   */
+  private abandonJoin(text: string): void {
+    void this.net.run(() => this.net.connection!.reducers.leaveRoom({}), false);
+    this.urlRoom = "";
+    history.replaceState(history.state, "", roomUrl(location.href, null));
+    this.message = text;
   }
 
   private startAdapter(): void {
