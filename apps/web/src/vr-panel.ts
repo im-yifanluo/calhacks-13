@@ -1,8 +1,8 @@
 import * as THREE from "three";
 
 /**
- * The in-VR control panel: a canvas drawn onto a plane, styled as dark glass. It opens 1.2 m ahead and 0.3 m below the
- * eyes (about 14° down) and follows lazily: it re-centres only when you turn more than 30° or step 0.5 m away, and never
+ * The in-VR control panel: a canvas drawn onto a plane, styled as dark glass. It opens 1.1 m ahead and 0.5 m below the
+ * eyes (about 24° down) and follows lazily: it re-centres only when you turn more than 30° or step 0.5 m away, and never
  * while you point at it. Drag the bar under it to put it anywhere (the thumbstick pushes it away or pulls it closer); it
  * then stays where you left it until you bring it back (click the right thumbstick, or press B or Y twice).
  * The panel is a child of the rig, so thumbstick moves and snap turns carry it along.
@@ -66,8 +66,8 @@ export function scrubTime(u: number, duration: number): number {
   return ratio * duration;
 }
 
-/** Where the panel opens: 1.2 m ahead along the horizontal view direction and 0.3 m below the eyes (about 14° down). */
-export const FOLLOW = { distance: 1.2, drop: 0.3, maxAngleDeg: 30, maxMove: 0.5 } as const;
+/** Where the panel opens: 1.1 m ahead along the horizontal view direction and 0.5 m below the eyes (about 24° down). */
+export const FOLLOW = { distance: 1.1, drop: 0.5, maxAngleDeg: 30, maxMove: 0.5 } as const;
 /** Dragging: how near and far the panel may go, and how fast the thumbstick pushes it, m/s. */
 export const DRAG = { minDistance: 0.6, maxDistance: 3, pushSpeed: 1.2 } as const;
 /**
@@ -75,8 +75,8 @@ export const DRAG = { minDistance: 0.6, maxDistance: 3, pushSpeed: 1.2 } as cons
  * be lost overhead or on the floor (the brief: gaze is comfortable from 10° above to 60° below the horizon).
  */
 export const PLACE = { minDistance: 0.6, maxDistance: 3, minPitchDeg: -55, maxPitchDeg: 20 } as const;
-/** A pinned panel out of view (more than 55° from the gaze) for 1.5 s offers a "Bring controls here" pill in front. */
-export const SUMMON = { afterSec: 1.5, offAngleDeg: 55, distance: 1.0, drop: 0.42, metersWide: 0.3 } as const;
+/** A pinned panel out of view (more than 55° from the gaze) for 2.5 s offers a "Bring controls here" pill in front. */
+export const SUMMON = { afterSec: 2.5, offAngleDeg: 55, distance: 1.0, drop: 0.42, metersWide: 0.3 } as const;
 
 /** Keep a world position `p` inside the PLACE band around `eye` (in place). */
 export function clampPlacement(p: THREE.Vector3, eye: THREE.Vector3): THREE.Vector3 {

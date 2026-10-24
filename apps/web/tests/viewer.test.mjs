@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { Euler, Group, Quaternion, Vector3 } from "three";
 import { colliderDepth, initPhysics, STEP } from "../.test-dist/physics.js";
 import { validateManifest } from "../.test-dist/loader.js";
-import { Viewer, isGhost } from "../.test-dist/viewer.js";
+import { AT_END, Viewer, isGhost } from "../.test-dist/viewer.js";
 
 const frame = (t, x, y = 1, z = 0, extra = {}) => ({ t, p: [x, y, z], q: [0, 0, 0, 1], ...extra });
 const close = (a, b, tolerance = 1e-5) => assert.ok(Math.abs(a - b) < tolerance, `${a} != ${b}`);
@@ -176,6 +176,17 @@ test("the status line reports the finished recording instead of keeping 'Recordi
     viewer.seek(1); assert.equal(await viewer.grab("ball"), true); viewer.release();
     viewer.seek(2); // finishes the preview at once
     assert.equal(reports.at(-1), "Throw recorded.");
+  } finally { viewer.dispose(); }
+});
+
+test("a grab at the very end is refused with a message saying what to do", async () => {
+  const { memory } = build([still()]);
+  const reports = []; const viewer = new Viewer(memory, message => reports.push(message));
+  try {
+    viewer.seek(6);
+    assert.equal(await viewer.grab("ball"), false);
+    assert.equal(reports.at(-1), AT_END);
+    assert.equal(viewer.timeline.branches.length, 1);
   } finally { viewer.dispose(); }
 });
 

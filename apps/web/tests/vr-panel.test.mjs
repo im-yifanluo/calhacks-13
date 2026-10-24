@@ -65,12 +65,12 @@ test("the scrubber maps its track ends to the clip ends and clamps beyond them",
   close(scrubTime(1, 6), 6);
 });
 
-test("the panel opens 1.2 m ahead and 0.3 m down: about 14° below the eyes, 33° wide, ~31 canvas px per degree", () => {
+test("the panel opens 1.1 m ahead and 0.5 m down: about 24° below the eyes, 34° wide, ~30 canvas px per degree", () => {
   const head = new Vector3(1, 1.6, 2), spot = panelTarget(head, new Vector3(0, 0, -1));
   close(spot.x, 1); close(spot.y, 1.6 - FOLLOW.drop); close(spot.z, 2 - FOLLOW.distance);
   const sight = Math.hypot(FOLLOW.distance, FOLLOW.drop);
   const below = deg(Math.atan2(FOLLOW.drop, FOLLOW.distance)), wide = deg(2 * Math.atan(PANEL.metersWide / 2 / sight));
-  assert.ok(below > 10 && below < 20, `${below}° below eye level`);
+  assert.ok(below > 18 && below < 30, `${below}° below eye level`);
   assert.ok(wide > 30 && wide < 36, `${wide}° wide`);
   assert.ok(sight > 0.8, "outside the 0.5–0.8 m middle distance");
   const perDegree = PANEL.width / wide;
@@ -191,12 +191,12 @@ test("dragging the ray straight up stops the panel 20° above eye level", () => 
   close(deg(Math.atan2(centre.y - eye.y, Math.hypot(centre.x - eye.x, centre.z - eye.z))), PLACE.maxPitchDeg, 1e-6);
 });
 
-test("a pinned panel out of view for 1.5 s offers Bring controls here in front; recenter puts it away", () => {
+test("a pinned panel out of view for 2.5 s offers Bring controls here in front; recenter puts it away", () => {
   const { panel, head, forward } = rigged();
   // Pin it 90° to the left.
   panel.pinned = true; panel.mesh.position.set(-1.2, 1.3, 0);
   const gazeAhead = new Vector3(0, 0, -1);
-  panel.updateSummon(head, forward, gazeAhead, 1.0);
+  panel.updateSummon(head, forward, gazeAhead, 2.0);
   assert.equal(panel.summon.visible, false, "not yet");
   panel.updateSummon(head, forward, gazeAhead, 0.6);
   assert.equal(panel.summon.visible, true);

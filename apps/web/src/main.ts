@@ -75,6 +75,8 @@ async function main(): Promise<void> {
   // Enter VR where the wearer started, standing on the scene floor, facing their first heading.
   let vrSpawn = { x: 0, y: 0, z: 2, yaw: 0 };
   renderer.xr.addEventListener("sessionstart", () => {
+    // A memory that already played to its end has nothing left to grab: start VR from the beginning, paused.
+    if (viewer && viewer.timeline.time >= viewer.timeline.duration) viewer.seek(0);
     savedCamera.copy(camera.position); savedTarget.copy(controls.target); controls.enabled = false;
     rig.position.set(vrSpawn.x, vrSpawn.y, vrSpawn.z); rig.rotation.set(0, vrSpawn.yaw, 0);
     eyes.checked = false; eyes.disabled = true; document.body.classList.add("in-xr");
@@ -186,7 +188,7 @@ async function main(): Promise<void> {
     controls.enabled = !eyes.checked && !xrPreview;
   };
   const markers = element("markers"), roomPanel = element<HTMLDialogElement>("room-panel");
-  let previous = 0, frames = 0, elapsed = 0, lastUI = 0, slowSeconds = 0;
+  let previous = 0, frames = 0, elapsed = 0, lastUI = 0, slowSeconds = 0, wasPlaying = false;
   renderer.setAnimationLoop(timestamp => {
     const dt = previous ? Math.min((timestamp - previous) / 1000, 0.1) : 0; previous = timestamp;
     xr.update(dt); currentViewer.update(dt);
@@ -209,6 +211,11 @@ async function main(): Promise<void> {
     const tl = currentViewer.timeline;
     if (timestamp - lastUI > 100) {
       lastUI = timestamp;
+      // Playback just reached the end: nothing can be grabbed there, so say what to do next.
+      if (wasPlaying && !tl.playing && tl.time >= tl.duration) status.textContent = touch
+        ? "That's the end. Press Play to watch again, or drag the timeline back to throw something."
+        : "That's the end. Press Play (Space) to watch again, or scrub back to throw something.";
+      wasPlaying = tl.playing;
       play.classList.toggle("playing", tl.playing); play.setAttribute("aria-label", tl.playing ? "Pause" : "Play");
       scrub.value = String(tl.time / tl.duration * 1000);
       scrub.style.setProperty("--progress", `${percentAt(tl.time, tl.duration)}%`);

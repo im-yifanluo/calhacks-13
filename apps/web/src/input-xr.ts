@@ -182,7 +182,8 @@ export class XRInput {
     const started = () => {
       vrlog("sessionstart");
       session = renderer.xr.getSession(); session?.addEventListener("visibilitychange", visibility);
-      this.reset(); this.panel.reset(); this.settle = 3;
+      // About a sixth of a second at 90 Hz: the first poses after entering VR can still move.
+      this.reset(); this.panel.reset(); this.settle = 15;
     };
     const ended = () => {
       vrlog("sessionend");
@@ -224,8 +225,10 @@ export class XRInput {
   private aim(index: number): Pointing {
     this.ray(index);
     const ui = this.panel.hit(this.raycaster);
-    const paused = !this.viewer.timeline.playing && !this.viewer.held;
-    const objectHit = paused ? this.viewer.pick(this.raycaster) : undefined;
+    // Objects can be grabbed only while paused, and not at the very end (a take there would have no time to play).
+    const timeline = this.viewer.timeline;
+    const grabbable = !timeline.playing && !this.viewer.held && timeline.time < timeline.duration;
+    const objectHit = grabbable ? this.viewer.pick(this.raycaster) : undefined;
     if (ui && (!objectHit || ui.distance <= objectHit.distance)) return ui;
     if (objectHit) return { kind: "object", id: objectHit.object.userData.objectId as string, distance: objectHit.distance, point: objectHit.point };
     return null;
@@ -256,7 +259,14 @@ export class XRInput {
     this.ray(index);
     const hit = this.viewer.pick(this.raycaster);
     if (!hit) return;
-    if (this.viewer.timeline.playing) { this.say("Pause first (A or X), then grab."); pattern(source, false); return; }
+    const hands = !!source?.hand;
+    if (this.viewer.timeline.playing) {
+      this.say(hands ? "Pause first: pinch Pause on the panel, then grab." : "Pause first (A or X), then grab."); pattern(source, false); return;
+    }
+    if (this.viewer.timeline.time >= this.viewer.timeline.duration) {
+      this.say(hands ? "That's the end. Pinch Play to watch again, then pause and grab." : "That's the end. Press A or X to watch again, then pause and grab.");
+      pattern(source, false); vrlog("refused", { reason: "end" }); return;
+    }
     const version = ++this.requestVersion; this.pending = index;
     const acquired = await this.viewer.grab(hit.object.userData.objectId);
     if (version === this.requestVersion && this.pending === index) this.pending = null;
@@ -348,9 +358,11 @@ export class XRInput {
     if (this.dragging !== null) return "Move the panel; the stick pushes it away or pulls it closer.";
     if (viewer.held) return `Holding ${viewer.held.definition.label}. Move, then let go to throw.`;
     if (viewer.recording) return "Recording the throw…";
-    if (target) return `${target}: hold grip or pinch to grab.`;
-    if (viewer.timeline.playing) return "Press A or X to pause, then grab something.";
-    return "Point at an object and hold grip to grab it.";
+    const hands = [...this.sources.values()].some(source => !!source.hand);
+    if (target) return hands ? `${target}: pinch to grab, move, then let go.` : `${target}: hold grip to grab, move, then let go.`;
+    if (viewer.timeline.playing) return hands ? "Pinch Pause to freeze time, then grab something." : "Press A or X to freeze time, then grab something.";
+    if (viewer.timeline.time >= viewer.timeline.duration) return hands ? "That's the end. Pinch Play to watch again." : "That's the end. Press A or X to watch again.";
+    return hands ? "Point at an object and pinch to grab it." : "Point at an object and hold grip to grab it.";
   }
 
   update(dt: number): void {

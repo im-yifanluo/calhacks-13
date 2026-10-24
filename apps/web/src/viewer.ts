@@ -5,6 +5,9 @@ import { colliderDepth, Physics, STEP } from "./physics.js";
 import { SAME_TIME, Timeline, type Branch } from "./timeline.js";
 import { keyframe, keyframeVelocity, sampleTrack, trackVelocity, validateTrack } from "./tracks.js";
 
+/** What a grab at the very end of the memory says. */
+export const AT_END = "That's the end of the memory. Scrub back or press Play, then pause to grab something.";
+
 export interface GrabRequest { objectId: string; branchId: string; time: number; pose: Keyframe }
 /** P4 installs this gate before enabling shared-room interaction. Never grant optimistically. */
 export interface InteractionAuthority {
@@ -132,7 +135,9 @@ export class Viewer {
   }
 
   async grab(objectId: string): Promise<boolean> {
-    if (this.disposed || this.held || this.pendingGrab || this.timeline.playing || this.timeline.time >= this.timeline.duration) return false;
+    if (this.disposed || this.held || this.pendingGrab || this.timeline.playing) return false;
+    // Nothing can be edited at the very end (a take made there has no time left to play), so say so.
+    if (this.timeline.time >= this.timeline.duration) { this.report(AT_END); return false; }
     const object = this.memory.objects.find(o => o.definition.id === objectId);
     if (!object?.definition.grabbable || !object.root.visible) return false;
     this.throwNoted = false;
@@ -143,7 +148,7 @@ export class Viewer {
     if (catchTime !== undefined && catchTime >= this.timeline.duration) catchTime = undefined;
     this.finishSimulation();
     if (catchTime !== undefined) this.timeline.seek(catchTime);
-    if (this.timeline.time >= this.timeline.duration) return false;
+    if (this.timeline.time >= this.timeline.duration) { this.report(AT_END); return false; }
     this.sample();
     if (!object.root.visible) return false;
     const op = ++this.operation;

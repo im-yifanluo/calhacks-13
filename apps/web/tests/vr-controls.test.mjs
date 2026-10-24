@@ -47,7 +47,7 @@ function setup() {
   xr.controllers[0].dispatchEvent({ type: "connected", data: { handedness: "right", gamepad: right } });
   xr.controllers[1].dispatchEvent({ type: "connected", data: { handedness: "left", gamepad: left } });
   const step = (dt = 1 / 60) => { scene.updateMatrixWorld(true); input.update(dt); viewer.update(dt); scene.updateMatrixWorld(true); };
-  for (let i = 0; i < 5; i++) step(); // the panel waits a few frames for a head pose, then opens in front
+  for (let i = 0; i < 17; i++) step(); // the panel waits a few frames for a head pose, then opens in front
   const panel = rig.getObjectByName("vr-panel");
   /** Point controller 0 (held at the eyes) at a world point. */
   const aim = target => {
@@ -65,7 +65,7 @@ function setup() {
   return { viewer, xr, input, rig, camera, panel, aim, pointAt, centre, press, click, step, ball, right, left, pixel, dispose };
 }
 
-test("the panel opens 1.2 m in front of the eyes once the headset reports a head pose", () => {
+test("the panel opens in front of and below the eyes once the headset reports a head pose", () => {
   const app = setup();
   try {
     assert.equal(app.panel.visible, true);
@@ -207,11 +207,30 @@ test("a panel left out of view can be called back with the Bring controls here p
     }
     app.press("selectend");
     const summon = app.rig.getObjectByName("vr-panel-summon");
-    for (let i = 0; i < 120; i++) app.step(1 / 60);
+    for (let i = 0; i < 180; i++) app.step(1 / 60);
     assert.equal(summon.visible, true, "offered after the panel was out of view for a while");
     app.aim(summon.getWorldPosition(new Vector3())); app.step();
     app.press("selectstart"); app.press("selectend"); app.step();
     assert.equal(summon.visible, false);
     close(app.panel.position.x, 0, 1e-6); close(app.panel.position.z, 2 - FOLLOW.distance, 1e-6);
+  } finally { app.dispose(); }
+});
+
+test("at the very end of the memory objects don't light up, and a grab says what to do instead of failing silently", async () => {
+  const app = setup();
+  try {
+    app.click(region("hide")); app.step();
+    app.viewer.seek(app.viewer.timeline.duration);
+    app.aim(app.ball); app.step();
+    assert.equal(app.input.pointingKeys[0], "", "the ball is not offered at the end");
+    app.press("squeezestart"); await flush(); app.press("squeezeend");
+    assert.equal(app.viewer.held, null);
+    assert.equal(app.viewer.timeline.branches.length, 1, "no take was made");
+    assert.match(app.input.toast.text, /end/);
+    // Back a second, the same grab works.
+    app.viewer.seek(app.viewer.timeline.duration - 1); app.aim(app.ball); app.step();
+    assert.equal(app.input.pointingKeys[0], "object:ball");
+    app.press("squeezestart"); await flush();
+    assert.equal(app.viewer.held?.definition.id, "ball");
   } finally { app.dispose(); }
 });
