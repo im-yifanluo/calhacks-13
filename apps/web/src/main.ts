@@ -75,8 +75,9 @@ async function main(): Promise<void> {
   // Enter VR where the wearer started, standing on the scene floor, facing their first heading.
   let vrSpawn = { x: 0, y: 0, z: 2, yaw: 0 };
   renderer.xr.addEventListener("sessionstart", () => {
-    // A memory that already played to its end has nothing left to grab: start VR from the beginning, paused.
-    if (viewer && viewer.timeline.time >= viewer.timeline.duration) viewer.seek(0);
+    // Solo, VR starts from the beginning, paused, so there is time to look around and grab. In a room the clock is
+    // shared, so only a memory that already played to its end (nothing left to grab) rewinds.
+    if (viewer && (!session.adapter || viewer.timeline.time >= viewer.timeline.duration)) viewer.seek(0);
     savedCamera.copy(camera.position); savedTarget.copy(controls.target); controls.enabled = false;
     rig.position.set(vrSpawn.x, vrSpawn.y, vrSpawn.z); rig.rotation.set(0, vrSpawn.yaw, 0);
     eyes.checked = false; eyes.disabled = true; document.body.classList.add("in-xr");

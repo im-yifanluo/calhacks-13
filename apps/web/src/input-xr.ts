@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { XRControllerModelFactory } from "three/examples/jsm/webxr/XRControllerModelFactory.js";
 import { XRHandModelFactory } from "three/examples/jsm/webxr/XRHandModelFactory.js";
 import type { Viewer } from "./viewer.js";
 import { scrubTime, VRPanel, type PanelAction, type PanelHit } from "./vr-panel.js";
@@ -57,7 +58,12 @@ export interface XRHost {
 }
 
 type Press = "select" | "squeeze";
-type Pointing = PanelHit | { kind: "object"; id: string; distance: number; point: THREE.Vector3 } | null;
+/** An object is offered by touch (`near`: the hand or controller is on it), by the ray, or by the ray passing close by. */
+type Pointing = PanelHit | { kind: "object"; id: string; distance: number; point: THREE.Vector3; near: boolean } | null;
+/** How close a hand's pinch point or a controller's grip must be to an object's surface to grab it by touch, m. */
+const REACH = 0.08;
+/** A ray that misses small objects still offers one whose edge is within this angle of it, degrees. */
+const ASSIST_DEG = 3;
 
 /** How long a new status message stays on the panel before the contextual hint comes back. */
 const MESSAGE_MS = 6000;
@@ -129,6 +135,9 @@ export class XRInput {
   private gaze = new THREE.Vector3();
   private summonShown = false;
   private eye = new THREE.Vector3();
+  private touch = new THREE.Vector3();
+  private toCentre = new THREE.Vector3();
+  private sphere = new THREE.Sphere();
   private previousButtons = new Map<string, boolean>();
   private previousSnap = false;
   private panel: VRPanel;
@@ -153,10 +162,13 @@ export class XRInput {
     private camera: THREE.PerspectiveCamera, private viewer: Viewer, private host: XRHost, previewCanvas?: HTMLCanvasElement) {
     this.raycaster.far = RAY.reach;
     this.panel = new VRPanel(rig, renderer.capabilities?.getMaxAnisotropy?.() ?? 1);
-    const handModels = new XRHandModelFactory();
+    const handModels = new XRHandModelFactory(), controllerModels = new XRControllerModelFactory();
     for (let index = 0; index < 2; index++) {
       const controller = renderer.xr.getController(index);
-      this.controllers.push(controller); rig.add(controller); rig.add(renderer.xr.getControllerGrip(index));
+      // The controllers themselves, so holding them doesn't leave empty hands (the model comes from the WebXR profiles CDN).
+      const grip = renderer.xr.getControllerGrip(index);
+      grip.add(controllerModels.createControllerModel(grip));
+      this.controllers.push(controller); rig.add(controller); rig.add(grip);
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]),
         new THREE.LineBasicMaterial({ color: RAY.idle, transparent: true, opacity: 0.35, depthTest: false }));
       line.renderOrder = 1012; line.scale.z = RAY.short; controller.add(line); this.lines.push(line);
@@ -221,16 +233,71 @@ export class XRInput {
     return grip.visible ? grip : this.controllers[index];
   }
 
-  /** What controller `index` points at: the panel (or its bar), a grabbable object (only while paused), or nothing. */
+  /** The point a hand pinches with (between thumb and index tips), or the controller's grip, in world space. */
+  private touchPoint(index: number, out: THREE.Vector3): THREE.Vector3 | null {
+    const source = this.sources.get(index);
+    if (!source) return null;
+    if (source.hand) {
+      const joints = this.renderer.xr.getHand(index).joints, thumb = joints?.["thumb-tip"], tip = joints?.["index-finger-tip"];
+      if (!thumb || !tip || !thumb.visible) return null;
+      return out.copy(thumb.getWorldPosition(this.scale)).add(tip.getWorldPosition(this.position)).multiplyScalar(0.5);
+    }
+    const grip = this.renderer.xr.getControllerGrip(index);
+    return grip.visible ? grip.getWorldPosition(out) : null;
+  }
+
+  /** The grabbable objects with their world bounding spheres. */
+  private *grabbables(): Generator<{ id: string; sphere: THREE.Sphere }> {
+    for (const proxy of this.viewer.pickables) {
+      const object = this.viewer.memory.objects.find(o => o.definition.id === proxy.userData.objectId);
+      if (!object?.definition.grabbable || !object.root.visible) continue;
+      proxy.updateWorldMatrix(true, false);
+      if (!proxy.geometry.boundingSphere) proxy.geometry.computeBoundingSphere();
+      yield { id: object.definition.id, sphere: this.sphere.copy(proxy.geometry.boundingSphere!).applyMatrix4(proxy.matrixWorld) };
+    }
+  }
+
+  /** An object the hand or controller is touching (its surface within REACH), nearest first. */
+  private touching(index: number): { id: string; point: THREE.Vector3 } | null {
+    const at = this.touchPoint(index, this.touch);
+    if (!at) return null;
+    let best: { id: string; point: THREE.Vector3 } | null = null, nearest = REACH;
+    for (const { id, sphere } of this.grabbables()) {
+      const gap = at.distanceTo(sphere.center) - sphere.radius;
+      if (gap < nearest) { nearest = gap; best = { id, point: sphere.center.clone() }; }
+    }
+    return best;
+  }
+
+  /** A small object the ray just misses: its edge within ASSIST_DEG of the ray, the closest such. */
+  private assisted(): { id: string; distance: number; point: THREE.Vector3 } | null {
+    const { origin, direction } = this.raycaster.ray;
+    let best: { id: string; distance: number; point: THREE.Vector3 } | null = null, closest = ASSIST_DEG * Math.PI / 180;
+    for (const { id, sphere } of this.grabbables()) {
+      const toCentre = this.toCentre.subVectors(sphere.center, origin), distance = toCentre.length();
+      if (distance > RAY.reach || toCentre.dot(direction) <= 0) continue;
+      const off = toCentre.angleTo(direction) - Math.asin(Math.min(1, sphere.radius / Math.max(distance, 1e-6)));
+      if (off < closest) { closest = off; best = { id, distance, point: sphere.center.clone() }; }
+    }
+    return best;
+  }
+
+  /**
+   * What controller `index` offers: an object it touches, else what its ray points at (the panel or its bar, or an
+   * object, hit or just missed), else nothing. Objects are offered until the very end (a take made there would have
+   * no time to play); grabbing one while the memory plays freezes time first.
+   */
   private aim(index: number): Pointing {
     this.ray(index);
-    const ui = this.panel.hit(this.raycaster);
-    // Objects can be grabbed only while paused, and not at the very end (a take there would have no time to play).
     const timeline = this.viewer.timeline;
-    const grabbable = !timeline.playing && !this.viewer.held && timeline.time < timeline.duration;
-    const objectHit = grabbable ? this.viewer.pick(this.raycaster) : undefined;
-    if (ui && (!objectHit || ui.distance <= objectHit.distance)) return ui;
-    if (objectHit) return { kind: "object", id: objectHit.object.userData.objectId as string, distance: objectHit.distance, point: objectHit.point };
+    const offered = !this.viewer.held && timeline.time < timeline.duration;
+    const touched = offered ? this.touching(index) : null;
+    if (touched) return { kind: "object", id: touched.id, distance: 0, point: touched.point, near: true };
+    const ui = this.panel.hit(this.raycaster);
+    const hit = offered ? this.viewer.pick(this.raycaster) : undefined;
+    const object = hit ? { id: hit.object.userData.objectId as string, distance: hit.distance, point: hit.point } : offered ? this.assisted() : null;
+    if (ui && (!object || ui.distance <= object.distance)) return ui;
+    if (object) return { kind: "object", ...object, near: false };
     return null;
   }
 
@@ -256,19 +323,24 @@ export class XRInput {
       if (press === "select" && pointing.action) { this.panel.pressed = pointing.action; pulse(source, HAPTIC.press); this.act(pointing.action, pointing.u, index); }
       return;
     }
-    this.ray(index);
-    const hit = this.viewer.pick(this.raycaster);
-    if (!hit) return;
-    const hands = !!source?.hand;
-    if (this.viewer.timeline.playing) {
-      this.say(hands ? "Pause first: pinch Pause on the panel, then grab." : "Pause first (A or X), then grab."); pattern(source, false); return;
+    let id = pointing?.kind === "object" ? pointing.id : null;
+    if (!id) {
+      // Not offered: at the very end, say so if the press was on an object.
+      this.ray(index);
+      const hit = this.viewer.pick(this.raycaster);
+      if (!hit) return;
+      id = hit.object.userData.objectId as string;
     }
-    if (this.viewer.timeline.time >= this.viewer.timeline.duration) {
-      this.say(hands ? "That's the end. Pinch Play to watch again, then pause and grab." : "That's the end. Press A or X to watch again, then pause and grab.");
+    const hands = !!source?.hand, timeline = this.viewer.timeline;
+    if (timeline.time >= timeline.duration) {
+      this.say(hands ? "That's the end. Pinch Play to watch again, then grab." : "That's the end. Press A or X to watch again, then grab.");
       pattern(source, false); vrlog("refused", { reason: "end" }); return;
     }
+    // Grabbing freezes time: no need to pause first.
+    if (timeline.playing) this.viewer.togglePlay();
     const version = ++this.requestVersion; this.pending = index;
-    const acquired = await this.viewer.grab(hit.object.userData.objectId);
+    const acquired = await this.viewer.grab(id);
+    vrlog("grab", { index, id, acquired, by: pointing?.kind === "object" ? (pointing.near ? "touch" : "ray") : "ray" });
     if (version === this.requestVersion && this.pending === index) this.pending = null;
     if (!acquired) return;
     // Let go (or left VR) while the room was deciding: give it straight back.
@@ -359,10 +431,9 @@ export class XRInput {
     if (viewer.held) return `Holding ${viewer.held.definition.label}. Move, then let go to throw.`;
     if (viewer.recording) return "Recording the throw…";
     const hands = [...this.sources.values()].some(source => !!source.hand);
-    if (target) return hands ? `${target}: pinch to grab, move, then let go.` : `${target}: hold grip to grab, move, then let go.`;
-    if (viewer.timeline.playing) return hands ? "Pinch Pause to freeze time, then grab something." : "Press A or X to freeze time, then grab something.";
+    if (target) return hands ? `${target}: pinch to grab it, move, then let go.` : `${target}: hold grip to grab it, move, then let go.`;
     if (viewer.timeline.time >= viewer.timeline.duration) return hands ? "That's the end. Pinch Play to watch again." : "That's the end. Press A or X to watch again.";
-    return hands ? "Point at an object and pinch to grab it." : "Point at an object and hold grip to grab it.";
+    return hands ? "Reach for an object (or point at it) and pinch to grab it." : "Reach for an object (or point at it) and hold grip to grab it.";
   }
 
   update(dt: number): void {
@@ -415,11 +486,12 @@ export class XRInput {
       if (!active) { cursor.visible = false; this.pointingKeys[index] = ""; continue; }
       const pointing = this.dragging === index ? null : this.aim(index);
       const interactive = pointing && (pointing.kind !== "panel" || pointing.action !== null);
-      line.scale.z = pointing ? pointing.distance : RAY.short;
+      const near = pointing?.kind === "object" && pointing.near;
+      line.scale.z = pointing && !near ? pointing.distance : RAY.short;
       line.material.color.setHex(pointing?.kind === "object" ? RAY.object : pointing ? RAY.panel : RAY.idle);
       line.material.opacity = interactive ? 0.9 : pointing ? 0.6 : 0.35;
-      cursor.visible = !!pointing;
-      if (pointing) {
+      cursor.visible = !!pointing && !near;
+      if (pointing && !near) {
         // About 1° across at any distance, 83 % while pressed.
         cursor.position.copy(pointing.point);
         cursor.scale.setScalar(pointing.distance * 0.009 * (this.pressed.has(index) ? 0.83 : 1));

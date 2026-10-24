@@ -234,3 +234,52 @@ test("at the very end of the memory objects don't light up, and a grab says what
     assert.equal(app.viewer.held?.definition.id, "ball");
   } finally { app.dispose(); }
 });
+
+/** The ball's proxy as a world sphere. */
+const ballSphere = app => {
+  const proxy = app.viewer.pickables.find(p => p.userData.objectId === "ball"); proxy.updateWorldMatrix(true, false);
+  if (!proxy.geometry.boundingSphere) proxy.geometry.computeBoundingSphere();
+  return proxy.geometry.boundingSphere.clone().applyMatrix4(proxy.matrixWorld);
+};
+
+test("touching an object with the controller grabs it without pointing at it", async () => {
+  const app = setup();
+  try {
+    const sphere = ballSphere(app);
+    app.aim(new Vector3(0, 4, -5)); // the ray points up and away
+    app.xr.grips[0].position.copy(sphere.center).add(new Vector3(0, 0, sphere.radius + 0.04)); app.step();
+    assert.equal(app.input.pointingKeys[0], "object:ball", "offered by touch");
+    app.press("squeezestart"); await flush();
+    assert.equal(app.viewer.held?.definition.id, "ball");
+  } finally { app.dispose(); }
+});
+
+test("a ray that just misses a small object still offers it", async () => {
+  const app = setup();
+  try {
+    app.click(region("hide")); app.step();
+    const sphere = ballSphere(app), eye = new Vector3(0, 1.6, 2);
+    // Aim 2° outside the ball's edge, to its right.
+    const toBall = sphere.center.clone().sub(eye), edge = Math.asin(sphere.radius / toBall.length());
+    const dir = toBall.clone().normalize().applyAxisAngle(new Vector3(0, 1, 0), -(edge + 2 * Math.PI / 180));
+    app.aim(eye.clone().add(dir)); app.step();
+    assert.equal(app.input.pointingKeys[0], "object:ball");
+    // Far outside the assist cone it is not.
+    app.aim(eye.clone().add(toBall.clone().normalize().applyAxisAngle(new Vector3(0, 1, 0), -(edge + 8 * Math.PI / 180)))); app.step();
+    assert.equal(app.input.pointingKeys[0], "");
+  } finally { app.dispose(); }
+});
+
+test("grabbing while the memory plays freezes time first", async () => {
+  const app = setup();
+  try {
+    app.click(region("hide")); app.step();
+    app.viewer.togglePlay(); assert.equal(app.viewer.timeline.playing, true);
+    app.aim(app.ball); app.step();
+    assert.equal(app.input.pointingKeys[0], "object:ball", "offered while playing");
+    app.press("squeezestart"); await flush();
+    assert.equal(app.viewer.timeline.playing, false);
+    assert.equal(app.viewer.held?.definition.id, "ball");
+    assert.equal(app.viewer.timeline.branches.length, 2);
+  } finally { app.dispose(); }
+});
