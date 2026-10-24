@@ -48,4 +48,6 @@ STDB_DATABASE=jerry-memory-replay-phone-20261024 \
 STDB_WS_URL=wss://maincloud.spacetimedb.com npm run test:party
 ```
 
-This checks presence, shared time/speed, late joins, rejection of guest playback changes, leader transfer, disconnect election, and synthetic worker-status handoff. It does not verify real glasses recording, Google consent, GPU reconstruction, or physical iPhone behavior.
+This checks presence, shared time/speed, late joins, rejection of guest playback changes, leader transfer, disconnect election, and synthetic worker-status handoff. Two browser clients also showed the same paused time of 2.4 seconds at 0.5×, with guest playback controls disabled.
+
+On 24 October 2026, the user confirmed that physical iPhone Safari loaded the hosted scene and displayed **Connected** on the original network. Its `Guest (phone)` participant appeared in the party after the old Mac-hosted tunnel services were stopped. Real glasses recording, Google consent, GPU reconstruction, and physical phone interaction beyond loading/joining remain unverified.
