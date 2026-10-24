@@ -37,4 +37,4 @@ docs/                plan, integration guide, per-area guides
 - **Working, checked in a desktop browser and by tests:** viewer engine with physics and replay; multiplayer server and client; network adapter and room panel; upload service and capture page. Run `npm test`, `npm run typecheck`, `npm run build`, and `npm run test:integration` against a local SpacetimeDB.
 - **Never run on real hardware:** Quest 3S, a phone over the tunnel, real glasses footage.
 - **Not built:** the vision pipeline steps and the pipeline worker (upload → pipeline → `ready`). Uploaded clips stay `uploaded`; add a `memory.json` URL to the library by hand to use a memory in a room.
-- **Known issues** with owners: [docs/INTEGRATION.md](docs/INTEGRATION.md) §4.
+- **What's fixed and what's still open:** [docs/INTEGRATION.md](docs/INTEGRATION.md) §4.

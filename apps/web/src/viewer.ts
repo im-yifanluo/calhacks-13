@@ -1,9 +1,9 @@
 import * as THREE from "three";
-import type { Keyframe } from "@memreplay/shared";
+import type { DynamicObject, Keyframe } from "@memreplay/shared";
 import { type LoadedMemory, type LoadedObject, proxyGeometry } from "./loader.js";
-import { Physics, STEP } from "./physics.js";
-import { Timeline, type Branch } from "./timeline.js";
-import { keyframe, sampleTrack, trackVelocity, validateTrack } from "./tracks.js";
+import { colliderDepth, Physics, STEP } from "./physics.js";
+import { SAME_TIME, Timeline, type Branch } from "./timeline.js";
+import { keyframe, keyframeVelocity, sampleTrack, trackVelocity, validateTrack } from "./tracks.js";
 
 export interface GrabRequest { objectId: string; branchId: string; time: number; pose: Keyframe }
 /** P4 installs this gate before enabling shared-room interaction. Never grant optimistically. */
@@ -18,8 +18,13 @@ export type ViewerEvent =
   | { type: "pose"; objectId: string; branchId: string; pose: Keyframe; velocity: [number, number, number] }
   | { type: "recording"; objectId: string; branchId: string; frames: Keyframe[] };
 
-/** Two clock times closer than this (seconds) are the same instant. */
-const SAME_TIME = 0.001;
+/**
+ * People "ghosts" (and anything else that is neither grabbable nor massive) only replay. They get no pick proxy and no
+ * physics body: a ghost's collider would sit at its identity track's origin, an invisible obstacle in the room.
+ */
+export function isGhost(definition: DynamicObject): boolean {
+  return definition.visual.kind === "points-sequence" || (!definition.grabbable && definition.mass === 0);
+}
 
 export class Viewer {
   readonly timeline: Timeline;
@@ -29,6 +34,16 @@ export class Viewer {
   held: LoadedObject | null = null;
   private authority?: InteractionAuthority;
   private activeSimulation: { object: LoadedObject; time: number; startTime: number; frames: Keyframe[]; branchId: string; steps: number } | null = null;
+  /**
+   * A throw preview that came to rest keeps showing its final pose, instead of snapping back to the release pose,
+   * while the clock stays where it was paused (time and take). Play, seek, a take change or an applied clock end it.
+   * A grab meanwhile catches the preview at its rest time, as grabbing a running preview does, so nothing jumps.
+   */
+  private restHold: { object: LoadedObject; frame: Keyframe; time: number; branchId: string } | null = null;
+  /** Other players' throws that came to rest while we watched, held at their landing pose like our own restHold. */
+  private remoteHolds = new Map<string, { frame: Keyframe; time: number; branchId: string }>();
+  /** The status line still shows "Throw recorded…" from our last throw. */
+  private throwNoted = false;
   private accumulator = 0;
   private motion = new THREE.Vector3();
   private angularMotion = new THREE.Vector3();
@@ -40,11 +55,13 @@ export class Viewer {
   private lastPublish = 0;
   private disposed = false;
   private remotePoses = new Map<string, { from: Keyframe; to: Keyframe; receivedAt: number }>();
+  private floorTarget = new THREE.Vector3();
 
   constructor(readonly memory: LoadedMemory, readonly report: (message: string) => void) {
     this.timeline = new Timeline(memory.manifest.timeline.durationSec);
     this.physics = new Physics(memory.manifest.world.floorY, memory.roomGeometry);
     for (const object of memory.objects) {
+      if (isGhost(object.definition)) continue;
       const geometry = proxyGeometry(object.definition.collider);
       if (object.hull) {
         geometry.dispose();
@@ -75,33 +92,60 @@ export class Viewer {
   }
 
   private sample(): void {
+    const timeline = this.timeline, time = timeline.time, hold = this.restHold;
+    // Anything that moved the clock ends the hold, including paths that bypass finishSimulation.
+    if (hold && (timeline.playing || timeline.activeId !== hold.branchId || Math.abs(time - hold.time) >= SAME_TIME)) this.restHold = null;
+    for (const [id, remoteHold] of this.remoteHolds)
+      if (timeline.playing || timeline.activeId !== remoteHold.branchId || Math.abs(time - remoteHold.time) >= SAME_TIME) this.remoteHolds.delete(id);
     for (const object of this.memory.objects) {
       const { definition, root } = object;
       const simulated = this.held === object || this.activeSimulation?.object === object;
-      root.visible = this.timeline.time >= definition.visibleFrom && this.timeline.time <= definition.visibleTo;
+      const track = timeline.track(definition.id, object.track);
+      // An edited object stays in its take past the original visibleTo while a take's recording drives it
+      // (timeline.track returns a recording only once t has reached its first frame).
+      root.visible = track !== object.track || (time >= definition.visibleFrom && time <= definition.visibleTo);
       const remote = this.remotePoses.get(definition.id);
-      if (!simulated && remote) sampleTrack([remote.from, remote.to], (performance.now() - remote.receivedAt) / 1000, root);
-      else if (!simulated) sampleTrack(this.timeline.track(definition.id, object.track), this.timeline.time, root);
-      if (root.visible) object.updateVisual?.(this.timeline.time);
+      if (simulated) { /* physics drives it */ }
+      else if (remote) sampleTrack([remote.from, remote.to], (performance.now() - remote.receivedAt) / 1000, root);
+      else if (this.restHold?.object === object) sampleTrack([this.restHold.frame], 0, root);
+      else if (this.remoteHolds.has(definition.id)) sampleTrack([this.remoteHolds.get(definition.id)!.frame], 0, root);
+      else sampleTrack(track, time, root);
+      if (root.visible) object.updateVisual?.(time);
     }
+  }
+
+  /** The velocity physics starts an object with at the paused time: its active keyframe's v, else the track's finite difference. */
+  private velocityAt(object: LoadedObject, out = new THREE.Vector3()): THREE.Vector3 {
+    return keyframeVelocity(this.timeline.track(object.definition.id, object.track), this.timeline.time, out);
   }
 
   private seedColliders(): void {
     this.physics.clear();
-    for (const object of this.memory.objects) if (object.root.visible) {
-      this.physics.add(object, trackVelocity(this.timeline.track(object.definition.id, object.track), this.timeline.time));
+    for (const object of this.memory.objects) if (object.root.visible && !isGhost(object.definition)) {
+      this.physics.add(object, this.velocityAt(object));
     }
+  }
+
+  /** The lowest the object's origin may be, so its collider stays on or above the floor in this rotation. */
+  private floorLimit(object: LoadedObject, rotation: THREE.Quaternion): number {
+    return this.memory.manifest.world.floorY + colliderDepth(object.definition.collider, rotation, object.root.scale.x, object.hull);
   }
 
   async grab(objectId: string): Promise<boolean> {
     if (this.disposed || this.held || this.pendingGrab || this.timeline.playing || this.timeline.time >= this.timeline.duration) return false;
     const object = this.memory.objects.find(o => o.definition.id === objectId);
     if (!object?.definition.grabbable || !object.root.visible) return false;
-    const catchTime = this.activeSimulation?.time;
+    this.throwNoted = false;
+    // Grabbing while a throw preview runs, or while its final pose is held, catches it: the edit happens at the
+    // preview's time, so what is on screen and the take agree. A preview that ran to the clip end cannot be caught
+    // (nothing can be edited at the end), so the edit then happens at the paused time.
+    let catchTime = this.activeSimulation?.time ?? this.restHold?.frame.t ?? this.remoteHoldTime(objectId);
+    if (catchTime !== undefined && catchTime >= this.timeline.duration) catchTime = undefined;
     this.finishSimulation();
     if (catchTime !== undefined) this.timeline.seek(catchTime);
     if (this.timeline.time >= this.timeline.duration) return false;
     this.sample();
+    if (!object.root.visible) return false;
     const op = ++this.operation;
     const authority = this.authority;
     const request: GrabRequest = { objectId, branchId: this.timeline.activeId, time: this.timeline.time, pose: keyframe(this.timeline.time, object.root) };
@@ -111,8 +155,8 @@ export class Viewer {
       if (!grant) { this.report("Another player owns that object."); return false; }
       if (op !== this.operation || this.disposed) { authority?.release(objectId); return false; }
       const remote = this.remotePoses.get(objectId);
-      this.initialVelocity.copy(remote ? trackVelocity([remote.from, remote.to], 0) :
-        trackVelocity(this.timeline.track(objectId, object.track), this.timeline.time));
+      if (remote) trackVelocity([remote.from, remote.to], 0, this.initialVelocity);
+      else this.velocityAt(object, this.initialVelocity);
       this.remotePoses.delete(objectId);
       try { this.seedColliders(); } catch (error) { authority?.release(objectId); throw error; }
       let branch: Branch;
@@ -134,8 +178,11 @@ export class Viewer {
     finally { this.pendingGrab = false; this.pendingRequest = null; }
   }
 
-  moveHeld(position: THREE.Vector3, rotation: THREE.Quaternion, dt: number): void {
+  /** Move the held object. It is kept above the floor by its collider's depth (rotation included), whatever the input. */
+  moveHeld(target: THREE.Vector3, rotation: THREE.Quaternion, dt: number): void {
     if (!this.held) return;
+    const position = this.floorTarget.copy(target);
+    position.y = Math.max(position.y, this.floorLimit(this.held, rotation));
     const elapsed = Math.max(1 / 240, Math.min(dt, 0.1));
     const instantaneous = position.clone().sub(this.held.root.position).divideScalar(elapsed).clampLength(0, 12);
     this.motion.lerp(instantaneous, 0.45);
@@ -163,6 +210,9 @@ export class Viewer {
     // A stationary hand retains the recorded momentum. A stale pointer sample is not a throw.
     if (performance.now() - this.lastMove > 100) { this.motion.set(0, 0, 0); this.angularMotion.set(0, 0, 0); }
     const velocity = this.motion.clone().add(this.initialVelocity).clampLength(0, 12);
+    // Never release inside or under the floor (an object can rest there in its track, or be released unmoved).
+    const floor = this.floorLimit(object, object.root.quaternion);
+    if (object.root.position.y < floor) this.physics.hold(object.definition.id, this.floorTarget.copy(object.root.position).setY(floor), object.root.quaternion);
     this.physics.release(object.definition.id, velocity, this.angularMotion);
     const frame = this.physics.frame(object.definition.id, this.timeline.time);
     const frames = [...(this.timeline.active.tracks.get(object.definition.id) ?? []).filter(f => f.t < this.timeline.time), frame];
@@ -185,18 +235,25 @@ export class Viewer {
     if (publish && simulation.steps % 4 === 0) this.emit({ type: "pose", objectId: id, branchId: simulation.branchId, pose: frame,
       velocity: [body.linvel().x, body.linvel().y, body.linvel().z] });
     if (body.isSleeping() || simulation.time >= this.timeline.duration || simulation.steps >= 6000) {
-      if (simulation.steps >= 6000) this.report("Recording capped at 100 seconds; the final pose is held afterward.");
+      const capped = simulation.steps >= 6000;
       this.emit({ type: "recording", objectId: id, branchId: simulation.branchId, frames: simulation.frames.map(f => ({ ...f, p: [...f.p], q: [...f.q] })) });
       this.emit({ type: "rest", objectId: id, branchId: simulation.branchId, pose: frame, velocity: [0, 0, 0] });
       this.authority?.release(id);
       this.activeSimulation = null;
       this.physics.clear();
+      this.restHold = { object: simulation.object, frame: simulation.frames.at(-1)!, time: this.timeline.time, branchId: simulation.branchId };
+      // A preview finished early by play, seek or a take change gets a short message; the caller may say more.
+      this.report(capped ? "Throw recorded, capped at 100 seconds; the final pose is held afterward. Press Play to replay this take."
+        : publish ? "Throw recorded. Press Play to replay this take." : "Throw recorded.");
+      this.throwNoted = true;
     }
   }
 
+  /** Ends a hold, completes a running preview at once and drops a held object. User actions and applied clocks start here. */
   private finishSimulation(): void {
     this.release();
     while (this.activeSimulation) this.simulationStep(false);
+    this.restHold = null; this.remoteHolds.clear();
   }
 
   togglePlay(): void {
@@ -231,7 +288,14 @@ export class Viewer {
     if (this.pendingRequest && !playing && Math.abs(target - this.pendingRequest.time) < SAME_TIME) return;
     if (!timeline.branches.some(b => b.id === branchId)) { this.report(`Ignored a clock update for an unknown take (${branchId}).`); return; }
     this.finishSimulation(); this.remotePoses.clear();
-    if (branchId !== this.timeline.activeId) this.timeline.select(branchId);
+    if (branchId !== this.timeline.activeId) {
+      this.timeline.select(branchId);
+      // Someone else moved the room to another take: replace our stale "Throw recorded. Press Play…".
+      if (this.throwNoted) {
+        this.throwNoted = false;
+        this.report(branchId === "original" ? "The room is on the original recording." : `The room switched to ${this.timeline.active.name}.`);
+      }
+    }
     this.timeline.seek(time); this.timeline.playing = playing; this.timeline.speed = speed; this.sample();
   }
 
@@ -240,14 +304,45 @@ export class Viewer {
     validateTrack([pose], objectId);
     const object = this.memory.objects.find(o => o.definition.id === objectId);
     if (!object || this.held === object || this.activeSimulation?.object === object) return;
+    if (this.restHold?.object === object) this.restHold = null; // someone else moves it now
+    this.remoteHolds.delete(objectId);
     this.remotePoses.set(objectId, { from: keyframe(0, object.root), to: { ...pose, t: 1 / 15 }, receivedAt: performance.now() });
   }
   clearRemotePose(objectId: string): void { this.remotePoses.delete(objectId); }
 
-  /** P4 calls this when a thrown object is caught by another player. Stop writing immediately. */
+  /**
+   * Another player's throw of objectId came to rest while we watched it live: show it at its landing pose (the last
+   * frame of its recording) while the clock stays where it is, as the thrower's own viewer does. The hold ends on
+   * play, seek, a take change, an applied clock or a new remote move. Grabbing during the hold catches at the landing
+   * time, as for our own throws.
+   */
+  holdPose(objectId: string, frame: Keyframe): void {
+    validateTrack([frame], objectId);
+    const object = this.memory.objects.find(o => o.definition.id === objectId);
+    if (!object || this.held === object || this.activeSimulation?.object === object || this.timeline.playing) return;
+    this.remotePoses.delete(objectId);
+    this.remoteHolds.set(objectId, { frame: { ...frame, p: [...frame.p], q: [...frame.q] }, time: this.timeline.time, branchId: this.timeline.activeId });
+    this.sample();
+  }
+
+  /** The landing time a grab catches at while other players' throws are held: that object's, else the latest. */
+  private remoteHoldTime(objectId: string): number | undefined {
+    const own = this.remoteHolds.get(objectId);
+    if (own) return own.frame.t;
+    let latest: number | undefined;
+    for (const hold of this.remoteHolds.values()) latest = Math.max(latest ?? -Infinity, hold.frame.t);
+    return latest;
+  }
+
+  /**
+   * The server cleared our hold or simulation of objectId (we left the room, or the connection dropped). Stop writing
+   * it at once; the recorded prefix is emitted. Only a pending grab of that same object is cancelled; a pending grab of
+   * another object carries on.
+   */
   revokeOwnership(objectId: string): void {
-    this.cancelPendingGrab();
+    if (this.pendingRequest?.objectId === objectId) this.cancelPendingGrab();
     if (this.held?.definition.id === objectId) this.held = null;
+    if (this.restHold?.object.definition.id === objectId) this.restHold = null;
     if (this.activeSimulation?.object.definition.id === objectId) {
       const simulation = this.activeSimulation;
       this.emit({ type: "recording", objectId, branchId: simulation.branchId,

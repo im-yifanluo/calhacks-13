@@ -154,10 +154,25 @@ try {
   const childBranch = b.conn.db.timeline.roomId.find(r.id)!.branchId;
   assert.notEqual(childBranch, branchId);
   assert.ok(b.conn.db.objectState.key.find(`${childBranch}:ball-1`)?.simOwner);
+  const childFork = b.conn.db.branch.id.find(childBranch)!.forkMediaUs;
+  // Alice must see Bob's hold on his new take first, or the checks below pass on a stale cache.
+  await until(
+    () =>
+      a.conn.db.objectState.key.find(`${childBranch}:ball-1`)?.simOwner &&
+      a.conn.db.timeline.roomId.find(r.id)?.branchId === childBranch,
+  );
   b.conn.disconnect();
   await until(
     () => !a.conn.db.objectState.key.find(`${childBranch}:ball-1`)?.simOwner,
   );
+  // Bob dropped before saving a chunk, so the room leaves the empty take his grab forked.
+  await until(
+    () => a.conn.db.timeline.roomId.find(r.id)?.branchId === branchId,
+  );
+  const back = a.conn.db.timeline.roomId.find(r.id)!;
+  assert.equal(back.paused, true);
+  assert.equal(back.anchorMediaUs, childFork);
+  assert.ok(a.conn.db.branch.id.find(childBranch), "the empty take is kept");
   const resumed = await connect(b.token);
   await until(
     () => a.conn.db.player.identity.find(resumed.conn.identity!)?.online,
@@ -165,6 +180,20 @@ try {
   assert.equal(
     resumed.conn.identity!.toHexString(),
     b.conn.identity!.toHexString(),
+  );
+  // A player who left stays out of the room after reconnecting.
+  await resumed.conn.reducers.leaveRoom({});
+  resumed.conn.disconnect();
+  const again = await connect(b.token);
+  assert.equal(
+    again.conn.identity!.toHexString(),
+    b.conn.identity!.toHexString(),
+  );
+  const gone = again.conn.db.player.identity.find(again.conn.identity!)!;
+  assert.equal(gone.online, false);
+  assert.equal(gone.roomId, 0n);
+  await until(
+    () => !a.conn.db.player.identity.find(again.conn.identity!)?.online,
   );
   // Exercise pipeline HTTP reducer permissions and the array payload consumed by the signing service.
   const http = uri.replace(/^ws/, "http");

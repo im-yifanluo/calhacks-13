@@ -11,13 +11,13 @@ Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves 
 
 | Part | State |
 |---|---|
-| Viewer: splats, physics, VR controls, timeline replay (Nikko) | Merged. Checked in a desktop browser; never run on a Quest. |
+| Viewer: splats, physics, VR controls, timeline replay, people ghosts, audio (Nikko) | Merged. Checked in a desktop browser; never run on a Quest. |
 | Multiplayer: rooms, shared clock, avatars, grabbing, shared takes (Jerry + the new network adapter) | Merged. Checked live with two browser tabs against a local SpacetimeDB. |
 | Upload service and capture test page (Jerry) | Merged. Uploads to local disk or S3/R2 and registers the clip in SpacetimeDB. |
 | Vision pipeline (`pipeline/`) | Being rewritten. Nothing turns a clip into `memory.json` automatically yet, and no worker picks up uploads. |
 | Left out | Andrew's `origin/part1` (pipeline rewrite) and Jerry's iOS app (never compiled). See [docs/INTEGRATION.md](docs/INTEGRATION.md) §1. |
 
-Known issues found during the merge, with owners: [docs/INTEGRATION.md](docs/INTEGRATION.md) §4.
+What's fixed and what's still open: [docs/INTEGRATION.md](docs/INTEGRATION.md) §4.
 
 ---
 
@@ -26,7 +26,7 @@ Known issues found during the merge, with owners: [docs/INTEGRATION.md](docs/INT
 | Person | Owns | Folders |
 |---|---|---|
 | **Vision (one person)** | The whole pipeline: one glasses clip in, `memory.json` out, plus the worker that picks up uploads. Owns the GPU pod. | `pipeline/` |
-| **P3 · XR client** | Quest rendering, grab + physics, timeline in VR. Next: people ghosts (`points-sequence`), keyframe velocity `v`, audio (`source.audioUrl`). | `apps/web/` |
+| **P3 · XR client** | Quest rendering, grab + physics, timeline in VR, people ghosts, audio. Next: test on the Quest (controls, frame rate, load time). | `apps/web/` |
 | **P4 · Multiplayer & phone** | SpacetimeDB module, network adapter, room panel, phone controls, upload, demo | `server/`, `apps/web/src/net/`, `apps/web/src/session.ts` |
 
 ---
@@ -76,7 +76,7 @@ Port 3055 avoids Docker, which often holds 3000/3001. Set `STDB_PORT=<port>` to 
 3. Open that link in a second tab (or **Copy room link**, or type the code and **Join**).
 4. Both tabs see each other's head and share play, pause and seek. Pause, drag the ball and throw it: the other tab sees it fly, and the new take appears for both. Re-grabbing an object makes another take; the original recording never changes.
 
-Without `?room=` the page is a solo session, exactly as before. Joining a room drops takes you made solo; **Leave** returns to solo. A room whose memory differs from the loaded one reloads the page with `?memory=<url>&room=<code>`. In dev builds, `window.__memreplay` exposes the viewer state for debugging.
+Without `?room=` the page is a solo session, exactly as before. If SpacetimeDB restarts, pages reconnect within about 5 s. Joining a room drops takes you made solo; **Leave** returns to solo. A room whose memory differs from the loaded one reloads the page with `?memory=<url>&room=<code>`. In dev builds, `window.__memreplay` exposes the viewer state for debugging.
 
 **Check it works:**
 

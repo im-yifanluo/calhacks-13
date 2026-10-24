@@ -15,7 +15,7 @@ Use this first to test the recording and automatic-upload experience. Keep the l
 5. In **Stored recordings**, the new `[SIMULATION]` row is automatically selected. Press **Play**. You should see the animated scene and its recorded timer. Reload to confirm the row and playback persist; the in-memory PASS badge resets on reload.
 6. Press O/F again for another recording. Each completed recording should get its own database ID. Pressing F while off does nothing; repeated O while recording does not create extra clips.
 
-The scene is simulated, but the browser encodes a real MP4 (or WebM where needed), uploads real bytes, and creates a real database row. This tests the O/F → recording → upload → database → playback path. It does **not** verify Meta pairing, camera permissions, glasses streaming, or 3D reconstruction.
+The scene is simulated, but the browser encodes a real MP4 (or WebM where needed), uploads real bytes, and creates a real database row. This tests the O/F → recording → upload → database → playback path. It does **not** verify Meta pairing, camera permissions, glasses streaming, or 3D reconstruction. The row is a **test upload**: it is assigned to your own identity instead of the pipeline worker, so the worker never processes it (section 4). Stored recordings marks it `test`.
 
 Keep the tab visible. Recording stops after 30 seconds or when the page is hidden. Keyboard shortcuts are ignored while editing text. This simulator needs localhost or trusted HTTPS; plain HTTP to a Mac hostname from an iPhone does not provide the browser security features used for hashing.
 
@@ -103,7 +103,16 @@ npm run test:video -- /absolute/path/to/wayfarer.mp4 15
 APP_ORIGIN=http://YOUR-MAC.local:5173 npm run test:video -- /absolute/path/to/wayfarer.mp4 15
 ```
 
-The command uploads bytes, confirms the row using an independent authenticated database query, downloads the row's source URL and compares size/SHA-256 with the original, then repeats completion and checks that the ID is unchanged. It prints four PASS lines and a playback link. It creates a separate test identity/title. Use the browser to verify visual content/decoding too.
+The command uploads bytes, confirms the row using an independent authenticated database query, downloads the row's source URL and compares size/SHA-256 with the original, then repeats completion and checks that the ID is unchanged. It prints four PASS lines and a playback link. It creates a separate test identity/title, and its row is a test upload that the pipeline worker never takes. Use the browser to verify visual content/decoding too.
+
+## 4. Next: the pipeline worker
+
+No worker exists yet, so every row stays `uploaded`. When it runs, it takes `uploaded` rows assigned to its identity:
+
+- **Which uploads it gets.** Clips from the upload panel (**Upload video**) are queued for it. Test uploads are not: the O/F simulation and `npm run test:video` presign with `"pipeline": false`, which assigns the row to the uploader. Check with `spacetime sql -s http://127.0.0.1:3055 memory-replay 'SELECT id, title, owner, pipeline_identity, status FROM memory'`: a test row has `pipeline_identity` equal to `owner`.
+- **Its identity and token.** With `upload:local`, the worker identity is minted on the service's first start and kept in `data/uploads/.worker-identity.json`; its `token` is the worker's `PIPELINE_TOKEN` for `scripts/pipeline-status.py`. Keep that file: deleting it orphans the rows already assigned to the old identity. With `service.mjs` (S3/R2), mint one with `curl -X POST $STDB_HTTP_URL/v1/identity`, set its `identity` (without `0x`) as `PIPELINE_IDENTITY`, and keep the `token` on the worker only.
+- **What it may download.** Any client can register a memory with any `sourceUrl`. The worker downloads only URLs under `ASSET_BASE_URL` (with `upload:local`: under `PUBLIC_ORIGIN/api/local-media/`) whose key names the row's owner, at most 2 GiB and a few minutes, without following redirects. `scripts/source_check.py` has the check: `allowed_source(url, base, owner)`.
+- **Reaching it from Runpod.** With `upload:local`, `PUBLIC_ORIGIN` must be the public tunnel URL, or the worker can't fetch the clips; `STDB_HTTP_URL` can be the tunnel URL plus `/stdb`. Cloudflare may cap request bodies at 100 MB, so try an upload over 100 MB through the tunnel before the demo (unverified), or use R2.
 
 ## Evidence and troubleshooting
 
@@ -117,6 +126,6 @@ Verified on Jerry's branch: 16 automated tests, TypeScript checks, production we
 | iPhone cannot reach Mac       | Same Wi-Fi, correct `.local` hostname, Vite `--host 0.0.0.0`, local-network permission and firewall.                                     |
 | Origin not allowed            | Use the exact `PUBLIC_ORIGIN` in both commands and the phone URL.                                                                        |
 | Row exists but playback fails | Check its source URL hostname, upload service and stored file; export H.264 MP4 if the browser cannot decode the original codec.         |
-| Status stays `uploaded`       | Expected: no pipeline worker exists yet to move it to `processing`/`ready`.                                                              |
+| Status stays `uploaded`       | Expected: no pipeline worker exists yet to move it to `processing`/`ready`. Test uploads stay `uploaded` even with a worker (section 4). |
 
 These local test videos and database rows are readable by clients of this demo server. The capture test needs no GPU or cloud account. It does not verify S3/R2 deployment, 3D reconstruction, or Quest rendering.

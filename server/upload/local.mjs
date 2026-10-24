@@ -24,14 +24,22 @@ export async function localStorage({ directory, secret, publicOrigin }) {
   };
   const head = async (key) => {
     const file = pathFor(key);
-    const data = JSON.parse(await readFile(file + ".json", "utf8"));
-    const info = await stat(file);
+    let data, info;
+    try {
+      data = JSON.parse(await readFile(file + ".json", "utf8"));
+      info = await stat(file);
+    } catch {
+      // Not the fs message: it names absolute paths on this machine.
+      throw new Error("Upload not found; PUT the video first");
+    }
     if (info.size !== data.size) throw new Error("Stored size mismatch");
     return data;
   };
   return {
+    // kind:"put" tells this 15-minute PUT ticket apart from the 1-hour completion receipt,
+    // which is signed with the same secret: neither one works in place of the other.
     sign: async (data) =>
-      `${publicOrigin}/api/local-upload?receipt=${encodeURIComponent(ticket({ ...data, expires: Date.now() + 900_000 }, secret))}`,
+      `${publicOrigin}/api/local-upload?receipt=${encodeURIComponent(ticket({ ...data, kind: "put", expires: Date.now() + 900_000 }, secret))}`,
     head,
     async handle(req, res) {
       const url = new URL(req.url, "http://localhost");
@@ -44,6 +52,8 @@ export async function localStorage({ directory, secret, publicOrigin }) {
         let temporary, handle;
         try {
           const data = readTicket(url.searchParams.get("receipt"), secret);
+          if (data.kind !== "put")
+            throw new Error("Invalid upload ticket; request a new upload");
           const file = pathFor(data.key);
           if (
             req.headers["content-type"] !== data.type ||
@@ -73,11 +83,15 @@ export async function localStorage({ directory, secret, publicOrigin }) {
           try {
             await link(temporary, file);
           } catch (error) {
-            if (
-              error.code !== "EEXIST" ||
-              (await head(data.key)).sha256 !== metadata.sha256
-            )
-              throw error;
+            if (error.code !== "EEXIST") throw error;
+            // Another PUT already stored this key: accept identical bytes only.
+            const existing = await head(data.key).catch(() => {
+              throw new Error("Upload could not be stored; retry");
+            });
+            if (existing.sha256 !== metadata.sha256)
+              throw new Error(
+                "This upload is already stored with different bytes; request a new upload",
+              );
           }
           await writeFile(file + ".json", JSON.stringify(metadata), {
             mode: 0o600,
@@ -85,7 +99,12 @@ export async function localStorage({ directory, secret, publicOrigin }) {
           res.writeHead(200);
           res.end();
         } catch (error) {
-          if (!res.headersSent) send(400, error.message);
+          // Our own checks explain themselves; fs errors (with a code) name server paths.
+          const message =
+            typeof error?.code === "string"
+              ? "Upload could not be stored; retry"
+              : error.message;
+          if (!res.headersSent) send(400, message);
           else res.destroy();
         } finally {
           await handle?.close();
@@ -158,6 +177,8 @@ export async function createLocalHandler(env = process.env) {
     STDB_HTTP_URL: env.STDB_HTTP_URL || `http://127.0.0.1:${env.STDB_PORT || 3055}`,
     STDB_DATABASE: env.STDB_DATABASE || "memory-replay",
   });
+  // The pipeline worker's identity, minted on first start. Its "token" is the worker's
+  // PIPELINE_TOKEN; deleting this file orphans rows already assigned to the old identity.
   const workerPath = join(directory, ".worker-identity.json");
   let worker;
   try {
@@ -198,6 +219,19 @@ export async function createLocalHandler(env = process.env) {
       res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
       res.setHeader("Vary", "Origin");
     }
+    // Preflight for a PUT from a page on another origin than PUBLIC_ORIGIN (the PUT URL's
+    // origin), e.g. PUBLIC_ORIGIN set to this service. Through the Vite proxy it needs none.
+    if (
+      req.method === "OPTIONS" &&
+      new URL(req.url, "http://localhost").pathname === "/api/local-upload"
+    ) {
+      res.writeHead(204, {
+        "Access-Control-Allow-Methods": "PUT,OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Max-Age": "600",
+      });
+      return res.end();
+    }
     res.setHeader(
       "Access-Control-Expose-Headers",
       "X-Content-SHA256,Content-Length",
@@ -210,13 +244,14 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   const server = createServer(await createLocalHandler());
+  const directory = resolve(process.env.LOCAL_UPLOAD_DIR || "data/uploads");
   server.requestTimeout = 15 * 60 * 1000;
   server.listen(
     Number(process.env.UPLOAD_PORT || 8788),
     process.env.UPLOAD_HOST || "127.0.0.1",
     () =>
       console.log(
-        "Local capture storage ready. Video files: data/uploads; metadata: SpacetimeDB. No GPU reconstruction is simulated.",
+        `Local capture storage ready. Video files and the worker identity (.worker-identity.json): ${directory}; metadata: SpacetimeDB. No GPU reconstruction is simulated.`,
       ),
   );
 }

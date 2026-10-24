@@ -40,7 +40,14 @@ const prepared = await api("/api/uploads/presign", {
   size: bytes.length,
   title: `Video verification ${new Date().toISOString()}`,
   durationSec,
+  // A verification run, not a memory: keep its row off the GPU worker's queue.
+  pipeline: false,
 });
+assert.equal(
+  prepared.pipeline,
+  false,
+  "The upload service ignored pipeline:false; restart it from this build",
+);
 assert.ok(
   (
     await fetch(prepared.putUrl, {
@@ -64,8 +71,13 @@ const rows = (await list.json()).memories;
 const row = rows.find((m: any) => m.requestId === prepared.requestId);
 assert.equal(row?.id, completed.memory.id);
 assert.equal(row?.status, "uploaded");
+assert.equal(
+  row?.pipelineIdentity,
+  identity,
+  "The test row is assigned to the pipeline worker",
+);
 console.log(
-  `PASS 2/4: independent database query found memory #${row.id}, status=${row.status}`,
+  `PASS 2/4: independent database query found memory #${row.id}, status=${row.status}, assigned to this test identity (not queued for the pipeline)`,
 );
 const response = await fetch(row.sourceUrl);
 assert.ok(response.ok, "Stored video could not be retrieved");

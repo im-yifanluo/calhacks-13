@@ -14,7 +14,7 @@ npm run build
 Open `http://127.0.0.1:5173`. The default demo creates a small Spark splat floor and primitive objects in code. It makes no remote asset requests and does not claim to be reconstructed footage. `?memory=/mock/memory.json` loads a demo manifest with primitive objects (a ball and a can) over Spark's public butterfly splat, which needs internet.
 
 1. Pause near the ball's high point around 2 seconds, or use the scrubber.
-2. Drag the ball and release. This forks a take and previews/records its physics trajectory.
+2. Drag the ball and release. This forks a take and previews/records its physics trajectory. A grab starts after 6 px of movement or 150 ms held, so a quick tap does nothing. A held object can't go below the floor. When the preview comes to rest, the object holds its landing pose and the status says "Throw recorded. Press Play to replay this take."
 3. Press **Play take** to replay the recorded trajectory from the paused time. If the preview is still simulating, it is finished before replay begins.
 4. Scrub or select **Original**. The original motion is unchanged. A second edit creates a child take that inherits earlier edits.
 5. Use **Export takes** to download the local branch records as JSON. Local takes live in memory and are lost on reload unless exported or persisted by P4. Export is data for inspection/integration; the UI does not yet import files.
@@ -28,7 +28,7 @@ Use the README's USB/adb setup (`LOCAL_HTTP=1 npm run dev`, `adb reverse tcp:517
 - The rig starts at the first camera keyframe's x/z position, at `world.floorY`, with that keyframe's yaw. Headset height is supplied by `local-floor` tracking.
 - Squeeze a controller or pinch a hand ray over a paused grabbable object. Release to throw. The object preserves its offset relative to the controller, including rotation.
 - The floating panel works without the DOM HUD: trigger/pinch selects Play, −1 second, +1 second, Takes, or Original. A/X toggles play, B/Y cycles takes.
-- Left stick moves; right stick turns in 30° steps. Hand-only users can move physically and use the panel; joystick locomotion requires controllers.
+- Left stick moves; right stick turns in 30° steps. Both use the user camera under the rig, so the stick follows where you look after spawn and after snap turns, and a snap turn pivots around your head. Hand-only users can move physically and use the panel; joystick locomotion requires controllers.
 - One local grab/simulation is active at a time. Hand disconnect, cancelled pointers, lost focus, and XR exit release local input. Network ownership loss can explicitly stop simulation via the API below.
 
 The renderer uses antialiasing off, pixel ratio 1, fixed foveation 1, a shared Three.js instance, Spark `preUpdate:false`, and `maxStdDev: Math.sqrt(5)`. Declared/loaded static scenes above one million splats fail visibly; above 500,000 emit a warning. Sequence frames have a three-frame cache with one request in flight. Sequence frames must also be budgeted by the pipeline; the viewer's initial total-count check cannot account for all future sequence assets.
@@ -39,7 +39,7 @@ The renderer uses antialiasing off, pixel ratio 1, fixed foveation 1, a shared T
 
 Pass `?memory=` with a URL-encoded manifest URL. All asset/track URLs resolve relative to that manifest, including external camera/object JSON tracks, background SPZ/other Spark formats, GLB visuals, optional GLB room collision mesh, and GLB convex hulls. CORS must permit the viewer origin. A failed required asset shows a load error; a missing sequence frame shows a warning and can be retried by reloading.
 
-- World frame remains +Y up and meters; floor height comes from the manifest. No shared TypeScript/Python contract changes were made.
+- World frame remains +Y up and meters; floor height comes from the manifest. The scene format is main's `packages/shared/src/manifest.ts`: keyframe velocity `v` (used on pause), `source.audioUrl` (played in sync, with a Sound toggle), `primitive` visuals, `points-sequence` people ghosts (drawn as points, no physics) and `cylinder` colliders.
 - Track JSON is a nonempty array of `{t,p,q,s?}`. `t` is seconds, strictly increasing. Positions and scale interpolate linearly; normalized rotations use quaternion slerp. Outside a track's endpoints the endpoint pose is held. Invalid times, nonfinite components, zero quaternions, and nonpositive scales are rejected.
 - Sequence convention: `urlPattern` contains literal **`{frame}`**, replaced by a zero-based, unpadded integer. Frame index is `floor((time - visibleFrom) * timeline.sampleHz)`, clamped to `frameCount - 1`. P2 must follow this convention or coordinate a change.
 - A static background is required for real memories. A sequence is a timed visual attached to the object's pose; nonrigid people should be `grabbable:false`.

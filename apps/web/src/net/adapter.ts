@@ -30,6 +30,13 @@ const TICK_MS = 1000;
 
 type Reducers = DbConnection["reducers"];
 type BranchInfo = Omit<ViewerBranch, "tracks">;
+/**
+ * What a status message is about: changing the shared clock, a grab, a throw (its release, saves and final release),
+ * giving an object back, losing a hold, a take kept on this device, unreadable room data, or the adapter itself.
+ */
+export type ReportKind = "clock" | "grab" | "throw" | "release" | "hold" | "take" | "data" | "internal";
+/** An error stays until a later action of its kind succeeds (the adapter's `resolved` callback) or a newer message. */
+export interface ReportOptions { kind: ReportKind; error: boolean }
 type Grant = { branch: BranchInfo };
 type ClockEvent = Extract<ViewerEvent, { type: "clock" }>;
 type ObjectEvent = { objectId: string; branchId: string; pose: Keyframe; velocity: [number, number, number] };
@@ -43,8 +50,8 @@ interface Owned {
   thrown: boolean;
   /** The viewer is done with it; release(rest: true) is queued. */
   releasing: boolean;
-  /** release(rest: true) has been sent. */
-  sent: boolean;
+  /** A call for this hold failed, so finishing it does not clear earlier errors. */
+  failed?: boolean;
   finalPose?: Pose;
 }
 interface Track { key: string; branchId: bigint; objectId: string; chunks: Map<string, { startUs: bigint; frames: Keyframe[] }> }
@@ -139,18 +146,26 @@ export class NetAdapter implements InteractionAuthority {
   private readonly warned = new Set<string>();
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly cancelers = new Set<() => void>();
+  /** Other players' objects we are showing live (row keys), so a rest we watched holds its landing pose. */
+  private readonly live = new Set<string>();
   /** Grants handed to the viewer that it has not yet taken ("grab" event) or given back (release). */
   private readonly decisions = new Map<string, () => void>();
   private readonly unhooks: Array<() => void> = [];
   private interval?: ReturnType<typeof setInterval>;
 
-  constructor(private readonly net: Multiplayer, private readonly viewer: Viewer, private readonly report: (message: string) => void) {}
+  /**
+   * `report` shows a message to the player; `resolved` says an action of that kind just succeeded, so an error of the
+   * same kind still on screen is stale. Every message replaces the previous one.
+   */
+  constructor(private readonly net: Multiplayer, private readonly viewer: Viewer,
+    private readonly report: (message: string, options?: ReportOptions) => void,
+    private readonly resolved: (kind: ReportKind) => void = () => {}) {}
 
   /** Call once, after the player is in a room and net.ready: syncs from the client cache, then follows rows and viewer events. */
   start(): void {
     if (this.started || this.disposed) return;
     const conn = this.net.connection, room = this.net.room;
-    if (!conn || !room || !this.net.ready || !this.net.identity) { this.say("Multiplayer is not ready yet: join a room first."); return; }
+    if (!conn || !room || !this.net.ready || !this.net.identity) { this.say("Multiplayer is not ready yet: join a room first.", "internal"); return; }
     this.started = true; this.roomId = room.id;
     this.syncBranches();
     for (const chunk of conn.db.branchKeyframes.iter()) this.onChunk(chunk, false);
@@ -162,7 +177,7 @@ export class NetAdapter implements InteractionAuthority {
     const db = conn.db;
     // Row callbacks run inside the SDK's message handling, so they must never throw.
     const safe = <A extends unknown[]>(handle: (...args: A) => void) => (...args: A) => {
-      try { if (!this.disposed) handle(...args); } catch (error) { console.error("NetAdapter", error); this.say(`Multiplayer error: ${message(error)}`); }
+      try { if (!this.disposed) handle(...args); } catch (error) { console.error("NetAdapter", error); this.say(`Multiplayer error: ${message(error)}`, "internal"); }
     };
     const timeline = safe((_ctx: unknown, row: TimelineRow) => this.onTimeline(row));
     const timelineUpdate = safe((_ctx: unknown, _old: TimelineRow, row: TimelineRow) => this.onTimeline(row));
@@ -189,7 +204,12 @@ export class NetAdapter implements InteractionAuthority {
     this.interval = setInterval(safe(this.tick), TICK_MS);
   }
 
-  /** Removes every hook, listener and timer. Queued calls are dropped; anything still held is released, best effort. */
+  /**
+   * Removes every hook, listener and timer. Queued calls are dropped, and nothing more is sent: anything still held
+   * stays held until the connection closes. session.ts disposes the adapter on pagehide and disconnects right after;
+   * the server then clears the hold and, when the grab's take has nothing recorded yet, puts the room back on the
+   * parent take. Releasing here would look like an ordinary give-back and leave everyone on an empty take.
+   */
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -199,11 +219,6 @@ export class NetAdapter implements InteractionAuthority {
     this.timers.clear();
     for (const cancel of [...this.cancelers]) cancel();
     for (const entry of this.queue.splice(0)) void entry(); // resolves its caller without calling the server
-    // A forgotten hold would block seek, fork and take changes for the whole room until we disconnect.
-    for (const owned of this.owned.values()) {
-      const row = this.ownRow(owned);
-      if (!owned.sent && row && this.net.ready) void this.net.release(owned.objectId, true, owned.finalPose ?? rowPose(row));
-    }
     this.owned.clear(); this.moves.clear();
   }
 
@@ -234,7 +249,8 @@ export class NetAdapter implements InteractionAuthority {
     // viewer's own message only guesses "Another player owns that object").
     this.later(() => {
       this.clockHold--; this.reconcile();
-      if (attempt.reason) this.say(`Could not grab the ${this.label(request.objectId)}: ${attempt.reason}`);
+      if (attempt.reason) this.say(`Could not grab the ${this.label(request.objectId)}: ${attempt.reason}`, "grab");
+      else if (result) this.succeeded("grab");
     }, 0);
     return result || false;
   }
@@ -291,7 +307,7 @@ export class NetAdapter implements InteractionAuthority {
     if (!granted) { this.giveBack(objectId); return fail("the server's confirmation did not arrive"); }
     this.syncBranches();
     this.owned.set(objectId, { objectId, branchId: granted.row.branchId, fromMediaUs: granted.row.fromMediaUs,
-      thrown: false, releasing: false, sent: false });
+      thrown: false, releasing: false });
     if (attempt.abandoned) { this.giveBack(objectId); return false; }
     return { branch: granted.branch };
   }
@@ -308,16 +324,13 @@ export class NetAdapter implements InteractionAuthority {
 
   /** Release an object the server granted that the viewer will not use (a late or abandoned grant). */
   private giveBack(objectId: string): void {
-    if (this.disposed) {
-      const row = this.net.connection?.db.objectState.key.find(`${this.net.timeline?.branchId}:${objectId}`);
-      if (row && this.mine(row.simOwner) && this.net.ready) void this.net.release(objectId, true, rowPose(row));
-      return;
-    }
+    if (this.disposed) return; // the connection closes next, which clears the hold (see dispose)
     const owned = this.owned.get(objectId);
     if (owned) { owned.releasing = true; void this.enqueue(() => this.sendRelease(owned), true); this.decided(objectId); return; }
     void this.enqueue(async () => {
       const row = this.net.connection?.db.objectState.key.find(`${this.row?.branchId}:${objectId}`);
-      if (row && this.mine(row.simOwner)) await this.calling(`release the ${this.label(objectId)}`, r => r.release({ objectId, rest: true, ...rowPose(row) }));
+      if (row && this.mine(row.simOwner) &&
+        await this.calling(`release the ${this.label(objectId)}`, "release", r => r.release({ objectId, rest: true, ...rowPose(row) }))) this.succeeded("release");
     }, true);
     this.decided(objectId);
   }
@@ -326,9 +339,10 @@ export class NetAdapter implements InteractionAuthority {
     if (this.owned.get(owned.objectId) !== owned) return; // revoked meanwhile
     const row = this.ownRow(owned);
     if (row) {
-      owned.sent = true;
-      await this.calling(`release the ${this.label(owned.objectId)}`,
-        r => r.release({ objectId: owned.objectId, rest: true, ...(owned.finalPose ?? rowPose(row)) }), owned);
+      // A throw is done once it rests: if none of its calls failed, an older throw error is stale.
+      const kind = owned.thrown ? "throw" : "release";
+      if (await this.calling(`release the ${this.label(owned.objectId)}`, kind,
+        r => r.release({ objectId: owned.objectId, rest: true, ...(owned.finalPose ?? rowPose(row)) }), owned) && !owned.failed) this.succeeded(kind);
     }
     if (this.owned.get(owned.objectId) === owned) this.owned.delete(owned.objectId);
   }
@@ -336,7 +350,7 @@ export class NetAdapter implements InteractionAuthority {
   private onClock(event: ClockEvent): void {
     const branchId = serverBranchId(event.branchId);
     if (branchId === undefined) {
-      this.say("That take exists only on this device. Showing the room's take.");
+      this.say("That take exists only on this device. Showing the room's take.", "take", false);
       this.later(() => this.reconcile(), 0);
       return;
     }
@@ -365,8 +379,9 @@ export class NetAdapter implements InteractionAuthority {
     ];
     for (const step of steps) {
       const error = await step();
-      if (error) { this.say(`Could not change the shared clock: ${error}`); return; }
+      if (error) { this.say(`Could not change the shared clock: ${error}`, "clock"); return; }
     }
+    this.succeeded("clock");
   }
 
   private onPose(event: ObjectEvent): void {
@@ -405,7 +420,7 @@ export class NetAdapter implements InteractionAuthority {
     this.dropMove(event.objectId);
     const pose = serverPose(event.pose, event.velocity);
     void this.enqueue(async () => {
-      if (this.owned.get(owned.objectId) === owned) await this.calling(`throw the ${this.label(owned.objectId)}`, r => r.release({ objectId: owned.objectId, rest: false, ...pose }), owned);
+      if (this.owned.get(owned.objectId) === owned) await this.calling(`throw the ${this.label(owned.objectId)}`, "throw", r => r.release({ objectId: owned.objectId, rest: false, ...pose }), owned);
     });
   }
 
@@ -420,7 +435,7 @@ export class NetAdapter implements InteractionAuthority {
       try {
         for (const [i, chunk] of chunks.entries()) {
           if (this.owned.get(objectId) !== owned) return;
-          await this.calling(`save part ${i + 1} of ${chunks.length} of the throw`, r => r.saveBranchKeyframes({
+          await this.calling(`save part ${i + 1} of ${chunks.length} of the throw`, "throw", r => r.saveBranchKeyframes({
             branchId: owned.branchId, objectId, startMediaUs: microseconds(chunk[0].t), keyframesJson: JSON.stringify(chunk) }), owned);
         }
       } finally { this.saving.delete(track.key); this.markDirty(track.key); }
@@ -509,8 +524,24 @@ export class NetAdapter implements InteractionAuthority {
   /** Another player's held or thrown object follows their pose; once it rests it replays its track again. */
   private showRemote(row: ObjectState): void {
     if (this.mine(row.simOwner)) return;
-    if (!row.simOwner || (row.mode !== "held" && row.mode !== "physics")) { this.viewer.clearRemotePose(row.objectId); return; }
+    if (!row.simOwner || (row.mode !== "held" && row.mode !== "physics")) {
+      this.viewer.clearRemotePose(row.objectId);
+      // A throw we watched just came to rest: hold its landing pose while paused, as the thrower's viewer does, instead
+      // of falling back to the take's pose at the paused time (the release pose). Late joiners see the take as is.
+      if (row.mode === "rest" && this.live.delete(row.key)) this.holdLanding(row);
+      return;
+    }
+    this.live.add(row.key);
     try { this.viewer.applyRemotePose(row.objectId, { t: 0, p: [row.px, row.py, row.pz], q: [row.qx, row.qy, row.qz, row.qw] }); }
+    catch { this.warn(`pose:${row.key}`, `Ignored an invalid pose for the ${this.label(row.objectId)}.`); }
+  }
+
+  private holdLanding(row: ObjectState): void {
+    const timeline = this.viewer.timeline;
+    if (timeline.playing) return;
+    const last = timeline.active.tracks.get(row.objectId)?.at(-1);
+    const frame = last && last.t >= timeline.time ? last : { t: timeline.time, p: [row.px, row.py, row.pz] as [number, number, number], q: [row.qx, row.qy, row.qz, row.qw] as [number, number, number, number] };
+    try { this.viewer.holdPose(row.objectId, frame); }
     catch { this.warn(`pose:${row.key}`, `Ignored an invalid pose for the ${this.label(row.objectId)}.`); }
   }
 
@@ -529,7 +560,7 @@ export class NetAdapter implements InteractionAuthority {
     this.dropMove(owned.objectId);
     this.viewer.revokeOwnership(owned.objectId);
     this.markDirty(this.track(owned.branchId, owned.objectId).key);
-    this.say(`You no longer hold the ${this.label(owned.objectId)}: the room released it.`);
+    this.say(`You no longer hold the ${this.label(owned.objectId)}: the room released it.`, "hold", false);
   }
 
   /** Our own rows left over from an earlier viewer or adapter would lock the room: give them back. */
@@ -539,7 +570,7 @@ export class NetAdapter implements InteractionAuthority {
     for (const row of conn.db.objectState.iter()) {
       if (row.branchId !== tl.branchId || !this.mine(row.simOwner) || this.owned.has(row.objectId)) continue;
       const pose = rowPose(row);
-      void this.enqueue(() => this.calling(`release the ${this.label(row.objectId)}`, r => r.release({ objectId: row.objectId, rest: true, ...pose })));
+      void this.enqueue(() => this.calling(`release the ${this.label(row.objectId)}`, "release", r => r.release({ objectId: row.objectId, rest: true, ...pose })));
     }
   }
 
@@ -610,13 +641,17 @@ export class NetAdapter implements InteractionAuthority {
     return this.viewer.memory.objects.find(o => o.definition.id === objectId)?.definition.label ?? objectId;
   }
 
-  /** A status line for the player, unless the adapter is gone. */
-  private say(text: string): void { if (!this.disposed) this.report(text); }
+  /** A status line for the player, unless the adapter is gone. Errors by default; information expires. */
+  private say(text: string, kind: ReportKind, error = true): void { if (!this.disposed) this.report(text, { kind, error }); }
 
+  /** An action of this kind succeeded, so an error of the same kind still on screen is stale. */
+  private succeeded(kind: ReportKind): void { if (!this.disposed) this.resolved(kind); }
+
+  /** Room data this device cannot show, said once per key. */
   private warn(key: string, text: string): void {
     if (this.warned.has(key)) return;
     this.warned.add(key);
-    this.say(text);
+    this.say(text, "data");
   }
 
   /** Run a task after every task queued before it (or before all of them, with front). Resolves undefined if dropped. */
@@ -624,7 +659,7 @@ export class NetAdapter implements InteractionAuthority {
     return new Promise(resolve => {
       const entry = async () => {
         try { resolve(this.disposed ? undefined : await task()); }
-        catch (error) { this.say(`Multiplayer error: ${message(error)}`); resolve(undefined); }
+        catch (error) { this.say(`Multiplayer error: ${message(error)}`, "internal"); resolve(undefined); }
       };
       if (front) this.queue.unshift(entry); else this.queue.push(entry);
       void this.pump();
@@ -639,28 +674,31 @@ export class NetAdapter implements InteractionAuthority {
   }
 
   /**
-   * One reducer call through Multiplayer.run. Resolves to undefined on success, else to the server's reason. A call
-   * still unanswered after 5 s counts as failed; if it succeeds later after all, onLate runs.
+   * One reducer call through Multiplayer.attempt. Resolves to undefined on success, else to the server's reason. A
+   * call still unanswered after 5 s counts as failed; if it succeeds later after all, onLate runs. The adapter shows
+   * its own errors, so the call leaves net.failure (the room panel's error) alone.
    */
   private async call(action: (reducers: Reducers) => Promise<unknown>, onLate?: () => void): Promise<string | undefined> {
     if (this.disposed) return "the multiplayer adapter stopped";
-    let reason: string | undefined;
-    const done = this.net.run(async () => {
-      try { await action(this.net.connection!.reducers); }
-      catch (error) { reason = message(error); throw error; }
-    });
-    const ok = await this.within(done, CALL_TIMEOUT_MS);
-    if (ok === undefined) {
-      if (onLate) void done.then(late => { if (late) onLate(); });
+    const done = this.net.attempt(() => action(this.net.connection!.reducers), null);
+    const answer = await this.within(done.then(error => ({ error })), CALL_TIMEOUT_MS);
+    if (answer === undefined) {
+      if (onLate) void done.then(late => { if (late === undefined) onLate(); });
       return "the server did not answer in time";
     }
-    return ok ? undefined : reason ?? (this.net.error || "the request failed");
+    return answer.error;
   }
 
-  /** call(), reporting a failure as "Could not <what>: <reason>", unless it was about a hold revoked meanwhile. */
-  private async calling(what: string, action: (reducers: Reducers) => Promise<unknown>, about?: Owned): Promise<void> {
+  /**
+   * call(), reporting a failure as "Could not <what>: <reason>", unless it was about a hold revoked meanwhile.
+   * Resolves to true on success.
+   */
+  private async calling(what: string, kind: ReportKind, action: (reducers: Reducers) => Promise<unknown>, about?: Owned): Promise<boolean> {
     const error = await this.call(action);
-    if (error && (!about || this.owned.get(about.objectId) === about)) this.say(`Could not ${what}: ${error}`);
+    if (!error) return true;
+    if (about) about.failed = true;
+    if (!about || this.owned.get(about.objectId) === about) this.say(`Could not ${what}: ${error}`, kind);
+    return false;
   }
 
   /** The promise's value, or undefined after ms or once the adapter is disposed. */
