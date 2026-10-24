@@ -193,3 +193,25 @@ test("Exit VR on the help page ends the session", () => {
     assert.equal(app.xr.session.ended, true);
   } finally { app.dispose(); }
 });
+
+test("a panel left out of view can be called back with the Bring controls here pill", () => {
+  const app = setup();
+  try {
+    // Drag it far to the left and drop it, then keep looking ahead.
+    const bar = app.panel.localToWorld(new Vector3(0, -PANEL_METERS_HIGH / 2 - 0.004, 0));
+    app.aim(bar); app.press("selectstart");
+    const controller = app.xr.controllers[0], start = controller.quaternion.clone();
+    for (let i = 1; i <= 30; i++) {
+      controller.quaternion.copy(start).premultiply(new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), (80 * Math.PI / 180) * i / 30));
+      app.step(1 / 60);
+    }
+    app.press("selectend");
+    const summon = app.rig.getObjectByName("vr-panel-summon");
+    for (let i = 0; i < 120; i++) app.step(1 / 60);
+    assert.equal(summon.visible, true, "offered after the panel was out of view for a while");
+    app.aim(summon.getWorldPosition(new Vector3())); app.step();
+    app.press("selectstart"); app.press("selectend"); app.step();
+    assert.equal(summon.visible, false);
+    close(app.panel.position.x, 0, 1e-6); close(app.panel.position.z, 2 - FOLLOW.distance, 1e-6);
+  } finally { app.dispose(); }
+});

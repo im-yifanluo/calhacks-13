@@ -82,6 +82,16 @@ function pulse(source: XRInputSource | undefined, [intensity, ms]: readonly [num
   } catch { /* haptics are a nicety */ }
 }
 
+/** Dev builds keep the last 300 headset events in window.__vrlog, to read back over DevTools after a headset test. */
+const LOG_SIZE = 300;
+function vrlog(event: string, data: Record<string, unknown> = {}): void {
+  if (!import.meta.env?.DEV || typeof window === "undefined") return;
+  const log = ((window as unknown as { __vrlog?: unknown[] }).__vrlog ??= []);
+  log.push({ t: Math.round(performance.now()), event, ...data });
+  if (log.length > LOG_SIZE) log.splice(0, log.length - LOG_SIZE);
+}
+const round = (v: THREE.Vector3) => v.toArray().map(x => Math.round(x * 100) / 100);
+
 /** Two buzzes 90 ms apart: rising for a new take, falling for "not now". */
 function pattern(source: XRInputSource | undefined, rising: boolean): void {
   const [first, second] = rising ? [0.3, 0.7] : [0.7, 0.3];
@@ -116,6 +126,8 @@ export class XRInput {
   private matrix = new THREE.Matrix4();
   private head = new THREE.Vector3();
   private forward = new THREE.Vector3();
+  private gaze = new THREE.Vector3();
+  private summonShown = false;
   private eye = new THREE.Vector3();
   private previousButtons = new Map<string, boolean>();
   private previousSnap = false;
@@ -150,8 +162,10 @@ export class XRInput {
       line.renderOrder = 1012; line.scale.z = RAY.short; controller.add(line); this.lines.push(line);
       const cursor = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: RAY.idle, depthTest: false, transparent: true }));
       cursor.renderOrder = 1013; cursor.visible = false; (rig.parent ?? rig).add(cursor); this.cursors.push(cursor);
-      controller.addEventListener("connected", event => { this.sources.set(index, event.data); });
-      controller.addEventListener("disconnected", () => { this.end(index); this.sources.delete(index); });
+      controller.addEventListener("connected", event => {
+        this.sources.set(index, event.data); vrlog("connected", { index, side: event.data.handedness, hand: !!event.data.hand });
+      });
+      controller.addEventListener("disconnected", () => { vrlog("disconnected", { index }); this.end(index); this.sources.delete(index); });
       controller.addEventListener("selectstart", () => { void this.start(index, "select"); });
       controller.addEventListener("selectend", () => this.end(index, "select"));
       controller.addEventListener("squeezestart", () => { void this.start(index, "squeeze"); });
@@ -160,13 +174,18 @@ export class XRInput {
       hand.add(handModels.createHandModel(hand, "spheres")); rig.add(hand);
     }
     // Opening the system menu (or the headset going to sleep) drops whatever you were doing.
-    const visibility = () => { if (renderer.xr.getSession()?.visibilityState !== "visible") this.reset(); };
+    const visibility = () => {
+      const state = renderer.xr.getSession()?.visibilityState; vrlog("visibility", { state });
+      if (state !== "visible") this.reset();
+    };
     let session: XRSession | null = null;
     const started = () => {
+      vrlog("sessionstart");
       session = renderer.xr.getSession(); session?.addEventListener("visibilitychange", visibility);
       this.reset(); this.panel.reset(); this.settle = 3;
     };
     const ended = () => {
+      vrlog("sessionend");
       session?.removeEventListener("visibilitychange", visibility); session = null;
       this.reset(); this.sources.clear(); this.panel.reset();
     };
@@ -223,8 +242,10 @@ export class XRInput {
     if (this.busy) return;
     const source = this.sources.get(index);
     const pointing = this.aim(index);
+    vrlog("press", { index, press, at: !pointing ? "nothing" : pointing.kind === "panel" ? `panel:${pointing.action ?? "glass"}` : pointing.kind === "bar" ? "bar" : `object:${pointing.id}` });
     if (pointing?.kind === "bar") {
       this.dragging = index; this.panel.beginDrag(this.raycaster.ray, pointing.point); pulse(source, HAPTIC.press);
+      vrlog("drag-start", { index, panel: round(this.panel.mesh.getWorldPosition(new THREE.Vector3())) });
       return;
     }
     if (pointing?.kind === "panel") {
@@ -251,7 +272,13 @@ export class XRInput {
   private end(index: number, press?: Press): void {
     if (press && this.pressed.get(index) !== press) return;
     this.pressed.delete(index);
-    if (this.dragging === index) { this.panel.endDrag(); this.dragging = null; pulse(this.sources.get(index), HAPTIC.release); }
+    if (this.dragging === index) {
+      this.panel.endDrag(); this.dragging = null; pulse(this.sources.get(index), HAPTIC.release);
+      const at = this.panel.mesh.getWorldPosition(new THREE.Vector3()), eye = this.camera.getWorldPosition(new THREE.Vector3());
+      const d = at.clone().sub(eye);
+      vrlog("drag-end", { index, panel: round(at), eye: round(eye), distance: Math.round(d.length() * 100) / 100,
+        pitchDeg: Math.round(Math.atan2(d.y, Math.hypot(d.x, d.z)) * 180 / Math.PI) });
+    }
     if (this.scrubbing === index) { this.scrub(index); this.scrubbing = null; }
     if (this.panel.pressed && this.pressed.size === 0) this.panel.pressed = null;
     if (this.owner === index) {
@@ -268,6 +295,7 @@ export class XRInput {
 
   private act(action: PanelAction, u: number, index: number): void {
     const viewer = this.viewer, timeline = viewer.timeline;
+    vrlog("action", { action, index });
     switch (action) {
       case "play": viewer.togglePlay(); break;
       case "back": viewer.seek(timeline.time - 1); break;
@@ -280,6 +308,7 @@ export class XRInput {
       case "hide": this.panel.mode = "compact"; break;
       case "show": this.panel.mode = "full"; break;
       case "exit": void this.renderer.xr.getSession()?.end().catch(() => this.say("Use the headset's menu to leave VR.")); break;
+      case "summon": if (this.panel.mode === "compact") this.panel.mode = "full"; this.panel.recenter(); break;
     }
   }
 
@@ -353,6 +382,7 @@ export class XRInput {
         const down = pad.buttons[button]?.pressed ?? false, key = `${index}-${button}`;
         if (down && !this.previousButtons.get(key) && !this.busy) {
           this.host.unlockAudio();
+          vrlog("button", { index, side: source.handedness, button });
           if (button === 4) { viewer.togglePlay(); pulse(source, HAPTIC.press); }
           else if (button === 5) { this.toggleHidden(); pulse(source, HAPTIC.press); }
           else if (source.handedness === "right") { this.panel.mode = this.panel.mode === "help" ? "help" : "full"; this.panel.recenter(); pulse(source, HAPTIC.press); }
@@ -405,6 +435,11 @@ export class XRInput {
     if (this.settle > 0) { this.settle--; this.panel.mesh.visible = false; }
     else if (this.dragging !== null) { this.ray(this.dragging); this.panel.dragTo(this.raycaster.ray, this.eye, push, dt); }
     else this.panel.follow(this.head.copy(this.camera.position), localForward(this.camera, this.forward), dt, onPanel || this.scrubbing !== null);
+    if (this.settle === 0) {
+      this.gaze.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+      this.panel.updateSummon(this.head.copy(this.camera.position), localForward(this.camera, this.forward), this.gaze, dt);
+      if (this.panel.summon.visible !== this.summonShown) { this.summonShown = this.panel.summon.visible; vrlog(this.summonShown ? "summon-shown" : "summon-hidden"); }
+    }
     this.panel.setDimmed(!!viewer.held || viewer.recording);
     this.drawPanel(target);
   }

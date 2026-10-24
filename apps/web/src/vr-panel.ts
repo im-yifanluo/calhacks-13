@@ -14,7 +14,7 @@ import * as THREE from "three";
 export const PANEL = { width: 1024, height: 512, metersWide: 0.74 } as const;
 export const PANEL_METERS_HIGH = PANEL.metersWide * PANEL.height / PANEL.width;
 
-export type PanelAction = "play" | "back" | "forward" | "scrub" | "prev-take" | "next-take" | "original" | "help" | "hide" | "show" | "exit";
+export type PanelAction = "play" | "back" | "forward" | "scrub" | "prev-take" | "next-take" | "original" | "help" | "hide" | "show" | "exit" | "summon";
 /** full: the controls. help: how to use it. compact: hidden, leaving a small "Show controls" pill. */
 export type PanelMode = "full" | "help" | "compact";
 export interface Region { id: PanelAction; x: number; y: number; w: number; h: number }
@@ -70,6 +70,23 @@ export function scrubTime(u: number, duration: number): number {
 export const FOLLOW = { distance: 1.2, drop: 0.3, maxAngleDeg: 30, maxMove: 0.5 } as const;
 /** Dragging: how near and far the panel may go, and how fast the thumbstick pushes it, m/s. */
 export const DRAG = { minDistance: 0.6, maxDistance: 3, pushSpeed: 1.2 } as const;
+/**
+ * Where a dragged panel may sit, around the eyes: 0.6–3 m away and from 55° below to 20° above eye level, so it can't
+ * be lost overhead or on the floor (the brief: gaze is comfortable from 10° above to 60° below the horizon).
+ */
+export const PLACE = { minDistance: 0.6, maxDistance: 3, minPitchDeg: -55, maxPitchDeg: 20 } as const;
+/** A pinned panel out of view (more than 55° from the gaze) for 1.5 s offers a "Bring controls here" pill in front. */
+export const SUMMON = { afterSec: 1.5, offAngleDeg: 55, distance: 1.0, drop: 0.42, metersWide: 0.3 } as const;
+
+/** Keep a world position `p` inside the PLACE band around `eye` (in place). */
+export function clampPlacement(p: THREE.Vector3, eye: THREE.Vector3): THREE.Vector3 {
+  const dx = p.x - eye.x, dy = p.y - eye.y, dz = p.z - eye.z;
+  const yaw = Math.atan2(dx, dz);
+  const pitch = THREE.MathUtils.clamp(Math.atan2(dy, Math.hypot(dx, dz)), PLACE.minPitchDeg * Math.PI / 180, PLACE.maxPitchDeg * Math.PI / 180);
+  const r = THREE.MathUtils.clamp(Math.hypot(dx, dy, dz), PLACE.minDistance, PLACE.maxDistance);
+  const horizontal = r * Math.cos(pitch);
+  return p.set(eye.x + Math.sin(yaw) * horizontal, eye.y + r * Math.sin(pitch), eye.z + Math.cos(yaw) * horizontal);
+}
 
 export function panelTarget(head: THREE.Vector3, forward: THREE.Vector3, out = new THREE.Vector3()): THREE.Vector3 {
   return out.copy(head).addScaledVector(forward, FOLLOW.distance).setY(head.y - FOLLOW.drop);
@@ -128,6 +145,16 @@ export class VRPanel {
   pinned = false;
   private bar: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private barTarget: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  /** "Bring controls here": shown in front while a pinned panel is out of view. */
+  readonly summon: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  private summonCanvas = document.createElement("canvas");
+  private summonTexture: THREE.CanvasTexture;
+  private summonDrawn = "";
+  private outOfView = 0;
+  private summonPlaced = false;
+  private summonFrom = new THREE.Vector3();
+  private summonTarget = new THREE.Vector3();
+  private toPanel = new THREE.Vector3();
   private canvas = document.createElement("canvas");
   private context: CanvasRenderingContext2D;
   private texture: THREE.CanvasTexture;
@@ -161,21 +188,38 @@ export class VRPanel {
     this.barTarget.position.set(0, barY, 0);
     this.mesh.add(this.bar, this.barTarget);
     parent.add(this.mesh);
+    this.summonCanvas.width = 512; this.summonCanvas.height = 128;
+    this.summonTexture = new THREE.CanvasTexture(this.summonCanvas); this.summonTexture.colorSpace = THREE.SRGBColorSpace;
+    this.summon = new THREE.Mesh(new THREE.PlaneGeometry(SUMMON.metersWide, SUMMON.metersWide / 4), new THREE.MeshBasicMaterial({
+      map: this.summonTexture, transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
+    }));
+    this.summon.renderOrder = 1010; this.summon.visible = false; this.summon.name = "vr-panel-summon";
+    parent.add(this.summon);
   }
 
   /** Hide it and forget where it was; the next follow() places it in front of the head at once. */
   reset(): void {
     this.mesh.visible = false; this.placed = false; this.moving = false; this.pinned = false; this.dragging = null;
-    this.mode = "full"; this.hover = null; this.pressed = null;
+    this.mode = "full"; this.hover = null; this.pressed = null; this.hideSummon();
   }
 
   /** Bring it back in front of you at the next follow(), following again. */
-  recenter(): void { this.placed = false; this.moving = false; this.pinned = false; this.dragging = null; }
+  recenter(): void { this.placed = false; this.moving = false; this.pinned = false; this.dragging = null; this.hideSummon(); }
+
+  private hideSummon(): void { this.summon.visible = false; this.summonPlaced = false; this.outOfView = 0; }
 
   get isDragging(): boolean { return this.dragging !== null; }
 
   /** What a ray hits on the panel: the grab bar, a region, a blank part of the glass, or nothing (null). */
   hit(raycaster: THREE.Raycaster): PanelHit | null {
+    const summon = this.summon.visible ? raycaster.intersectObject(this.summon, false)[0] : undefined;
+    const panel = this.hitPanel(raycaster);
+    if (summon?.uv && (!panel || summon.distance < panel.distance))
+      return { kind: "panel", action: "summon", u: summon.uv.x, distance: summon.distance, point: summon.point };
+    return panel;
+  }
+
+  private hitPanel(raycaster: THREE.Raycaster): PanelHit | null {
     if (!this.mesh.visible) return null;
     this.mesh.updateWorldMatrix(true, true);
     if (this.mode !== "compact") {
@@ -228,6 +272,7 @@ export class VRPanel {
       this.mesh.getWorldQuaternion(this.rotation);
       this.offset.copy(drag.offset).applyQuaternion(this.rotation);
       this.target.subVectors(this.grabPoint, this.offset);
+      clampPlacement(this.target, eye);
       if (parent) { parent.updateWorldMatrix(true, false); parent.worldToLocal(this.target); }
       this.mesh.position.copy(this.target);
       this.mesh.updateWorldMatrix(true, false);
@@ -240,6 +285,41 @@ export class VRPanel {
   endDrag(): void {
     if (!this.dragging) return;
     this.dragging = null; this.pinned = true; this.placed = true;
+  }
+
+  /**
+   * While a pinned panel has been out of view for a moment, offer "Bring controls here" low in front of you (it follows
+   * lazily, like the panel). `head`, `forward` (horizontal) and `gaze` (the view direction) are in the rig's space.
+   */
+  updateSummon(head: THREE.Vector3, forward: THREE.Vector3, gaze: THREE.Vector3, dt: number): void {
+    const lost = this.pinned && !this.dragging && this.mesh.visible && this.mode !== "compact"
+      && this.toPanel.subVectors(this.mesh.position, head).angleTo(gaze) > SUMMON.offAngleDeg * Math.PI / 180;
+    this.outOfView = lost ? this.outOfView + Math.max(0, dt) : 0;
+    if (this.outOfView < SUMMON.afterSec) { this.summon.visible = false; this.summonPlaced = false; return; }
+    this.summon.visible = true;
+    const spot = this.summonTarget;
+    if (!this.summonPlaced || needsRecenter(this.summon.position, head, forward, this.summonFrom)) {
+      spot.copy(head).addScaledVector(forward, SUMMON.distance).setY(head.y - SUMMON.drop);
+      this.summonFrom.copy(head);
+      if (!this.summonPlaced) this.summon.position.copy(spot);
+      this.summonPlaced = true;
+    }
+    this.summon.position.lerp(spot, 1 - Math.exp(-Math.max(0, dt) * 10));
+    this.summon.parent?.updateWorldMatrix(true, false);
+    this.summon.lookAt(this.summon.parent ? this.summon.parent.localToWorld(this.eye.copy(head)) : this.eye.copy(head));
+    const hover = this.hover === "summon";
+    const key = String(hover);
+    if (key === this.summonDrawn) return;
+    this.summonDrawn = key;
+    const ctx = this.summonCanvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, 512, 128);
+    glass(ctx, 12, 12, 488, 104, 52);
+    if (hover) { roundRect(ctx, 12, 12, 488, 104, 52); ctx.lineWidth = 4; ctx.strokeStyle = COLOR.accent; ctx.stroke(); }
+    ctx.textAlign = "center";
+    text(ctx, "Bring controls here", 256, 64, `600 40px ${FONT}`, hover ? COLOR.accent : COLOR.text);
+    ctx.textAlign = "left";
+    this.summonTexture.needsUpdate = true;
   }
 
   /** Redraw only when something on it changed. */
@@ -359,6 +439,7 @@ export class VRPanel {
   setDimmed(dimmed: boolean): void { this.mesh.material.opacity = dimmed ? 0.45 : 1; }
 
   dispose(): void {
+    this.summon.removeFromParent(); this.summon.geometry.dispose(); this.summon.material.dispose(); this.summonTexture.dispose();
     this.mesh.removeFromParent(); this.mesh.geometry.dispose(); this.mesh.material.dispose(); this.texture.dispose();
     this.bar.geometry.dispose(); this.bar.material.map?.dispose(); this.bar.material.dispose();
     this.barTarget.geometry.dispose(); this.barTarget.material.dispose();

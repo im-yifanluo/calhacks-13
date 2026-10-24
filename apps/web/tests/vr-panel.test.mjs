@@ -4,8 +4,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Group, Quaternion, Ray, Vector3 } from "three";
 import {
-  BODY, blocksRay, COMPACT_REGIONS, FOLLOW, HELP_REGIONS, hitRegion, needsRecenter, PANEL, PANEL_METERS_HIGH, panelTarget,
-  REGIONS, scrubTime, VRPanel,
+  BODY, blocksRay, clampPlacement, COMPACT_REGIONS, FOLLOW, HELP_REGIONS, hitRegion, needsRecenter, PANEL, PANEL_METERS_HIGH,
+  panelTarget, PLACE, REGIONS, scrubTime, SUMMON, VRPanel,
 } from "../.test-dist/vr-panel.js";
 
 const close = (a, b, tolerance = 1e-9) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
@@ -156,9 +156,60 @@ test("dragging by the bar keeps the grabbed spot under the ray, the stick pushes
 test("the stick cannot push the panel nearer than 0.6 m or farther than 3 m", () => {
   const { panel, eye } = rigged();
   const grabbed = worldOf(panel, 512, 500), ray = new Ray(eye.clone(), grabbed.clone().sub(eye).normalize());
+  const centre = () => panel.mesh.getWorldPosition(new Vector3()).distanceTo(eye);
   panel.beginDrag(ray, grabbed);
   for (let i = 0; i < 400; i++) panel.dragTo(ray, eye, 1, 1 / 90);
-  close(worldOf(panel, 512, 500).distanceTo(eye), 3, 1e-3);
+  assert.ok(centre() <= 3 + 1e-9 && centre() > 2.95, `the panel is ${centre()} m away`);
+  close(worldOf(panel, 512, 500).distanceTo(eye), 3, 0.02);
   for (let i = 0; i < 400; i++) panel.dragTo(ray, eye, -1, 1 / 90);
-  close(worldOf(panel, 512, 500).distanceTo(eye), 0.6, 1e-3);
+  close(worldOf(panel, 512, 500).distanceTo(eye), 0.6, 0.03);
+  assert.ok(centre() >= 0.6 - 1e-9, `the panel is ${centre()} m away`);
+});
+
+test("a dragged panel stays between 55° below and 20° above eye level, 0.6–3 m away", () => {
+  const eye = new Vector3(1, 1.6, 2);
+  const pitchOf = p => deg(Math.atan2(p.y - eye.y, Math.hypot(p.x - eye.x, p.z - eye.z)));
+  const overhead = clampPlacement(new Vector3(1.2, 3.5, 1.5), eye);
+  close(pitchOf(overhead), PLACE.maxPitchDeg, 1e-9);
+  const floor = clampPlacement(new Vector3(1, 0, 1.5), eye);
+  close(pitchOf(floor), PLACE.minPitchDeg, 1e-9);
+  close(clampPlacement(new Vector3(1, 1.6, -5), eye).distanceTo(eye), PLACE.maxDistance, 1e-9);
+  close(clampPlacement(new Vector3(1, 1.5, 1.9), eye).distanceTo(eye), PLACE.minDistance, 1e-9);
+  const fine = new Vector3(0.4, 1.3, 1);
+  close(clampPlacement(fine.clone(), eye).distanceTo(fine), 0, 1e-12); // inside the band it is untouched
+  // The compass direction is kept: dragged overhead to the left, it stays to the left.
+  const left = clampPlacement(new Vector3(-0.5, 4, 2), eye);
+  assert.ok(left.x < eye.x - 0.4 && Math.abs(left.z - eye.z) < 1e-9);
+});
+
+test("dragging the ray straight up stops the panel 20° above eye level", () => {
+  const { panel, eye } = rigged();
+  const grabbed = worldOf(panel, 512, 500), ray = new Ray(eye.clone(), grabbed.clone().sub(eye).normalize());
+  panel.beginDrag(ray, grabbed);
+  for (let i = 0; i < 10; i++) panel.dragTo(new Ray(eye.clone(), new Vector3(0, 1, -0.05).normalize()), eye, 0, 1 / 90);
+  const centre = panel.mesh.getWorldPosition(new Vector3());
+  close(deg(Math.atan2(centre.y - eye.y, Math.hypot(centre.x - eye.x, centre.z - eye.z))), PLACE.maxPitchDeg, 1e-6);
+});
+
+test("a pinned panel out of view for 1.5 s offers Bring controls here in front; recenter puts it away", () => {
+  const { panel, head, forward } = rigged();
+  // Pin it 90° to the left.
+  panel.pinned = true; panel.mesh.position.set(-1.2, 1.3, 0);
+  const gazeAhead = new Vector3(0, 0, -1);
+  panel.updateSummon(head, forward, gazeAhead, 1.0);
+  assert.equal(panel.summon.visible, false, "not yet");
+  panel.updateSummon(head, forward, gazeAhead, 0.6);
+  assert.equal(panel.summon.visible, true);
+  close(panel.summon.position.z, head.z - SUMMON.distance, 1e-9); close(panel.summon.position.y, head.y - SUMMON.drop, 1e-9);
+  // Looking at the panel again hides the pill.
+  panel.updateSummon(head, forward, new Vector3(-1, -0.2, 0).normalize(), 1 / 90);
+  assert.equal(panel.summon.visible, false);
+  // A following panel never offers it, and recenter() clears it.
+  for (let i = 0; i < 3; i++) panel.updateSummon(head, forward, gazeAhead, 1);
+  assert.equal(panel.summon.visible, true);
+  panel.recenter();
+  assert.equal(panel.summon.visible, false);
+  panel.follow(head, forward, 1 / 90);
+  for (let i = 0; i < 3; i++) panel.updateSummon(head, forward, new Vector3(1, 0, 0), 1);
+  assert.equal(panel.summon.visible, false, "a following panel comes back by itself");
 });
