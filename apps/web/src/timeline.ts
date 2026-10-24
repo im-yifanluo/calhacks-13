@@ -82,6 +82,20 @@ export class Timeline {
     branch.tracks.set(objectId, [...merged.values()].sort((a, b) => a.t - b.t));
   }
 
+  /**
+   * Replace a branch's whole recording of one object, or clear it with null or []. The network adapter rebuilds
+   * tracks with this whenever server chunks are inserted, updated or deleted. Unlike appendRecording, frames may
+   * start before the branch's fork time: the server accepts a branch's own edits there (seek back on a take, grab).
+   */
+  setRecording(branchId: string, objectId: string, frames: Keyframe[] | null): void {
+    const branch = this.branches.find(b => b.id === branchId);
+    if (!branch || branch.id === "original") throw new Error("Recordings require an existing alternate branch");
+    if (!frames?.length) { branch.tracks.delete(objectId); return; }
+    validateTrack(frames, objectId);
+    if (frames.at(-1)!.t > this.duration) throw new Error("Recording outside the clip");
+    branch.tracks.set(objectId, frames.map(f => ({ ...f, p: [...f.p], q: [...f.q], ...(f.v && { v: [...f.v] }) })));
+  }
+
   /** Child edits apply only after their first frame. Earlier history resolves through ancestors. */
   track(objectId: string, original: Keyframe[], t = this.time): Keyframe[] {
     let branch: Branch | undefined = this.active;
