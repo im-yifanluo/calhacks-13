@@ -87,7 +87,7 @@ def run_stage(name: str, work: Path, args: argparse.Namespace | None = None) -> 
         objects.run(work)
     elif name == "background":
         from . import background
-        background.run(work, steps_scaler=getattr(args, "steps_scaler", 0.25) or 0.25)
+        background.run(work, steps_scaler=getattr(args, "steps_scaler", None), static=getattr(args, "static", False))
     else:
         raise SystemExit(f"unknown step {name}")
 
@@ -115,7 +115,7 @@ def run_all(work: Path, title: str, args: argparse.Namespace) -> Path:
     log.write_text(json.dumps(old, indent=2))
     print(f"[run] done: {out}  timings {timings}")
     return out
-BG_SPLAT_MAX = 350_000  # Quest budget for the background (whole scene <= 500k)
+BG_SPLAT_MAX = 500_000  # Spark's default splat budget on Quest
 
 
 def quat_from_c2w_opencv(m: list[float]) -> tuple[float, float, float, float]:
@@ -143,8 +143,10 @@ def warn(msg: str) -> None:
     print(f"[merge] {msg}", file=sys.stderr)
 
 
-def merge(work: Path, title: str, memory_id: str, device: str) -> Path:
-    """S7: combine everything in <work> into memory.json. URLs stay relative to <work>."""
+def merge(work: Path, title: str, memory_id: str, device: str, static: bool = False) -> Path:
+    """S7: combine everything in <work> into memory.json. URLs stay relative to <work>.
+    static=True writes memory.static.json: the walk-through room only (bg_static.spz, collider, head path for the
+    start position, audio), no people or objects."""
     from .handoff import Cameras, FramesInfo, ObjectsFragment, WorldInfo
     from .manifest import Background, Camera, Keyframe, MemoryManifest, Source, Timeline, World
 
@@ -155,7 +157,10 @@ def merge(work: Path, title: str, memory_id: str, device: str) -> Path:
         raise SystemExit("world/cameras.json has no frames; run S3 (world) first")
 
     # Background: the trained splat (S6) if it exists, otherwise the L0 points (S4).
-    if (work / "world" / "bg.spz").exists():
+    if static and (work / "world" / "bg_static.spz").exists():
+        background = Background(url="world/bg_static.spz", format="spz",
+                                splatCount=int(world.diagnostics.get("static_splat_count", 0)))
+    elif (work / "world" / "bg.spz").exists():
         background = Background(url="world/bg.spz", format="spz", splatCount=world.bgSplatCount)
     elif (work / "world" / "bg_points.ply").exists():
         background = Background(url="world/bg_points.ply", format="ply", splatCount=world.bgPointsCount)
@@ -170,7 +175,7 @@ def merge(work: Path, title: str, memory_id: str, device: str) -> Path:
         warn("no world/room_collider.glb: thrown objects will only land on the floor plane")
 
     objects = []
-    for frag in (work / "world" / "ghosts.json", work / "objects" / "objects.json"):
+    for frag in (() if static else (work / "world" / "ghosts.json", work / "objects" / "objects.json")):
         if frag.exists():
             objects += ObjectsFragment.model_validate_json(frag.read_text()).objects
         else:
@@ -188,6 +193,8 @@ def merge(work: Path, title: str, memory_id: str, device: str) -> Path:
     first = cam_frames[0]
     track = [Keyframe(t=c.t, p=(c.c2w[3], c.c2w[7], c.c2w[11]), q=quat_from_c2w_opencv(c.c2w)) for c in cam_frames]
     audio = "input/audio.m4a" if (work / "input" / "audio.m4a").exists() else None
+    if static and not memory_id.endswith("-static"):
+        memory_id += "-static"
     manifest = MemoryManifest(
         id=memory_id,
         title=title,
@@ -200,7 +207,7 @@ def merge(work: Path, title: str, memory_id: str, device: str) -> Path:
         camera=Camera(track=track, fovYDeg=math.degrees(2 * math.atan(first.h / (2 * first.K[4])))),
         objects=objects,
     )
-    out = work / "memory.json"
+    out = work / ("memory.static.json" if static else "memory.json")
     # exclude_none: the TypeScript side expects missing optional fields, not null
     out.write_text(manifest.model_dump_json(indent=2, exclude_none=True))
     return out
@@ -213,7 +220,8 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument("name", choices=list(STAGES))
     st.add_argument("--work", required=True, type=Path)
     st.add_argument("--eye-height", type=float, help="camera height when recording, m (normalize)")
-    st.add_argument("--steps-scaler", type=float, default=0.25, help="gsplat schedule scale (background)")
+    st.add_argument("--steps-scaler", type=float, default=None, help="gsplat schedule scale (background)")
+    st.add_argument("--static", action="store_true", help="background: the walk-through room (only people masked)")
     mg = sub.add_parser("merge", help="S7: everything -> memory.json")
     rn = sub.add_parser("run", help="all steps, then merge")
     for p in (mg, rn):
@@ -221,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--title", default="Untitled memory")
         p.add_argument("--id", dest="memory_id")
         p.add_argument("--device", default="ray-ban-meta-gen2")
+    mg.add_argument("--static", action="store_true", help="memory.static.json: the walk-through room only")
     rn.add_argument("--eye-height", type=float)
     rn.add_argument("--steps-scaler", type=float, default=0.25)
     rn.add_argument("--force", action="store_true", help="rerun finished steps too")
@@ -254,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "merge":
-        print(merge(args.work, args.title, args.memory_id or args.work.name, args.device))
+        print(merge(args.work, args.title, args.memory_id or args.work.name, args.device, static=args.static))
         return 0
     if args.cmd == "run":
         run_all(args.work, args.title, args)

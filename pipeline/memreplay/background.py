@@ -22,6 +22,9 @@ from .vipe_io import Frames, Vipe, dilate
 MAX_IMAGES = 300
 INIT_POINTS = 150_000
 CAP = 300_000
+# static mode: the walk-through room. Only people/hands are masked (props stay in the room), more frames and
+# Gaussians (Spark's default budget on Quest is 500k), longer training, camera poses refined, PSNR on held-out frames.
+STATIC = {"images": 400, "cap": 500_000, "steps_scaler": 0.67, "test_every": 12, "out": "bg_static.spz"}
 
 
 def _quat_wxyz(R: np.ndarray) -> np.ndarray:
@@ -60,7 +63,7 @@ def pick_frames(work: Path, cams: Cameras, n: int) -> list:
     return picked
 
 
-def prepare(work: Path) -> Path:
+def prepare(work: Path, static: bool = False) -> Path:
     work = Path(work)
     cams = Cameras.model_validate_json((work / "world" / "cameras.json").read_text())
     v = Vipe(work / "vipe")
@@ -69,10 +72,15 @@ def prepare(work: Path) -> Path:
         shutil.rmtree(col)
     for d in ("images", "masks", "sparse/0"):
         (col / d).mkdir(parents=True)
-    chosen = pick_frames(work, cams, MAX_IMAGES)
+    chosen = pick_frames(work, cams, STATIC["images"] if static else MAX_IMAGES)
     reader = Frames(work / "input" / "clip.mp4")
     from .objects import scene_static_ids
-    keep_in_room = scene_static_ids(work)
+    from .vipe_io import HAND_PHRASES, PEOPLE_PHRASES
+    if static:   # everything but people and hands belongs to the room
+        movers = set(v.ids_with(PEOPLE_PHRASES | HAND_PHRASES))
+        keep_in_room = [i for i in v.phrases if i > 0 and i not in movers]
+    else:
+        keep_in_room = scene_static_ids(work)
     c0 = chosen[0]
     K = np.array(c0.K).reshape(3, 3)
     # ViPE puts pixel centres at integer coordinates; COLMAP/gsplat at +0.5
@@ -104,14 +112,20 @@ def prepare(work: Path) -> Path:
     return col
 
 
-def train(work: Path, steps_scaler: float = 0.25) -> Path:
+def train(work: Path, steps_scaler: float = 0.25, static: bool = False) -> Path:
     work = Path(work)
-    out = work / "gsplat"
+    out = work / ("gsplat_static" if static else "gsplat")
     env = dict(os.environ)
+    cap = STATIC["cap"] if static else CAP
     cmd = [sys.executable, "-m", "memreplay.train_splat", "mcmc", "--data_dir", str(work / "colmap"),
-           "--data_factor", "1", "--result_dir", str(out), "--strategy.cap-max", str(CAP),
+           "--data_factor", "1", "--result_dir", str(out), "--strategy.cap-max", str(cap),
            "--steps_scaler", str(steps_scaler), "--save_ply", "--app_opt", "--disable_viewer",
-           "--eval_steps", "-1", "--no-normalize-world-space", "--test_every", "100000"]
+           "--no-normalize-world-space"]
+    if static:   # refine ViPE's poses; evaluate on held-out frames at the end
+        steps = int(30_000 * steps_scaler)
+        cmd += ["--pose_opt", "--test_every", str(STATIC["test_every"]), "--eval_steps", str(steps)]
+    else:
+        cmd += ["--eval_steps", "-1", "--test_every", "100000"]
     subprocess.run(cmd, check=True, env=env)
     plys = sorted((out / "ply").glob("point_cloud_*.ply"), key=lambda p: int(p.stem.split("_")[-1]))
     if not plys:
@@ -119,23 +133,29 @@ def train(work: Path, steps_scaler: float = 0.25) -> Path:
     return plys[-1]
 
 
-def convert(work: Path, ply: Path) -> int:
+def convert(work: Path, ply: Path, static: bool = False) -> int:
     work = Path(work)
-    out = work / "world" / "bg.spz"
-    tmp = work / "gsplat" / "bg_capped.ply"
-    subprocess.run(["splat-transform", "-w", str(ply), "--filter-nan", "--decimate", str(CAP), str(tmp)], check=True)
+    out = work / "world" / (STATIC["out"] if static else "bg.spz")
+    tmp = ply.parent.parent / "bg_capped.ply"
+    cap = STATIC["cap"] if static else CAP
+    subprocess.run(["splat-transform", "-w", str(ply), "--filter-nan", "--decimate", str(cap), str(tmp)], check=True)
     subprocess.run(["splat-transform", "-w", str(tmp), str(out)], check=True)
     raw = tmp.read_bytes()[:2000].decode(errors="ignore")
     n = int(next(ln.split()[-1] for ln in raw.splitlines() if ln.startswith("element vertex")))
     winfo = WorldInfo.model_validate_json((work / "world" / "world.json").read_text())
-    winfo.bgSplatCount = n
+    if static:
+        winfo.diagnostics["static_splat_count"] = n
+    else:
+        winfo.bgSplatCount = n
     (work / "world" / "world.json").write_text(winfo.model_dump_json(indent=2))
-    print(f"[background] world/bg.spz: {n} splats")
+    print(f"[background] world/{out.name}: {n} splats")
     return n
 
 
-def run(work: Path, steps_scaler: float = 0.25) -> None:
+def run(work: Path, steps_scaler: float | None = None, static: bool = False) -> None:
     work = Path(work).resolve()                                # train_splat changes directory
     FramesInfo.model_validate_json((Path(work) / "input" / "frames.json").read_text())
-    prepare(work)
-    convert(work, train(work, steps_scaler))
+    if steps_scaler is None:
+        steps_scaler = STATIC["steps_scaler"] if static else 0.25
+    prepare(work, static)
+    convert(work, train(work, steps_scaler, static), static)

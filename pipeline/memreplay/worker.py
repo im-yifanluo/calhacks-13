@@ -19,7 +19,8 @@ import traceback
 import urllib.request
 from pathlib import Path
 
-VIEWER_FILES = ["memory.json", "input/audio.m4a", "world/bg.spz", "world/bg_points.ply", "world/room_collider.glb"]
+VIEWER_FILES = ["memory.json", "memory.static.json", "input/audio.m4a", "world/bg.spz", "world/bg_static.spz",
+                "world/bg_points.ply", "world/room_collider.glb"]
 PROGRESS = {"normalize": 0.15, "nouns": 0.2, "vipe": 0.55, "world": 0.6, "l0": 0.7, "objects": 0.8, "background": 0.95}
 
 
