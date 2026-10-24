@@ -82,7 +82,14 @@ async function main(): Promise<void> {
   const grid = new THREE.GridHelper(10, 40, 0x437979, 0x243642); grid.position.y = memory.manifest.world.floorY; scene.add(grid);
   viewer = new Viewer(memory, message => { status.textContent = message; }); window.memoryReplay = viewer;
   const currentViewer = viewer;
-  const xr = new XRInput(renderer, rig, camera, viewer);
+  // The VR panel shows the same status line as the 2D overlay, and the room summary from the room panel.
+  const xr = new XRInput(renderer, rig, camera, viewer, {
+    status: () => status.textContent ?? "",
+    room: () => {
+      const summary = element("room-summary").textContent ?? "";
+      return summary === "" || summary === "Solo" ? "Solo" : summary.startsWith("Joining") ? summary : `Room ${summary}`;
+    },
+  });
   desktopInput(renderer.domElement, camera, controls, viewer);
   element("title").textContent = demo ? "A moment. Another possibility." : memory.manifest.title;
   element("subtitle").textContent = demo ? "Pause the memory. Change the throw. Replay your take." : "Explore this recording, then create an alternate take.";
