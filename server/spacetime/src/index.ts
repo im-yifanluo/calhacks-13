@@ -267,6 +267,8 @@ function revertEmptyTake(ctx: Ctx, o: ObjectRow) {
   const tl = b && ctx.db.timeline.roomId.find(b.roomId);
   if (!b || !tl || tl.branchId !== b.id) return;
   if (!b.creator.isEqual(ctx.sender) || b.forkMediaUs !== o.fromMediaUs) return;
+  // Only takes a grab forked by itself ("First edit", "Edit <id>"); a take made with forkBranch stays.
+  if (b.name !== "First edit" && !b.name.startsWith("Edit ")) return;
   if (some(ctx.db.branchKeyframes.branchId.filter(b.id))) return;
   if (some(ctx.db.objectState.branchId.filter(b.id), (row) => !!row.simOwner))
     return;

@@ -580,6 +580,18 @@ test("dropping mid-throw before any chunk is saved puts the room back on the par
   });
 });
 
+test("a take made with forkBranch is kept when its creator drops mid-grab", () => {
+  // Found in review: the revert used to apply to any empty take its creator was grabbing on.
+  const r = pausedAtOneSecond();
+  call(alice, mod.forkBranch, { name: "My named take" });
+  const named = tl(r).branchId;
+  call(alice, mod.grab, { objectId: "ball", ...pose }); // no ball row on this take yet: no fork
+  expect(tl(r).branchId).toBe(named);
+  call(alice, mod.onDisconnect);
+  expect(tl(r).branchId).toBe(named);
+  expect(h.db.objectState.key.find(`${named}:ball`)).toMatchObject(free);
+});
+
 test("an empty take forked from another take goes back to that take, not to the Original", () => {
   const r = pausedAtOneSecond();
   call(alice, mod.grab, { objectId: "ball", ...pose });
