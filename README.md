@@ -7,6 +7,8 @@ Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves 
 - **Viewer:** [docs/P3_VIEWER.md](docs/P3_VIEWER.md) · **Multiplayer and upload:** [docs/P4.md](docs/P4.md) · **Upload test:** [docs/CAPTURE_TEST.md](docs/CAPTURE_TEST.md)
 - **Vision pipeline runbook:** [pipeline/README.md](pipeline/README.md) (being rewritten)
 
+**Phone app:** open `apps/ios/SceneCaptureDemo.xcodeproj` for a native iPhone/Simulator demo with **On** and **Off**, automatic upload, database + SHA-256 verification, offline playback and retry. [Installation and test instructions](docs/PHONE_APP.md). The separate glasses SDK project requires Meta's supported Xcode toolchain. Browser demo: `/capture.html`.
+
 ## Status (Sat Oct 24, morning)
 
 | Part | State |

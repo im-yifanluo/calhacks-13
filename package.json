@@ -22,7 +22,9 @@
     "test:video": "tsx scripts/test-video.ts",
     "upload:local": "node server/upload/local.mjs",
     "upload:dev": "node --env-file=server/upload/.env server/upload/service.mjs",
-    "tunnel": "cloudflared tunnel --url https://localhost:5173 --no-tls-verify"
+    "tunnel": "cloudflared tunnel --url https://localhost:5173 --no-tls-verify",
+    "ios:generate": "python3 scripts/generate_xcode_project.py",
+    "ios:demo:build": "xcodebuild -project apps/ios/SceneCaptureDemo.xcodeproj -scheme SceneCaptureDemo -configuration Debug -sdk iphonesimulator -derivedDataPath /tmp/memreplay-ios-demo build"
   },
   "engines": {
     "node": ">=22.12"
