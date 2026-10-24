@@ -82,6 +82,8 @@ The viewer develops against `apps/web/public/mock/memory.json` and never waits o
 
 ### 2.2 Reconstruction pipeline (`pipeline/`, Python, Runpod GPU)
 
+**Step-by-step commands and Runpod setup: [pipeline/README.md](../pipeline/README.md).**
+
 **One clip per memory. There is no separate room sweep.** Each memory gets one work dir, and every stage reads and writes files in it (layout and formats in [`pipeline/memreplay/handoff.py`](../pipeline/memreplay/handoff.py)). So any stage reruns alone: `memreplay stage <name> --work work/<id>`.
 
 The pipeline is split by **what each person delivers**. P1 and P2 both start on real work tonight and only meet through a few frozen files.
@@ -91,24 +93,24 @@ The pipeline is split by **what each person delivers**. P1 and P2 both start on 
 
 | Stage | Tool | Why this one | Output | Fallback |
 |---|---|---|---|---|
-| **S0** Frames (P1) | ffmpeg, keeping the clip's real timestamps. Keep the sharpest frame (Laplacian variance) in each 100 ms. Write a full-size copy and a small (~640 px) copy. | Real timestamps and fewer blurry frames than plain `fps=10`. | `frames/full/`, `frames/small/`, `frames.json` | ffmpeg `fps=10` |
+| **S0** Frames (P1) | ffmpeg, keeping the clip's real timestamps. Keep the sharpest frame (Laplacian variance) in each 100 ms. If the checkerboard was filmed, straighten the ultrawide lens (OpenCV calibration). Write a full-size copy and a small (~640 px) copy. | Real timestamps and fewer blurry frames than plain `fps=10`. A straightened lens lets ViPE use its default mode, which writes depth. | `frames/full/`, `frames/small/`, `frames.json` | ffmpeg `fps=10` |
 | **S1** Nouns (P2) | **Claude** on 8 keyframes → ≤6 rigid, textured things that move, each with a size range, density and grabbable flag. Always adds `person` and `hand`. | A fixed vocabulary misses the props in this scene. The same list is ViPE's masking phrases. | `nouns.json` | fixed list |
 | **S2** Masks (P2) | **SAM 3** (`facebookresearch/sam3`) in video mode, one run per noun. An object that leaves and re-enters the frame can get a new ID, so stitch tracklets (same 3D centroid within 0.3 m + similar look) before writing `tracks.json`. The wearer's own hands are tagged `ego-hand` (they touch the frame edge and sit closer than 0.8 m; the depth check runs after S3). Frames where a hand covers an object get a `held` flag. Claude reviews a crop gallery. Weights are gated on Hugging Face. | A text prompt finds every instance, and the detector keeps re-finding objects through the clip. Grounded-SAM-2's own README says its new-object IDs aren't very stable, and DEVA is obsolete. Egocentric video is still SAM 3's weakest domain, so expect some misses. | `masks/tracks.json` (COCO RLE), `masks/dyn/<idx>.png` | SAM 2.1 + Grounding DINO via HF `transformers`, plus 1-click fixes |
-| **S3** Cameras + depth (P1) | **NVIDIA ViPE** (`nv-tlabs/vipe`; `pip install nvidia-vipe` or its cu128 env). Phrases = defaults + `hand` + S1 nouns. Wide-angle (Mei) camera model (the override syntax for both is unverified). `pose_only_long` for long clips. Set `save_artifacts=true`, or no depth is written (from ViPE's default config; unverified). Don't use the UniK3D backend (BY-NC-SA). | The only released tool we found that masks moving things itself, solves the lens and gives near-metric depth on long clips. Its paper reports lower pose and focal error than MegaSaM at 3–5× the speed. DA3 and VGGT assume a static scene, and VGGT has no metric scale. | `world/cameras.json`, `world/depth.npz` | In order: ① undistort with the checkerboard, then ViPE pinhole ② MapAnything (`facebook/map-anything-apache` weights) on masked keyframes ③ MegaSaM, if a GPU is free |
-| **S4** World frame (P1) | open3d RANSAC floor fit on masked depth. +Y up. Scale = measured eye height ÷ median camera height. Cameras and depth are rewritten into the world frame (`in_world_frame=true`). | ViPE's depth is only near-metric. One physical measurement fixes the scale and sets the floor. | `world/world.json` | click 3 floor points |
+| **S3** Cameras + depth (P1) | **NVIDIA ViPE** (`nv-tlabs/vipe`; `pip install nvidia-vipe` or its cu128 env). `default` preset on S0's frames, via `run.py` (the `vipe infer` CLI can't set phrases). Phrases = `person`, `hand` + S1 nouns. Pass `save_artifacts=true` and `streams.frame_end=-1` (both verified). The `wide_angle` and `pose_only_long` presets write **no depth**, so use `wide_angle` only to cross-check the camera path. Don't use the UniK3D backend (BY-NC-SA). | The only released tool we found that masks moving things itself, solves the lens and gives near-metric depth on long clips. Its paper reports lower pose and focal error than MegaSaM at 3–5× the speed. DA3 and VGGT assume a static scene, and VGGT has no metric scale. | `vipe/` (poses, intrinsics, depth, masks) | In order: ① undistort with the checkerboard, then ViPE pinhole ② MapAnything (`facebook/map-anything-apache` weights) on masked keyframes ③ MegaSaM, if a GPU is free |
+| **S4** World frame (P1) | open3d RANSAC floor fit on masked depth. +Y up. Scale = measured eye height ÷ median camera height. Converts ViPE's output into the handoff files, already in the world frame (`in_world_frame=true`). | ViPE's depth is only near-metric. One physical measurement fixes the scale and sets the floor. | `world/cameras.json`, `world/depth.npz`, `world/world.json` | click 3 floor points |
 | **S5** Background (P1) | **gsplat** MCMC with a per-frame masked loss (~10-line patch), a trimmed loss on the top 5% of residuals, a 300k splat cap, appearance and pose refinement, ~15k steps (~12–15 min, estimate). Then crop, filter floaters and convert to `.spz`. **L0 version first:** fused masked depth points as splats (~2 min). | The cap applies during training, which is sharper than decimating afterwards. Explicit masks beat learned distractor handling (WildGaussians), and the trimmed loss catches shadows the masks miss. DA3's Gaussian head is non-commercial and doesn't remove movers; AnySplat is too low-resolution for VR. | `world/bg.spz` | Brush binary on the same data |
 | **S6** Ghosts (P1) | Depth inside eroded person masks, a depth-edge filter, 20–30k colored splats per frame at 10 Hz. | Simple: it reuses S2's masks and S3's depth, with no extra model. The depth-edge filter removes flying pixels, so ghosts look like people instead of noise. 4DGT only reads Aria `.vrs` files. | `world/ghosts.json` + `world/ghosts/<id>/<n>.spz` (non-grabbable splat-sequence objects) | 10k points, every 2nd frame |
 | **S7** Object asset (P2) | **SAM 3D Objects** on the best keyframe (mask area × sharpness × not covered by a hand) → splat, ≤30k. Scale fix: render the asset's depth, scale = median(observed) ÷ median(rendered), then ICP on rotation and translation only (scale locked), clamped to Claude's size range. trimesh convex hull, ≤64 vertices. Mass = density × volume. | It fills in hidden sides and also predicts a pose. TRELLIS.2 and Hunyuan3D give an unscaled asset with no pose. Letting scale float in ICP on one-sided depth collapses it, so scale comes from the depth ratio. | `objects/<id>/gs.spz`, `objects/<id>/hull.glb` | TRELLIS.2 + our own fit; or fused points + box collider |
 | **S8** 6DoF tracks (P2) | **CoTracker3** offline on points inside the mask minus hands → lift to world with P1's depth and cameras → per-frame RANSAC Kabsch (scale fixed, 2 cm inliers, at least 6) → Savitzky-Golay (window 7, order 2) → 10 Hz keyframes. `held` frames are interpolated. Until P1's world cameras land, work in camera coordinates. | Real point matches keep rotation stable; ICP on one-sided monocular depth slides, jitters or flips. FoundationPose would be better, but it needs a source build, fails when a hand wraps the object, and its license is probably non-commercial (unverified). Textureless props fail, so choose textured ones. | `objects/objects.json` | translation only (median of masked world points), then static |
 | **S9** Merge (P1; anyone can run it) | `memreplay merge <work>`, implemented and tested. Checks that cameras are in the world frame, the background splat budget, and objects below the floor. | — | `memory.json` | — |
 
-**Why this split.** ViPE masks moving things itself, so P1's cameras never wait for P2; P2's nouns only make them better. P1 needs P2's masks only for S5 and S6, and can use ViPE's own masks for L0 (whether ViPE writes them to disk is unverified; if it doesn't, P1 uses P2's masks v0 from 1 AM). P2 works in camera coordinates until P1's world cameras land. The cut follows env and file boundaries, so nobody imports the other person's env.
+**Why this split.** ViPE masks moving things itself, so P1's cameras never wait for P2; P2's nouns only make them better. P1 needs P2's masks only for S5 and S6, and uses ViPE's own masks (written to `vipe/mask/`, verified) for L0. P2 works in camera coordinates until P1's world cameras land. The cut follows env and file boundaries, so nobody imports the other person's env.
 
 **Handoffs.** Formats are frozen in [`pipeline/memreplay/handoff.py`](../pipeline/memreplay/handoff.py). Change them only when P1 and P2 both agree.
 
 | When | P1 · World | P2 · Things |
 |---|---|---|
-| Fri 11:15 PM | — | Request Hugging Face access to `sam3` and `sam-3d-objects`. Formats frozen in `handoff.py`. |
+| Fri 11:15 PM | — | Request Hugging Face access to `sam3.1`, `sam3` and `sam-3d-objects`. Formats frozen in `handoff.py`. |
 | Fri 11:30 PM | `frames/` + `frames.json` for the test clip → P2 | `nouns.json` v0 → P1 |
 | Sat 1:00 AM | ViPE go/no-go; `cameras.json` + `depth.npz` + `world.json` v0 → P2 | masks v0 → P1 (SAM 2.1 clicks if access is still pending) |
 | **Sat 2:30 AM** | **Checkpoint 1:** L0 `memory.json` → P3 (fused-point background + ghosts + head path) | translation-only tracks + box colliders |
@@ -119,7 +121,7 @@ The pipeline is split by **what each person delivers**. P1 and P2 both start on 
 | **Sat 11:30 AM** | **Merge to `memory.json` v1.** Gate: any failing stage switches to its fallback. | |
 | **Sat 12:00 PM** | **L1 frozen (Checkpoint 2)** | |
 
-**Go/no-go test tonight (by Sat 1:00 AM).** P1 runs ViPE twice on a test clip, once with the default config and once with the wide-angle camera model. It passes if:
+**Go/no-go test tonight (by Sat 1:00 AM).** P1 runs S0 and ViPE's `default` preset on a test clip, and checks the camera path against the `wide_angle` preset. It passes if:
 - the floor comes out flat;
 - eye height before rescaling is 1.4–1.8 m;
 - two frames 3 s apart don't show the background doubled.
@@ -130,9 +132,10 @@ At the same time, P2 runs SAM 3 (or SAM 2.1) with the prompt "box" on the same c
 
 | Env | Owner | Contents |
 |---|---|---|
-| `world` | P1 | ViPE, gsplat, open3d. P1 also owns the Brush binary. |
-| `seg` | P2 | SAM 3, SAM 2.1, CoTracker3 (Python 3.12, torch ≥ 2.7) |
-| `obj` | P2 | SAM 3D Objects |
+| `vipe` | P1 | ViPE (its packages live in ViPE's own uv venv) |
+| `world` | P1 | gsplat, open3d, splat-transform. P1 also owns the Brush binary. |
+| `seg` | P2 | SAM 3.1, SAM 2.1, Grounding DINO, CoTracker3 (Python 3.12, torch 2.10) |
+| `obj` | P2 | SAM 3D Objects (Python 3.11, torch 2.5.1, CUDA 12.1; needs ≥ 32 GB VRAM) |
 | `core` | shared | memreplay CLI, `anthropic` |
 
 Optional: a second, smaller pod for P2 on the same network volume (attaching one volume to two pods is unverified). The storage bucket is owned by P4. Upload each work dir as-is, because `memory.json` uses URLs relative to it.
@@ -218,7 +221,7 @@ Modules:
 | When | Goal | Details |
 |---|---|---|
 | **Fri 7:30–8:30 PM** | Kickoff | Everyone reads this plan. Accounts: Runpod (ask for credits), `spacetime login`, Claude API key, GitHub repo, R2 bucket. **Shoot a test clip** (rules in section 5). |
-| **Fri 8:30–11:30 PM** | Spikes in parallel | **P1:** pod and `world` env with ViPE; `frames/` + `frames.json` for the test clip to P2 by 11:30. **P2:** request Hugging Face access (`sam3`, `sam-3d-objects`) by 11:15; `seg` env with SAM 2.1 meanwhile; `nouns.json` v0 to P1 by 11:30. **P3:** scaffold on Quest over adb; load a `.spz` at 72 fps (ours arrives with L0 at 2:30 AM); 90-min IWSDK + Spark spike. **P4:** module published locally; two browsers see each other's heads; shared play/pause. |
+| **Fri 8:30–11:30 PM** | Spikes in parallel | **P1:** pod, `vipe` env and `world` env; `frames/` + `frames.json` for the test clip to P2 by 11:30. **P2:** request Hugging Face access (`sam3.1`, `sam3`, `sam-3d-objects`) by 11:15; `seg` env with SAM 2.1 meanwhile; `nouns.json` v0 to P1 by 11:30. **P3:** scaffold on Quest over adb; load a `.spz` at 72 fps (ours arrives with L0 at 2:30 AM); 90-min IWSDK + Spark spike. **P4:** module published locally; two browsers see each other's heads; shared play/pause. |
 | **Fri 11:30 PM–Sat 2:30 AM** | ViPE go/no-go, then L0 + physics | **P1:** ViPE go/no-go test (section 2.2); `cameras.json` + `depth.npz` + `world.json` v0 to P2 by 1 AM; then the L0 `memory.json`. **P2:** SAM 3 (or 2.1) "box" test on the same clip; masks v0 to P1 by 1 AM; then translation-only tracks + box colliders. **P3:** Rapier grab and throw while paused. **P4:** viewer wired to the shared clock and avatars. |
 | **Sat 2:30 AM** | ✅ **Checkpoint 1** | **L0 `memory.json` to P3:** our own test clip as a fused-point background, ghosts and the head path, visible in the Quest. P2 adds translation-only tracks + box colliders. Gates: if ViPE fails, **move down its fallbacks** (checkerboard + pinhole, MapAnything, MegaSaM); if SAM 3 access is still pending, **stay on SAM 2.1**; if IWSDK fails, **stay on plain three**. |
 | **Sat 2:30–9 AM** | Overnight runs, sleep in shifts | Two people sleep at a time. **P1:** gsplat on the test clip. **P2:** SAM 3D batch + Kabsch tracker. |

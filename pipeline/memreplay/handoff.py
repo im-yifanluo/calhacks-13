@@ -10,9 +10,12 @@ because memory.json uses URLs relative to it:
   <work>/frames.json                S0  P1  FramesIndex: every stage keys frames on `idx`
   <work>/nouns.json                 S1  P2  Nouns: also ViPE's masking phrases
   <work>/masks/tracks.json          S2  P2  MaskTracks (COCO RLE per object per frame)
-  <work>/masks/dyn/<idx>.png        S2  P2  union of all moving pixels, dilated 12 px (255 = moving)
-  <work>/world/cameras.json         S3  P1  Cameras
-  <work>/world/depth.npz            S3  P1  depth: float16 meters [N,H,W]; idx: int32 [N] (same order as cameras)
+  <work>/masks/dyn/<idx>.png        S2  P2  union of all moving pixels, dilated 12 px (255 = moving, 0 = static).
+                                            gsplat/Brush want the INVERSE (255 = static); S5 writes colmap/masks/ = 255 - dyn.
+  <work>/frames/small.mp4           S0  P1  kept small frames as a 10 fps video (ViPE input)
+  <work>/vipe/                      S3  P1  ViPE's raw output: pose/, intrinsics/, depth/, mask/ (frame = position)
+  <work>/world/cameras.json         S4  P1  Cameras
+  <work>/world/depth.npz            S4  P1  depth: float16 meters [N,H,W]; idx: int32 [N] (same order as cameras)
   <work>/world/world.json           S4  P1  WorldInfo
   <work>/world/bg.spz               S5  P1  background splat (L0: fused depth points; L1: gsplat)
   <work>/world/ghosts.json          S6  P1  ObjectsFragment: people as non-grabbable splat sequences
@@ -21,6 +24,9 @@ because memory.json uses URLs relative to it:
   <work>/objects/<id>/hull.glb      S7  P2  convex hull collider (<= 64 vertices)
   <work>/objects/objects.json       S8  P2  ObjectsFragment: visuals, colliders, mass, tracks
   <work>/memory.json                S9  merge
+
+<idx> in file names is always zero-padded to 5 digits: f"{idx:05d}" (frames/full/00042.jpg, masks/dyn/00042.png).
+Tools that number frames by folder position: position p = the p-th kept frame in frames.json.
 """
 from __future__ import annotations
 

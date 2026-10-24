@@ -21,3 +21,5 @@ __pycache__/
 server/spacetime/target/
 # agents
 .claude
+# memories copied from the pod for local viewing (big files)
+apps/web/public/memories/
