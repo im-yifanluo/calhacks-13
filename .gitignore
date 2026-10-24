@@ -28,3 +28,9 @@ apps/web/public/local/
 # Nikko's private build journal (not shared with the team)
 NIKKO_BUILD_LOG.md
 apps/web/.test-dist/
+# iPhone build output and machine-specific signing/server configuration
+apps/ios/DerivedData/
+apps/ios/.build/
+apps/ios/Backend.local.xcconfig
+apps/ios/**/xcuserdata/
+!apps/ios/CameraAccess/TestResources/plant.mp4
