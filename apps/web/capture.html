@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Memory Replay · Capture test</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <a href="/?demo=1">MEMORY REPLAY</a
+        ><span id="connection" role="status">Connecting…</span>
+      </header>
+      <h1>See what you recorded.</h1>
+      <p class="intro">
+        Record from your Wayfarer glasses in the iPhone app:
+        <strong>O · ON</strong> starts recording, <strong>F · OFF</strong> stops
+        the camera feed and uploads the clip. The live glasses preview is in
+        that app.
+      </p>
+      <div class="columns">
+        <section id="upload-panel" class="card"></section>
+        <section class="card">
+          <h2>Stored recordings</h2>
+          <p>
+            These rows come from SpacetimeDB. Select one, then play the video
+            fetched from its stored URL.
+          </p>
+          <label for="recordings">Database recordings</label
+          ><select id="recordings">
+            <option value="">No uploaded videos yet</option>
+          </select>
+          <dl>
+            <dt>Database row</dt>
+            <dd id="row-id">—</dd>
+            <dt>Processing status</dt>
+            <dd id="row-status">—</dd>
+            <dt>Video URL</dt>
+            <dd><a id="source-link" target="_blank" rel="noopener">—</a></dd>
+          </dl>
+          <video
+            id="stored-video"
+            controls
+            playsinline
+            preload="metadata"
+            aria-label="Stored video playback"
+          ></video>
+          <button id="check-storage" disabled>Verify stored file</button>
+          <p id="storage-proof" role="status">
+            Select a recording to check its file.
+          </p>
+          <p id="playback-proof" role="status"></p>
+        </section>
+      </div>
+      <p id="error" role="alert"></p>
+      <footer>
+        Video bytes live in storage; SpacetimeDB stores the record and URL.
+        “Uploaded” confirms ingestion, not a finished 3D reconstruction. This
+        demo library uses public database rows.
+      </footer>
+    </main>
+    <script type="module" src="/src/capture.ts"></script>
+  </body>
+</html>

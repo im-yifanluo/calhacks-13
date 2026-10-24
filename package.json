@@ -19,7 +19,10 @@
     "typecheck": "tsc -p server/spacetime/tsconfig.json && tsc -p apps/web/tsconfig.json --noEmit",
     "test:integration": "tsx scripts/test-multiplayer.ts",
     "upload:dev": "node --env-file=server/upload/.env server/upload/service.mjs",
-    "stdb:build": "spacetime build --module-path server/spacetime"
+    "stdb:build": "spacetime build --module-path server/spacetime",
+    "upload:local": "node server/upload/local.mjs",
+    "test:video": "tsx scripts/test-video.ts",
+    "ios:generate": "python3 scripts/generate_xcode_project.py"
   },
   "engines": {
     "node": ">=22.12"

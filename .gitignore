@@ -19,3 +19,7 @@ __pycache__/
 *.egg-info/
 # spacetime
 server/spacetime/target/
+
+# Xcode local state
+**/xcuserdata/
+DerivedData/

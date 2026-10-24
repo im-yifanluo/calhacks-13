@@ -46,6 +46,11 @@ test("presign/complete requires identity, matching object and creates memory onl
       createMemory: async (data: any) => {
         saved = data;
       },
+      registerIdentity: async () => ({ identity: owner, token: "valid" }),
+      listMemories: async (id: string) =>
+        saved && id === owner
+          ? [{ id: "42", requestId: saved.requestId, status: "uploaded" }]
+          : [],
     }),
   );
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -66,6 +71,28 @@ test("presign/complete requires identity, matching object and creates memory onl
       body: JSON.stringify({ identity: owner, ...body }),
     });
   try {
+    const base = `http://127.0.0.1:${port}`;
+    expect(
+      (
+        await fetch(`${base}/api/identity`, {
+          method: "POST",
+          headers: { Origin: "https://attacker.test" },
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      await (await fetch(`${base}/api/identity`, { method: "POST" })).json(),
+    ).toEqual({ identity: owner, token: "valid" });
+    expect((await fetch(`${base}/api/memories?identity=${owner}`)).status).toBe(
+      401,
+    );
+    expect(
+      (
+        await fetch(`${base}/api/memories?identity=${"b".repeat(64)}`, {
+          headers: { Authorization: "Bearer valid" },
+        })
+      ).status,
+    ).toBe(401);
     const input = {
       name: "clip.mp4",
       type: "video/mp4",
@@ -89,6 +116,14 @@ test("presign/complete requires identity, matching object and creates memory onl
       (await request("complete", { receipt: prepared.receipt })).status,
     ).toBe(200);
     expect(saved.requestId).toBe(prepared.requestId);
+    const listing = await fetch(`${base}/api/memories?identity=${owner}`, {
+      headers: { Authorization: "Bearer valid" },
+    });
+    expect(await listing.json()).toEqual({
+      memories: [
+        { id: "42", requestId: prepared.requestId, status: "uploaded" },
+      ],
+    });
     expect(
       (await request("complete", { receipt: prepared.receipt })).status,
     ).toBe(200);

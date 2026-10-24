@@ -8,7 +8,13 @@ export default defineConfig({
   server: {
     host: process.env.LOCAL_HTTP === "1" ? "127.0.0.1" : true,
     port: 5173,
-    allowedHosts: [".trycloudflare.com", ".ngrok-free.app"],
+    allowedHosts: [
+      ".trycloudflare.com",
+      ".ngrok-free.app",
+      ...(process.env.PUBLIC_ORIGIN
+        ? [new URL(process.env.PUBLIC_ORIGIN).hostname]
+        : []),
+    ],
     proxy: {
       "/stdb": {
         target: "http://127.0.0.1:3000",
@@ -16,6 +22,14 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/stdb/, ""),
       },
       "/api": { target: "http://127.0.0.1:8788" },
+    },
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        viewer: new URL("./index.html", import.meta.url).pathname,
+        capture: new URL("./capture.html", import.meta.url).pathname,
+      },
     },
   },
   // If we adopt IWSDK (super-three), keep a single three instance so Spark binds to it.

@@ -1,0 +1,89 @@
+import { Multiplayer } from "./net";
+import { uploadPanel } from "./upload";
+import "./capture.css";
+const net = new Multiplayer();
+const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
+  document.getElementById(id) as T;
+const select = $<HTMLSelectElement>("recordings"),
+  video = $<HTMLVideoElement>("stored-video");
+let selected = new URLSearchParams(location.search).get("request") || "",
+  signature = "",
+  proofGeneration = 0;
+function show() {
+  selected = select.value;
+  proofGeneration++;
+  const memory = net.memories.find((m) => m.requestId === selected);
+  $("row-id").textContent = memory
+    ? `#${memory.id} · confirmed in SpacetimeDB`
+    : "—";
+  $("row-status").textContent = memory?.status || "—";
+  const link = $<HTMLAnchorElement>("source-link");
+  link.textContent = memory?.sourceUrl || "—";
+  if (memory) {
+    link.href = memory.sourceUrl;
+    video.src = memory.sourceUrl;
+  } else {
+    link.removeAttribute("href");
+    video.removeAttribute("src");
+    video.load();
+  }
+  $<HTMLButtonElement>("check-storage").disabled = !memory;
+  $("storage-proof").textContent = memory
+    ? "Database row found. Click Verify stored file, then press Play."
+    : "Select a recording to check its file.";
+  $("playback-proof").textContent = "";
+}
+select.onchange = show;
+$("check-storage").onclick = async () => {
+  const memory = net.memories.find((m) => m.requestId === selected);
+  if (!memory) return;
+  const generation = ++proofGeneration;
+  $("storage-proof").textContent = "Checking the stored URL…";
+  try {
+    const response = await fetch(memory.sourceUrl, {
+      method: "HEAD",
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`Storage returned ${response.status}`);
+    const size = response.headers.get("Content-Length"),
+      hash = response.headers.get("X-Content-SHA256");
+    if (generation !== proofGeneration) return;
+    $("storage-proof").textContent =
+      `Storage reachable · ${size ? Number(size).toLocaleString() + " bytes" : "size not exposed by server"}${hash ? " · SHA-256 " + hash : ""}. Press Play to verify the content.`;
+  } catch (error) {
+    if (generation === proofGeneration)
+      $("storage-proof").textContent =
+        `Could not verify storage: ${error instanceof Error ? error.message : String(error)}. Check the service and storage CORS.`;
+  }
+};
+video.onplaying = () => {
+  $("playback-proof").textContent =
+    "Playing the video fetched from the database source URL. Check that it shows your recorded scene.";
+};
+video.onerror = () => {
+  $("playback-proof").textContent =
+    "Video could not be played. Check that storage is running and the browser supports its codec.";
+};
+uploadPanel(net, $("upload-panel"), (requestId) => {
+  selected = requestId;
+  signature = "";
+  render();
+});
+function render() {
+  $("connection").textContent = net.status;
+  $("error").textContent = net.error;
+  const memories = net.memories
+    .filter((m) => m.sourceUrl)
+    .sort((a, b) => Number(b.id - a.id));
+  const next = memories.map((m) => `${m.id}:${m.status}:${m.title}`).join("|");
+  if (next === signature) return;
+  signature = next;
+  select.replaceChildren();
+  for (const m of memories)
+    select.add(new Option(`#${m.id} · ${m.title} · ${m.status}`, m.requestId));
+  if (memories.some((m) => m.requestId === selected)) select.value = selected;
+  if (!memories.length) select.add(new Option("No uploaded videos yet", ""));
+  show();
+}
+net.addEventListener("change", render);
+net.connect();

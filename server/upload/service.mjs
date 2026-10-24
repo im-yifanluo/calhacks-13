@@ -71,9 +71,12 @@ export function makeHandler({
   head,
   createMemory,
   pipelineIdentity,
+  registerIdentity,
+  listMemories,
 }) {
   return async (req, res) => {
     const origin = req.headers.origin;
+    const route = new URL(req.url, "http://localhost");
     const send = (status, data) => {
       res.writeHead(status, {
         "Content-Type": "application/json",
@@ -95,19 +98,39 @@ export function makeHandler({
     }
     if (req.url === "/api/health") return send(200, { status: "ok" });
     if (
-      req.method !== "POST" ||
-      !["/api/uploads/presign", "/api/uploads/complete"].includes(req.url)
+      req.method === "POST" &&
+      route.pathname === "/api/identity" &&
+      registerIdentity
+    ) {
+      try {
+        return send(200, await registerIdentity());
+      } catch {
+        return send(502, { error: "Could not connect to SpacetimeDB" });
+      }
+    }
+    const listing =
+      req.method === "GET" &&
+      route.pathname === "/api/memories" &&
+      listMemories;
+    if (
+      !listing &&
+      (req.method !== "POST" ||
+        !["/api/uploads/presign", "/api/uploads/complete"].includes(req.url))
     )
       return send(404, { error: "Not found" });
     const auth = req.headers.authorization;
     if (!auth?.startsWith("Bearer "))
       return send(401, { error: "Connect to SpacetimeDB first" });
     try {
-      const body = await json(req);
+      const body = listing
+        ? { identity: route.searchParams.get("identity") }
+        : await json(req);
       if (!/^[a-f0-9]{64}$/i.test(body.identity ?? ""))
         return send(401, { error: "Invalid identity" });
       if (!(await verify(body.identity, auth)))
         return send(401, { error: "Identity/token mismatch" });
+      if (listing)
+        return send(200, { memories: await listMemories(body.identity, auth) });
       if (req.url.endsWith("/presign")) {
         const data = metadata(body, body.identity, assetBase);
         return send(200, {
@@ -129,7 +152,20 @@ export function makeHandler({
           "Upload is incomplete or has incorrect content type/size",
         );
       await createMemory(data, auth, pipelineIdentity);
-      return send(200, { requestId: data.requestId, status: "uploaded" });
+      const memory = listMemories
+        ? (await listMemories(data.owner, auth)).find(
+            (row) => row.requestId === data.requestId,
+          )
+        : undefined;
+      if (listMemories && !memory)
+        throw new Error(
+          "Upload stored, but database confirmation is missing. Retry completion.",
+        );
+      return send(200, {
+        requestId: data.requestId,
+        status: memory?.status || "uploaded",
+        memory,
+      });
     } catch (error) {
       send(400, {
         error: error instanceof Error ? error.message : "Upload failed",
@@ -166,7 +202,6 @@ export function productionConfig(env = process.env) {
     region: env.S3_REGION || "auto",
     forcePathStyle: env.S3_FORCE_PATH_STYLE === "true",
   });
-  const base = env.STDB_HTTP_URL.replace(/\/$/, "");
   return {
     secret: env.UPLOAD_SIGNING_SECRET,
     assetBase: env.ASSET_BASE_URL,
@@ -174,13 +209,7 @@ export function productionConfig(env = process.env) {
     allowedOrigins: (
       env.UPLOAD_ALLOWED_ORIGINS || "https://localhost:5173"
     ).split(","),
-    verify: async (id, auth) =>
-      (
-        await fetch(`${base}/v1/identity/${id}/verify`, {
-          headers: { Authorization: auth },
-          signal: AbortSignal.timeout(10000),
-        })
-      ).ok,
+    ...databaseConfig(env),
     sign: async (d) =>
       getSignedUrl(
         s3,
@@ -197,6 +226,50 @@ export function productionConfig(env = process.env) {
         new HeadObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
       );
       return { size: result.ContentLength, type: result.ContentType };
+    },
+  };
+}
+
+export function databaseConfig(env = process.env) {
+  const base = env.STDB_HTTP_URL.replace(/\/$/, "");
+  const url = `${base}/v1/database/${encodeURIComponent(env.STDB_DATABASE)}`;
+  return {
+    verify: async (id, auth) =>
+      (
+        await fetch(`${base}/v1/identity/${id}/verify`, {
+          headers: { Authorization: auth },
+          signal: AbortSignal.timeout(10000),
+        })
+      ).ok,
+    registerIdentity: async () => {
+      const response = await fetch(`${base}/v1/identity`, {
+        method: "POST",
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) throw new Error("Identity registration failed");
+      return response.json();
+    },
+    listMemories: async (identity, auth) => {
+      if (!/^[a-f0-9]{64}$/i.test(identity))
+        throw new Error("Invalid identity");
+      const response = await fetch(`${url}/sql`, {
+        method: "POST",
+        headers: { Authorization: auth },
+        body: `SELECT id, title, source_url, status, duration_us, request_id FROM memory WHERE owner = 0x${identity}`,
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) throw new Error("Database lookup failed");
+      const [result] = await response.json();
+      return result.rows.map(
+        ([id, title, sourceUrl, status, durationUs, requestId]) => ({
+          id: String(id),
+          title,
+          sourceUrl,
+          status,
+          durationUs: String(durationUs),
+          requestId,
+        }),
+      );
     },
     createMemory: async (d, auth, pipeline) => {
       const response = await fetch(
@@ -222,6 +295,7 @@ export function productionConfig(env = process.env) {
     },
   };
 }
+
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href

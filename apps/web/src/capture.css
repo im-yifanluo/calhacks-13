@@ -1,0 +1,158 @@
+:root {
+  font:
+    15px/1.5 system-ui,
+    sans-serif;
+  color: #e7f2f1;
+  background: #101720;
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 1120px;
+  margin: auto;
+  padding: 28px;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+a {
+  color: #82e6c5;
+}
+h1 {
+  font-size: clamp(28px, 5vw, 48px);
+  letter-spacing: -0.035em;
+  margin: 34px 0 12px;
+  line-height: 1.1;
+}
+h2 {
+  font-size: 21px;
+  margin-top: 0;
+}
+.intro {
+  max-width: 800px;
+  color: #bbced5;
+  margin-bottom: 30px;
+}
+.columns {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 20px;
+}
+.card {
+  padding: 24px;
+  border: 1px solid #354653;
+  border-radius: 16px;
+  background: #17232e;
+}
+label {
+  display: block;
+  color: #bcd0d6;
+  font-size: 13px;
+  margin: 15px 0 6px;
+}
+input,
+select,
+button {
+  font: inherit;
+  min-height: 44px;
+  border-radius: 8px;
+}
+input,
+select {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  color: inherit;
+  background: #0d1821;
+  border: 1px solid #425766;
+  margin-top: 6px;
+}
+button {
+  border: 0;
+  background: #8de2c4;
+  color: #102e29;
+  padding: 10px 16px;
+  margin: 14px 8px 0 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+video {
+  display: block;
+  width: 100%;
+  max-height: 300px;
+  aspect-ratio: 16/9;
+  background: #070d13;
+  border-radius: 10px;
+  object-fit: contain;
+  margin: 16px 0;
+}
+p,
+dd,
+footer {
+  overflow-wrap: anywhere;
+}
+dl {
+  font-size: 13px;
+}
+dt {
+  color: #91abb7;
+  margin-top: 10px;
+}
+dd {
+  margin: 2px 0;
+}
+progress {
+  width: 100%;
+  margin-top: 16px;
+  accent-color: #8de2c4;
+}
+footer {
+  font-size: 12px;
+  color: #9ab0bc;
+  margin-top: 28px;
+}
+#connection {
+  color: #8de2c4;
+}
+#error {
+  color: #ffb0a6;
+}
+#storage-proof,
+#playback-proof {
+  font-size: 13px;
+  color: #c5d9df;
+}
+:focus-visible {
+  outline: 2px solid #8de2c4;
+  outline-offset: 3px;
+}
+[hidden] {
+  display: none !important;
+}
+@media (max-width: 700px) {
+  main {
+    padding: 18px;
+  }
+  .columns {
+    grid-template-columns: 1fr;
+  }
+  .card {
+    padding: 18px;
+  }
+  h1 {
+    margin-top: 26px;
+  }
+}

@@ -1,8 +1,13 @@
 import type { Multiplayer } from "./net";
-export function uploadPanel(net: Multiplayer, root: HTMLElement) {
+export function uploadPanel(
+  net: Multiplayer,
+  root: HTMLElement,
+  onComplete?: (requestId: string) => void,
+) {
   root.innerHTML = `<h2>Upload a memory</h2><p>Export your glasses video from Meta AI to your camera roll, then select it here.</p>
   <label>Title<input id="upload-title" maxlength="120" required placeholder="Saturday at the park"></label>
   <label>Video<input id="upload-file" type="file" accept="video/mp4,video/quicktime,.mp4,.mov"></label>
+  <video id="upload-preview" controls playsinline preload="metadata" hidden aria-label="Selected video preview"></video>
   <button id="upload-start">Upload video</button><button id="upload-cancel" hidden>Cancel</button>
   <progress id="upload-progress" max="100" value="0"></progress><p id="upload-status" role="status"></p>`;
   const status = root.querySelector("#upload-status")!;
@@ -10,6 +15,21 @@ export function uploadPanel(net: Multiplayer, root: HTMLElement) {
   const start = root.querySelector<HTMLButtonElement>("#upload-start")!;
   const cancel = root.querySelector<HTMLButtonElement>("#upload-cancel")!;
   let xhr: XMLHttpRequest | undefined;
+  let previewURL = "";
+  const fileInput = root.querySelector<HTMLInputElement>("#upload-file")!;
+  const preview = root.querySelector<HTMLVideoElement>("#upload-preview")!;
+  fileInput.onchange = () => {
+    if (previewURL) URL.revokeObjectURL(previewURL);
+    const file = fileInput.files?.[0];
+    preview.hidden = !file;
+    if (file) {
+      previewURL = URL.createObjectURL(file);
+      preview.src = previewURL;
+    } else {
+      preview.removeAttribute("src");
+      preview.load();
+    }
+  };
   cancel.onclick = () => xhr?.abort();
   start.onclick = async () => {
     start.disabled = true;
@@ -108,11 +128,16 @@ export function uploadPanel(net: Multiplayer, root: HTMLElement) {
       }
       cancel.hidden = true;
       status.textContent = "Verifying upload and registering memory…";
-      await api("complete", { identity, receipt: pending.receipt });
+      const result = await api("complete", {
+        identity,
+        receipt: pending.receipt,
+      });
       sessionStorage.removeItem("memreplay-upload");
       progress.value = 100;
-      status.textContent =
-        "Uploaded. Pipeline progress appears in the memory list.";
+      status.textContent = result.memory
+        ? `Uploaded. Database row #${result.memory.id} verified. Open Capture test to play the stored video.`
+        : "Uploaded. Pipeline progress appears in the memory list.";
+      onComplete?.(result.requestId);
     } catch (error) {
       status.textContent =
         error instanceof Error ? error.message : String(error);

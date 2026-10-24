@@ -9,6 +9,8 @@ Full plan, system design, and timeline: [docs/PLAN.md](docs/PLAN.md)
 ```
 apps/web/            Viewer: one WebXR web app for Quest 3S browser + phones + laptops
                      (three.js + Spark splats + Rapier physics + SpacetimeDB client)
+apps/ios/            Native iPhone glasses preview, O/F recording and verified upload
+server/upload/       S3/R2 signing service and local disk transport for capture tests
 server/spacetime/    SpacetimeDB module: rooms, players, shared playhead, branches, object overrides
 packages/shared/     memory.json contract (TypeScript). Python mirror: pipeline/memreplay/manifest.py
 pipeline/            Python GPU pipeline: video -> poses/depth -> segments -> splat + meshes + tracks -> memory.json
@@ -20,7 +22,7 @@ data/                Local scratch (git-ignored). Big assets go to object storag
 
 Jerry's multiplayer/phone lane is implemented: SpacetimeDB tables/reducers and generated SDK bindings, rooms and presence, shared timeline/branches, phone grab/throw, trajectory replay, authenticated upload service and worker status handoff. The local demo uses clearly labeled debug geometry. GPU reconstruction and production Quest object rendering/hand input remain P1–P3 work.
 
-Setup, cloud configuration and the Wayfarer → phone → Quest test: **[docs/P4.md](docs/P4.md)**. Rehearsal and honest Devpost draft: **[docs/DEMO.md](docs/DEMO.md)**.
+Setup, cloud configuration and the Wayfarer → phone → Quest test: **[docs/P4.md](docs/P4.md)**. **Live iPhone preview, O/F controls, and video/database verification: [docs/CAPTURE_TEST.md](docs/CAPTURE_TEST.md)**. Rehearsal and honest Devpost draft: **[docs/DEMO.md](docs/DEMO.md)**.
 
 ## Quick start
 
