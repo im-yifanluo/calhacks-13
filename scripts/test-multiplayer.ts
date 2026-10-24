@@ -4,7 +4,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import { makeHandler, productionConfig } from "../server/upload/service.mjs";
 import { DbConnection } from "../apps/web/src/module_bindings";
 const database = process.env.STDB_DATABASE || "memory-replay";
-const uri = process.env.STDB_WS_URL || "ws://127.0.0.1:3000";
+const uri = process.env.STDB_WS_URL || `ws://127.0.0.1:${process.env.STDB_PORT || 3055}`;
 const clients: DbConnection[] = [];
 async function connect(
   token?: string,
