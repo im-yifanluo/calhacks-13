@@ -8,6 +8,7 @@ import { Viewer } from "./viewer.js";
 import { XRInput } from "./input-xr.js";
 import { desktopInput } from "./input-desktop.js";
 import { sampleTrack } from "./tracks.js";
+import { PhoneJoystick, isTouchDevice } from "./phone-joystick.js";
 import "./style.css";
 
 declare global { interface Window { memoryReplay?: Viewer } }
@@ -40,6 +41,12 @@ async function main(): Promise<void> {
   controls.maxPolarAngle = Math.PI * 0.49;
   const spark = new SparkRenderer({ renderer, preUpdate: false, maxStdDev: Math.sqrt(5), lodSplatCount: 500_000 });
   scene.add(spark);
+  const joystick = new PhoneJoystick(element("joystick"), camera, controls);
+  document.body.classList.toggle("touch", isTouchDevice());
+  // Keep the WALK pad clear of the bottom HUD, whatever its height.
+  const hud = element("hud");
+  const hudSpace = () => document.documentElement.style.setProperty("--hud-space", `${Math.max(0, Math.round(innerHeight - hud.getBoundingClientRect().top))}px`);
+  new ResizeObserver(hudSpace).observe(hud); addEventListener("resize", hudSpace); hudSpace();
   const savedCamera = new THREE.Vector3(), savedTarget = new THREE.Vector3();
   // Keep main's corrected spawn: start at the wearer's horizontal position on the scene floor.
   let vrSpawn = { x: 0, y: 0, z: 2, yaw: 0 };
@@ -107,7 +114,7 @@ async function main(): Promise<void> {
     if (eyes.checked && !renderer.xr.isPresenting) {
       sampleTrack(memory.cameraTrack, currentViewer.timeline.time, camera);
       camera.fov = memory.manifest.camera.fovYDeg; camera.updateProjectionMatrix();
-    } else if (!renderer.xr.isPresenting && controls.enabled) controls.update();
+    } else if (!renderer.xr.isPresenting) { joystick.update(dt); if (controls.enabled) controls.update(); }
     const tl = currentViewer.timeline;
     if (timestamp - lastUI > 100) {
       lastUI = timestamp; play.textContent = tl.playing ? "Pause" : "Play take";
@@ -131,6 +138,7 @@ async function main(): Promise<void> {
         }
       }
       branches.value = tl.activeId;
+      document.body.classList.toggle("wearer-view", eyes.checked);
     }
     debugLines.visible = debug.checked && currentViewer.physics.bodies.size > 0;
     debugBoxes.forEach(box => { box.visible = debug.checked && !debugLines.visible; });

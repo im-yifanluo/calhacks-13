@@ -53,3 +53,12 @@ kbd { font: inherit; background: #263944; padding: 1px 4px; border-radius: 3px; 
   #play { min-width: 73px; padding: 9px; } #status { font-size: 11px; } .help { flex-direction: column; gap: 6px; }
 }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+/* Phone WALK pad (phone-joystick.ts): touch devices only, never in VR or the wearer's view. */
+#joystick { position: absolute; left: 24px; bottom: calc(var(--hud-space, 250px) + 16px); width: 88px; height: 88px; display: none; place-items: center; border-radius: 50%; border: 1px solid #a2e8d677; background: radial-gradient(circle, #a2e8d633 20%, #162834aa 23%); touch-action: none; user-select: none; -webkit-user-select: none; }
+.touch #joystick { display: grid; }
+#joystick .knob { grid-area: 1 / 1; width: 34px; height: 34px; border-radius: 50%; background: #a2e8d640; border: 1px solid #a2e8d6aa; pointer-events: none; }
+#joystick .joystick-label { grid-area: 1 / 1; font-size: 9px; letter-spacing: .1em; color: #d7e7ed; pointer-events: none; }
+.in-xr #joystick, .wearer-view #joystick { display: none; }
+@media (max-width: 650px) {
+  #joystick { left: 16px; bottom: calc(var(--hud-space, 300px) + 12px); }
+}
