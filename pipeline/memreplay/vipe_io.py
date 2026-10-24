@@ -25,17 +25,24 @@ HAND_PHRASES = {"hand", "hands", "arm"}
 
 
 def _decode_exr(buf: bytes) -> np.ndarray:
-    img = cv2.imdecode(np.frombuffer(buf, np.uint8), cv2.IMREAD_UNCHANGED)
-    if img is not None:
-        return img.astype(np.float32)
-    import io
+    """ViPE writes one HALF channel "Z" (ZIP compression). OpenEXR reads it everywhere; some OpenCV builds
+    (e.g. the Linux opencv-python-headless 5.0 wheel) have no EXR codec at all."""
+    try:
+        import io
 
-    import OpenEXR  # fallback when this OpenCV build has no EXR codec
+        import Imath
+        import OpenEXR
+    except ImportError:
+        img = cv2.imdecode(np.frombuffer(buf, np.uint8), cv2.IMREAD_UNCHANGED)
+        if img is None:
+            raise RuntimeError("cannot decode EXR depth: pip install OpenEXR")
+        return img.astype(np.float32)
     f = OpenEXR.InputFile(io.BytesIO(buf))
-    dw = f.header()["dataWindow"]
+    hdr = f.header()
+    dw = hdr["dataWindow"]
     w, h = dw.max.x - dw.min.x + 1, dw.max.y - dw.min.y + 1
-    import Imath
-    raw = f.channel("Z", Imath.PixelType(Imath.PixelType.FLOAT))
+    chans = list(hdr["channels"].keys())
+    raw = f.channel("Z" if "Z" in chans else chans[0], Imath.PixelType(Imath.PixelType.FLOAT))
     return np.frombuffer(raw, np.float32).reshape(h, w).copy()
 
 
@@ -112,6 +119,28 @@ class Vipe:
 
     def ids_with(self, phrases: set[str]) -> list[int]:
         return [i for i, p in self.phrases.items() if p in phrases]
+
+    @cached_property
+    def sky_ids(self) -> list[int]:
+        return self.ids_with({"sky"})
+
+    def static_mask(self, idx: int, depth: np.ndarray | None = None, margin_px: int = 0,
+                    extra_static: list[int] | None = None) -> np.ndarray | None:
+        """Pixels that belong to the static scene: mask id 0, plus 'sky' pixels that are close by (ViPE's sky
+        prompt also fires on bright, overexposed walls and lamps indoors; real sky is far away).
+        margin_px widens the excluded people/objects. None when ViPE wrote no masks."""
+        m = self.mask(idx)
+        if m is None:
+            return None
+        static = m == 0
+        if extra_static:
+            static |= np.isin(m, extra_static)                    # segmented, but kept as part of the room
+        if self.sky_ids:
+            d = self.depth(idx) if depth is None else depth
+            static |= np.isin(m, self.sky_ids) & (d < 20.0)
+        if margin_px > 0:
+            static &= ~dilate(~static, margin_px)
+        return static
 
 
 class Frames:

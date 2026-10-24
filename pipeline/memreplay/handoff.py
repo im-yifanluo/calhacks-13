@@ -13,6 +13,7 @@ because memory.json uses URLs relative to it.
                                           (frame index = frame number in input/clip.mp4)
   <work>/world/world.json             S3  WorldInfo
   <work>/world/cameras.json           S3  Cameras (keyframes, world frame)
+  <work>/world/frames.npz             S3  every frame's final camera-to-world (incl. scale) + good flags (world.WorldPoses)
   <work>/world/bg_points.ply          S4  L0 background: static points written as small splats (Spark reads .ply)
   <work>/world/room_collider.glb      S4  floor + tables as a 10 cm heightfield mesh
   <work>/world/ghosts/<id>.bin        S4  people as per-frame points (POINTS_SEQUENCE_LAYOUT below)
@@ -71,6 +72,7 @@ class CameraFrame(BaseModel):
     h: int
     K: Mat3 = Field(min_length=9, max_length=9)
     c2w: Mat4 = Field(min_length=16, max_length=16)  # camera-to-world, OpenCV camera axes, world frame
+    good: bool = True  # False where ViPE's tracking glitched (position smoothed; S4-S6 skip the frame)
 
 
 class Cameras(BaseModel):
@@ -101,6 +103,7 @@ class ObjectSpec(BaseModel):
     density_kg_m3: float
     color: str  # "#rrggbb", for the tinted primitive
     grabbable: bool
+    movable: bool = True  # free-standing, resting on something (not mounted on a wall or ceiling, not built in)
 
 
 # --- S4/S5 -> S7 --------------------------------------------------------------------------

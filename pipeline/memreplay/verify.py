@@ -62,14 +62,17 @@ def reprojection(work: Path, n_frames: int = 6) -> dict:
     reader = Frames(work / "input" / "clip.mp4")
     out = work / "verify"
     out.mkdir(exist_ok=True)
+    from .objects import scene_static_ids
+    keep_in_room = scene_static_ids(work)
     errs, covs, pics = [], [], []
+    cams = [c for c in cams if c.good] or cams
     picks = [cams[i] for i in np.linspace(0, len(cams) - 1, n_frames + 2).astype(int)[1:-1]]
     for c in picks:
         K, c2w = np.array(c.K).reshape(3, 3), np.array(c.c2w).reshape(4, 4)
         real = reader.get(c.idx)
         img, hit = render_points(xyz, rgb, K, c2w, c.w, c.h)
-        m = v.mask(c.idx)
-        static = hit & ((m == 0) if m is not None else True)
+        st = v.static_mask(c.idx, extra_static=keep_in_room)
+        static = hit & (st if st is not None else True)
         d = np.abs(img.astype(int) - real.astype(int)).mean(-1)
         errs.append(float(np.median(d[static])) if static.any() else None)
         covs.append(float(hit.mean()))
@@ -84,39 +87,50 @@ def reprojection(work: Path, n_frames: int = 6) -> dict:
 
 
 def objects_check(work: Path) -> dict:
+    """Each kept object's track, evaluated at the frames where ViPE saw it, projected into those frames:
+    does it land on the object's mask? And does it rest on a support?"""
     p = work / "objects" / "objects.json"
     if not p.exists():
         return {"count": 0}
-    objs = json.loads(p.read_text())["objects"]
-    rep = json.loads((work / "objects" / "report.json").read_text()) if (work / "objects" / "report.json").exists() else []
-    ids = {r["id"]: r["mask_ids"] for r in rep}
+    objs = {o["id"]: o for o in json.loads(p.read_text())["objects"]}
+    sel = {e["id"]: e for e in json.loads((work / "objects" / "selection.json").read_text())} \
+        if (work / "objects" / "selection.json").exists() else {}
     cams = {c.idx: c for c in Cameras.model_validate_json((work / "world" / "cameras.json").read_text()).frames}
     v = Vipe(work / "vipe")
     support = Support(work)
     results = []
-    for o in objs:
+    for oid, o in objs.items():
         size = o["visual"].get("size", [0.1, 0.1, 0.1])
         half = size[1] / 2
-        inside, tested = 0, 0
-        for k in o["track"][:: max(1, len(o["track"]) // 25)]:
-            idx = int(round(k["t"] * 30 / 3)) * 3
-            c = cams.get(idx)
-            m = v.mask(idx)
-            if c is None or m is None or not ids.get(o["id"]):
+        ts = np.array([k["t"] for k in o["track"]])
+        P = np.array([k["p"] for k in o["track"]])
+        e = sel.get(oid)
+        sightings = [s for s in (e["obs"] if e else []) if not s["touches_border"]]   # whole views only
+        sightings = sightings[:: max(1, len(sightings) // 40)]
+        inside = tested = 0
+        errs = []
+        for ob in sightings:
+            c = cams.get(ob["idx"])
+            m = v.mask(ob["idx"])
+            if c is None or m is None:
                 continue
-            obj_mask = np.isin(m, ids[o["id"]])
+            obj_mask = np.isin(m, e["ids"])
             if obj_mask.sum() < 30:
                 continue
-            u, vv, z, ok = project(np.array([k["p"]]), np.array(c.K).reshape(3, 3), np.array(c.c2w).reshape(4, 4), c.w, c.h)
+            pos = np.array([np.interp(ob["idx"] / 30.0, ts, P[:, j]) for j in range(3)])
+            u, vv, z, ok = project(pos[None], np.array(c.K).reshape(3, 3), np.array(c.c2w).reshape(4, 4), c.w, c.h)
             tested += 1
+            ys, xs = np.nonzero(obj_mask)
             if ok[0]:
                 ui, vi = int(round(u[0])), int(round(vv[0]))
                 if (cv2.dilate(obj_mask.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0)[vi, ui]:
                     inside += 1
+                errs.append(float(np.hypot(u[0] - xs.mean(), vv[0] - ys.mean())))
         last = o["track"][-1]
         gap = last["p"][1] - half - support(last["p"][0], last["p"][2])
-        results.append({"id": o["id"], "label": o["label"], "shape": o["visual"].get("shape"), "mass": o["mass"],
-                        "centre_in_mask_frac": inside / tested if tested else None, "frames_tested": tested,
+        results.append({"id": oid, "label": o["label"], "shape": o["visual"].get("shape"), "mass": o["mass"],
+                        "centre_in_mask_frac": round(inside / tested, 3) if tested else None, "frames_tested": tested,
+                        "median_px_from_mask_centre": round(float(np.median(errs)), 1) if errs else None,
                         "rest_gap_to_support_m": round(gap, 3), "settles": drop_test(o, support)})
     return {"count": len(objs), "objects": results}
 

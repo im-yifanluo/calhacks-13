@@ -44,7 +44,7 @@ def _quat_wxyz(R: np.ndarray) -> np.ndarray:
 
 def pick_frames(work: Path, cams: Cameras, n: int) -> list:
     """About n keyframes spread over the clip, taking the sharpest one in each window."""
-    frames = cams.frames
+    frames = [c for c in cams.frames if c.good]
     if len(frames) <= n:
         return frames
     reader = Frames(Path(work) / "input" / "clip.mp4")
@@ -71,6 +71,8 @@ def prepare(work: Path) -> Path:
         (col / d).mkdir(parents=True)
     chosen = pick_frames(work, cams, MAX_IMAGES)
     reader = Frames(work / "input" / "clip.mp4")
+    from .objects import scene_static_ids
+    keep_in_room = scene_static_ids(work)
     c0 = chosen[0]
     K = np.array(c0.K).reshape(3, 3)
     # ViPE puts pixel centres at integer coordinates; COLMAP/gsplat at +0.5
@@ -81,8 +83,9 @@ def prepare(work: Path) -> Path:
         name = f"{c.idx:05d}"
         rgb = reader.get(c.idx)
         cv2.imwrite(str(col / "images" / f"{name}.jpg"), cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 95])
-        m = v.mask(c.idx)
-        static = np.ones(rgb.shape[:2], bool) if m is None else ~dilate(m > 0, 5)
+        static = v.static_mask(c.idx, margin_px=5, extra_static=keep_in_room)
+        if static is None:
+            static = np.ones(rgb.shape[:2], bool)
         cv2.imwrite(str(col / "masks" / f"{name}.png"), static.astype(np.uint8) * 255)
         c2w = np.array(c.c2w).reshape(4, 4)
         w2c = np.linalg.inv(c2w)

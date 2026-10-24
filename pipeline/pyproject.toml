@@ -9,6 +9,7 @@ description = "Glasses video -> layered 4D scene (background splat + dynamic obj
 requires-python = ">=3.10"
 dependencies = [
   "numpy",
+  "OpenEXR",
   "opencv-python-headless",
   "pydantic>=2",
   "scipy",

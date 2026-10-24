@@ -19,8 +19,9 @@ def work(tmp_path_factory):
     synthetic.make(w)
     world.run(w)
     objects.observe(w)
+    objects.select(w, use_claude=False)
     l0.run(w)
-    objects.run(w, use_claude=False)
+    objects.run(w)
     merge(w, "Synthetic", "synthetic", "synthetic")
     return w
 

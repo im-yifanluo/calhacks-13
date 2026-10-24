@@ -63,26 +63,33 @@ def propose_nouns(sheet: Path, max_props: int = 6) -> list[str]:
 
 SPEC_SCHEMA = {
     "type": "object", "additionalProperties": False,
-    "required": ["label", "shape", "size_m", "density_kg_m3", "color", "grabbable"],
+    "required": ["label", "shape", "size_m", "density_kg_m3", "color", "grabbable", "movable"],
     "properties": {"label": {"type": "string"},
                    "shape": {"type": "string", "enum": ["sphere", "box", "cylinder"]},
                    "size_m": {"type": "array", "items": {"type": "number"}},
                    "density_kg_m3": {"type": "number"},
                    "color": {"type": "string"},
-                   "grabbable": {"type": "boolean"}},
+                   "grabbable": {"type": "boolean"},
+                   "movable": {"type": "boolean"}},
 }
 
 
-def describe(crop: Path, label: str, observed_size_m: tuple[float, float, float]) -> ObjectSpec:
+def describe(crop: Path, label: str, observed_size_m: tuple[float, float, float],
+             bottom_above_floor_m: float | None = None) -> ObjectSpec:
     ox, oy, oz = observed_size_m
+    where = (f" Its lowest point is about {bottom_above_floor_m:.2f} m above the floor."
+             if bottom_above_floor_m is not None else "")
     prompt = (
         f"This crop shows a '{label}' from a first-person video. Our depth measurement says its visible extent is "
-        f"roughly {ox:.2f} x {oy:.2f} x {oz:.2f} m (x, y up, z), which can be off by 30% or more. Choose the simple "
+        f"roughly {ox:.2f} x {oy:.2f} x {oz:.2f} m (x, y up, z), which can be off by 30% or more.{where} Choose the simple "
         "shape that best approximates it for a physics engine (sphere, box, or cylinder with a vertical axis), its "
         "full size in meters as [x, y, z] with y up (for a sphere all three equal the diameter; for a cylinder x = z "
         "= diameter), a realistic average density in kg/m3 for the whole object (hollow things like balls, boxes or "
         "empty bottles are light), its main colour as #rrggbb, and whether one person could pick it up with one or "
-        "two hands. Also give a short, specific lowercase label (one or two words)."
+        "two hands, and whether it is movable: a free-standing object resting on a floor, table, shelf or seat, "
+        "as opposed to something mounted on a wall or ceiling, built in, or fixed in place (signs, screens, "
+        "paintings, mirrors, fixtures, hanging towels are not movable). Also give a short, specific lowercase "
+        "label (one or two words)."
     )
     out = _ask_json([_image_block(crop), {"type": "text", "text": prompt}], SPEC_SCHEMA)
     size = out["size_m"] + [out["size_m"][-1]] * (3 - len(out["size_m"]))

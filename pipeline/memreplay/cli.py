@@ -77,6 +77,7 @@ def run_stage(name: str, work: Path, args: argparse.Namespace | None = None) -> 
     elif name == "l0":
         from . import l0, objects
         objects.observe(work)
+        objects.select(work)          # which segmented things become props (the rest stays in the room)
         l0.run(work)
     elif name == "objects":
         from . import objects

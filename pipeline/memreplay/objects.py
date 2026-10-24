@@ -19,7 +19,7 @@ from .handoff import FramesInfo, ObjectsFragment, ObjectSpec, object_slug
 from .manifest import DynamicObject, Keyframe
 from .vipe_io import (HAND_PHRASES, IGNORED_PHRASES, PEOPLE_PHRASES, Frames, Vipe, backproject, depth_edges, erode,
                       transform)
-from .world import load_T
+from .world import WorldPoses
 
 G = np.array([0.0, -9.81, 0.0])
 MIN_OBS = 3                 # keyframes an object must be seen in
@@ -28,10 +28,10 @@ REST_SPEED = 0.25           # m/s
 
 
 # --- observe -----------------------------------------------------------------------------------------
-def observe(work: Path, v: Vipe | None = None, T: np.ndarray | None = None) -> dict:
+def observe(work: Path, v: Vipe | None = None) -> dict:
     work = Path(work)
     v = v or Vipe(work / "vipe")
-    T = load_T(work) if T is None else T
+    wp = WorldPoses(work)
     frames = FramesInfo.model_validate_json((work / "input" / "frames.json").read_text())
     skip = IGNORED_PHRASES | PEOPLE_PHRASES | HAND_PHRASES
     cand = {i for i, p in v.phrases.items() if i > 0 and p not in skip}
@@ -42,14 +42,14 @@ def observe(work: Path, v: Vipe | None = None, T: np.ndarray | None = None) -> d
             if idx > v.frame_indices[-1]:
                 break
             m = v.mask(idx)
-            if m is None:
+            if m is None or not wp.good(idx):
                 continue
             present = [int(i) for i in np.unique(m) if int(i) in cand]
             if not present:
                 continue
-            d = v.depth(idx)
+            d = v.depth(idx) * wp.depth_scale(idx)
             edges = depth_edges(d, rel=0.03, absolute=0.05)
-            Tc = T @ v.c2w(idx)
+            Tc = wp.c2w(idx)
             gray = None
             for i in present:
                 full = m == i
@@ -67,7 +67,8 @@ def observe(work: Path, v: Vipe | None = None, T: np.ndarray | None = None) -> d
                 ys, xs = np.nonzero(full)
                 zmed = float(np.median(pts[:, 2]))
                 K = v.K(idx)
-                sil = [(xs.max() - xs.min() + 1) * zmed / K[0, 0], (ys.max() - ys.min() + 1) * zmed / K[1, 1]]
+                sc = float(np.linalg.norm(Tc[:3, 0]))              # world scale (S3)
+                sil = [(xs.max() - xs.min() + 1) * zmed * sc / K[0, 0], (ys.max() - ys.min() + 1) * zmed * sc / K[1, 1]]
                 if gray is None:
                     gray = cv2.cvtColor(reader.get(idx), cv2.COLOR_RGB2GRAY)
                 x0, y0, x1, y1 = int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
@@ -82,30 +83,63 @@ def observe(work: Path, v: Vipe | None = None, T: np.ndarray | None = None) -> d
 
 
 # --- group -------------------------------------------------------------------------------------------
+def _segments(obs: list[dict], fps: float) -> list[list[dict]]:
+    """Split one mask id's sightings wherever the position jumps further than anything could move
+    (0.4 m + 4 m/s x time): ViPE's tracker sometimes hops onto a similar-looking object."""
+    segs, cur = [], [obs[0]]
+    for a, b in zip(obs[:-1], obs[1:]):
+        dt = (b["idx"] - a["idx"]) / fps
+        if np.linalg.norm(np.subtract(b["pos"], a["pos"])) > 0.4 + 4.0 * dt:
+            segs.append(cur)
+            cur = []
+        cur.append(b)
+    segs.append(cur)
+    return segs
+
+
+def _centre(obs: list[dict]) -> np.ndarray:
+    return np.median(np.array([o["pos"] for o in obs]), 0)
+
+
 def group(observations: dict, fps: float) -> list[dict]:
-    """Greedy: ids sorted by first sighting; attach to an existing object of the same label if they don't
-    overlap in time and the jump is plausible (0.5 m + 6 m/s x gap)."""
-    items = []
+    """Pieces (id segments) -> objects. Join pieces with the same label that sit in the same place (static
+    re-detections, centres within 0.5 m) or that continue each other in time (gap < 1.5 s, plausible jump).
+    Two different ids seen in the same frame are different objects unless they nearly coincide."""
+    pieces = []
     for sid, ob in observations["obs"].items():
-        items.append({"ids": [int(sid)], "label": observations["phrases"][sid], "obs": sorted(ob, key=lambda o: o["idx"])})
-    items.sort(key=lambda it: it["obs"][0]["idx"])
+        ob = sorted(ob, key=lambda o: o["idx"])
+        for seg in _segments(ob, fps):
+            pieces.append({"ids": [int(sid)], "label": observations["phrases"][sid], "obs": seg})
+    pieces.sort(key=lambda it: it["obs"][0]["idx"])
     objects: list[dict] = []
-    for it in items:
-        first = it["obs"][0]
+    for it in pieces:
+        c = _centre(it["obs"])
+        frames_it = {o["idx"] for o in it["obs"]}
         best, best_d = None, 1e9
         for o in objects:
-            last = o["obs"][-1]
-            if o["label"] != it["label"] or last["idx"] >= first["idx"]:
+            if o["label"] != it["label"]:
                 continue
-            gap = (first["idx"] - last["idx"]) / fps
-            dist = float(np.linalg.norm(np.subtract(first["pos"], last["pos"])))
-            if gap < 6.0 and dist < 0.5 + 6.0 * gap and dist < best_d:
-                best, best_d = o, dist
+            d = float(np.linalg.norm(_centre(o["obs"]) - c))
+            shared = frames_it & {x["idx"] for x in o["obs"]}
+            if shared and not set(it["ids"]) <= set(o["ids"]) and d > 0.15:
+                continue                                         # seen side by side: two objects
+            ok = d < 0.5
+            last, first = o["obs"][-1], it["obs"][0]
+            if not ok and last["idx"] < first["idx"]:
+                gap = (first["idx"] - last["idx"]) / fps
+                jump = float(np.linalg.norm(np.subtract(first["pos"], last["pos"])))
+                ok = gap < 1.5 and jump < 0.4 + 4.0 * gap
+            if ok and d < best_d:
+                best, best_d = o, d
         if best is None:
             objects.append({"ids": list(it["ids"]), "label": it["label"], "obs": list(it["obs"])})
         else:
-            best["ids"] += it["ids"]
-            best["obs"] += it["obs"]
+            best["ids"] = sorted(set(best["ids"]) | set(it["ids"]))
+            merged = {o["idx"]: o for o in best["obs"]}
+            for o in it["obs"]:                                 # one sighting per frame: keep the bigger view
+                if o["idx"] not in merged or o["area"] > merged[o["idx"]]["area"]:
+                    merged[o["idx"]] = o
+            best["obs"] = [merged[k] for k in sorted(merged)]
     return objects
 
 
@@ -272,42 +306,101 @@ class Support:
 
 
 # --- the stage -----------------------------------------------------------------------------------------
-def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
+MAX_PROP = 1.0      # m; bigger things stay part of the room
+
+
+def select(work: Path, use_claude: bool | None = None) -> list[dict]:
+    """Group sightings into objects and decide which become grabbable props (Claude or the fallback table).
+    Runs before S4 so that only kept props (and people) are cut out of the room. objects/selection.json"""
     from . import claude
 
     work = Path(work)
     frames = FramesInfo.model_validate_json((work / "input" / "frames.json").read_text())
     obs_path = work / "objects" / "observations.json"
     observations = json.loads(obs_path.read_text()) if obs_path.exists() else observe(work)
-    groups = [g for g in group(observations, frames.fps)
-              if len(g["obs"]) >= MIN_OBS and max(observed_size(g)) <= MAX_EXTENT]
     use_claude = claude.available() if use_claude is None else use_claude
-    support = Support(work)
     counts: dict[str, int] = {}
-    result, report = [], []
-    for g in groups:
+    out = []
+    for g in group(observations, frames.fps):
+        if len(g["obs"]) < MIN_OBS:
+            continue
         seen = observed_size(g)
         n = counts.get(g["label"], 0)
         counts[g["label"]] = n + 1
         oid = object_slug(g["label"], n)
+        entry = {"id": oid, "label": g["label"], "ids": g["ids"], "obs": g["obs"], "observed_size_m": seen}
+        if max(seen) > MAX_EXTENT:
+            out.append({**entry, "keep": False, "reason": f"too big ({max(seen):.1f} m)"})
+            continue
         crop, color = best_crop(work, g, work / "objects" / "crops" / f"{oid}.jpg")
-        source = "fallback"
-        spec = claude.fallback_spec(g["label"], seen, color)
+        bottom = float(np.median([o["pos"][1] - o["ext"][1] / 2 for o in g["obs"]]))
+        entry["bottom_above_floor_m"] = bottom
+        source, spec = "fallback", claude.fallback_spec(g["label"], seen, color)
+        if bottom > 2.0:                                    # nothing rests 2 m up: mounted
+            spec.movable = False
         if use_claude:
             try:
-                spec = claude.describe(crop, g["label"], seen)
-                source = "claude"
+                spec, source = claude.describe(crop, g["label"], seen, bottom), "claude"
             except Exception as e:  # network, quota, refusal: keep the fallback
                 print(f"[objects] Claude failed for {oid} ({e}); using the fallback table")
         spec = clamp_spec(spec, seen)
+        keep = spec.grabbable and spec.movable and max(spec.size_m) <= MAX_PROP
+        reason = ("" if keep else "mounted/fixed" if not spec.movable else "not grabbable" if not spec.grabbable
+                  else f"too big ({max(spec.size_m):.1f} m)")
+        out.append({**entry, "keep": bool(keep), "reason": reason,
+                    "spec": spec.model_dump(), "spec_source": source})
+    (work / "objects" / "selection.json").write_text(json.dumps(out))
+    print(f"[objects] kept {sum(e['keep'] for e in out)} of {len(out)}: "
+          + ", ".join(f"{e['id']}{'' if e['keep'] else ' (' + e['reason'] + ')'}" for e in out))
+    return out
+
+
+def scene_static_ids(work: Path) -> list[int]:
+    """Mask ids that stay part of the room: segmented things we did not keep as props (signs, benches...)."""
+    p = Path(work) / "objects" / "selection.json"
+    if not p.exists():
+        return []
+    sel = json.loads(p.read_text())
+    kept = {i for e in sel if e["keep"] for i in e["ids"]}
+    return sorted({i for e in sel if not e["keep"] for i in e["ids"]} - kept)
+
+
+def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
+    work = Path(work)
+    frames = FramesInfo.model_validate_json((work / "input" / "frames.json").read_text())
+    sel_path = work / "objects" / "selection.json"
+    selection = json.loads(sel_path.read_text()) if sel_path.exists() else select(work, use_claude)
+    support = Support(work)
+    result, report = [], []
+    for e in selection:
+        if not e["keep"]:
+            report.append({"id": e["id"], "label": e["label"], "kept": False, "reason": e["reason"], "mask_ids": e["ids"]})
+            continue
+        g, oid, seen, source = e, e["id"], tuple(e["observed_size_m"]), e["spec_source"]
+        spec = ObjectSpec.model_validate(e["spec"])
         half_h = spec.size_m[1] / 2
         depth_bias = 0.35 * min(spec.size_m)                   # the median of the visible surface sits in front
         samples = []
         for o in sorted(g["obs"], key=lambda o: o["idx"]):
             p, c = np.array(o["pos"]), np.array(o["cam"])
             ray = p - c
-            samples.append((o["idx"], p + depth_bias * ray / max(np.linalg.norm(ray), 1e-6)))
-        t, P, V = track(samples, frames.key_stride, frames.fps)
+            samples.append((o["idx"], p + depth_bias * ray / max(np.linalg.norm(ray), 1e-6), not o["touches_border"]))
+        whole = [s for s in samples if s[2]]                    # views cut by the image edge bias a static centre
+        S = np.array([s[1] for s in (whole if len(whole) >= 3 else samples)])
+        centre = np.median(S, 0)
+        spread = float(np.percentile(np.linalg.norm(S - centre, axis=1), 80))
+        static = spread < max(0.2, 0.75 * max(spec.size_m))
+        if static:
+            # never moved: the scatter is depth noise and changing viewpoints, not motion
+            t, P, V = np.array([samples[0][0], samples[-1][0]]) / frames.fps, np.array([centre, centre]), np.zeros((2, 3))
+        else:
+            t, P, V = track([(i, q) for i, q, _ in samples], frames.key_stride, frames.fps)
+        # the object exists for the whole memory: hold the first/last position outside the sighted stretch
+        dur = frames.duration_sec
+        if t[0] > 0:
+            t, P, V = np.r_[0.0, t], np.vstack([P[:1], P]), np.vstack([np.zeros((1, 3)), V])
+        if t[-1] < dur:
+            t, P, V = np.r_[t, dur], np.vstack([P, P[-1:]]), np.vstack([V, np.zeros((1, 3))])
         # never inside the floor or a table: lift the bottom onto the support below
         floor = 0.0
         for k in range(len(P)):
@@ -324,16 +417,17 @@ def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
             id=oid, label=spec.label or g["label"],
             visual={"kind": "primitive", "shape": spec.shape, "size": spec.size_m, "color": spec.color},
             collider=collider(spec), mass=round(mass, 4), grabbable=spec.grabbable,
-            visibleFrom=float(t[0]), visibleTo=float(t[-1]),
+            visibleFrom=0.0, visibleTo=float(dur),
             track=[Keyframe(t=round(float(tt), 4), p=tuple(np.round(p, 4)), q=(0, 0, 0, 1), v=tuple(np.round(vv, 4)))
                    for tt, p, vv in zip(t, P, V)]))
         speeds = np.linalg.norm(V, axis=1)
-        report.append({"id": oid, "label": spec.label, "mask_ids": g["ids"], "sightings": len(g["obs"]), "spec_source": source,
+        report.append({"id": oid, "label": spec.label, "kept": True, "mask_ids": g["ids"], "sightings": len(g["obs"]), "spec_source": source,
+                       "static": bool(static), "sighting_spread_m": round(spread, 3),
                        "shape": spec.shape, "size_m": spec.size_m, "observed_size_m": seen, "mass_kg": round(mass, 3),
                        "visible": [float(t[0]), float(t[-1])], "max_speed_m_s": float(speeds.max()),
                        "path_length_m": float(np.sum(np.linalg.norm(np.diff(P, axis=0), axis=1))) if len(P) > 1 else 0.0})
     (work / "objects" / "objects.json").write_text(ObjectsFragment(objects=result).model_dump_json(indent=2))
     (work / "objects" / "report.json").write_text(json.dumps(report, indent=2))
     print(f"[objects] {len(result)} objects: " + ", ".join(f"{r['id']} ({r['shape']}, {r['mass_kg']} kg, "
-                                                          f"{r['sightings']} sightings)" for r in report))
+                                                          f"{r['sightings']} sightings)" for r in report if r["kept"]))
     return result

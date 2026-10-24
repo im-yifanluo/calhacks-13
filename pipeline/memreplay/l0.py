@@ -11,7 +11,7 @@ import numpy as np
 from .handoff import FramesInfo, ObjectsFragment, WorldInfo, write_points_sequence
 from .manifest import DynamicObject, Keyframe
 from .vipe_io import HAND_PHRASES, PEOPLE_PHRASES, Frames, Vipe, backproject, depth_edges, dilate, erode, transform
-from .world import load_T
+from .world import WorldPoses
 
 ROOM_MAX_DEPTH = 7.0
 ROOM_CAP = 300_000
@@ -35,7 +35,8 @@ def _keys(p: np.ndarray, vox: float) -> np.ndarray:
     return (q[:, 0] << 42) | (q[:, 1] << 21) | q[:, 2]
 
 
-def room_points(work: Path, v: Vipe, T: np.ndarray, frames: FramesInfo, vox: float = 0.02):
+def room_points(work: Path, v: Vipe, wp: WorldPoses, frames: FramesInfo, vox: float = 0.02,
+                extra_static: list[int] | None = None):
     """Back-project background pixels from many frames, merge on a vox grid, keep voxels seen in >= 2 frames."""
     ids = np.arange(0, frames.frame_count, frames.key_stride)
     ids = ids[ids <= v.frame_indices[-1]]
@@ -45,18 +46,22 @@ def room_points(work: Path, v: Vipe, T: np.ndarray, frames: FramesInfo, vox: flo
     batch = []
     for n, idx in enumerate(ids):
         idx = int(idx)
-        d = v.depth(idx)
+        if not wp.good(idx):
+            continue
+        d = v.depth(idx) * wp.depth_scale(idx)
         sel = (d < ROOM_MAX_DEPTH) & ~depth_edges(d)
-        m = v.mask(idx)
-        if m is not None:
-            sel &= ~dilate(m > 0, 6)                           # only background, with a margin around people/objects
+        st = v.static_mask(idx, d, margin_px=6, extra_static=extra_static)   # margin around people/props
+        if st is not None:
+            sel &= st
         p, vv, uu = backproject(d, v.K(idx), sel, stride=2)
-        pw = transform(T @ v.c2w(idx), p)
+        if len(p) == 0:
+            continue
+        pw = transform(wp.c2w(idx), p)
         rgb = reader.get(idx)[vv, uu].astype(np.float64)
         k = _keys(pw, vox)
         kk, s_xyz, s_rgb, c = _voxel_reduce(k, pw, rgb, np.ones(len(k), np.int64))
         batch.append((kk, s_xyz / c[:, None], s_rgb / c[:, None], np.ones(len(kk), np.int64)))  # one vote per frame
-        if len(batch) >= 40 or n == len(ids) - 1:
+        if batch and (len(batch) >= 40 or n == len(ids) - 1):
             parts = ([acc] if acc is not None else []) + batch
             acc = _voxel_reduce(*(np.concatenate([b[i] for b in parts]) for i in range(4)))
             batch = []
@@ -143,7 +148,7 @@ def heightfield_mesh(H: np.ndarray, origin: tuple[float, float, float]):
 
 
 # --- people ghosts -------------------------------------------------------------------------------------
-def person_tracks(v: Vipe, T: np.ndarray, key_ids: np.ndarray) -> list[dict]:
+def person_tracks(v: Vipe, wp: WorldPoses, key_ids: np.ndarray) -> list[dict]:
     """Join person ids that are re-detections of the same person (no time overlap, close in 3D)."""
     pids = v.ids_with(PEOPLE_PHRASES)
     if not pids:
@@ -151,18 +156,18 @@ def person_tracks(v: Vipe, T: np.ndarray, key_ids: np.ndarray) -> list[dict]:
     seen: dict[int, list[tuple[int, np.ndarray]]] = {p: [] for p in pids}
     for idx in key_ids:
         m = v.mask(int(idx))
-        if m is None:
+        if m is None or not wp.good(int(idx)):
             continue
         present = [p for p in np.unique(m) if p in seen]
         if not present:
             continue
-        d = v.depth(int(idx))
+        d = v.depth(int(idx)) * wp.depth_scale(int(idx))
         for p in present:
             sel = (m == p) & (d < 8)
             if sel.sum() < 50:
                 continue
             pts, _, _ = backproject(d, v.K(int(idx)), sel, stride=4)
-            seen[p].append((int(idx), transform(T @ v.c2w(int(idx)), np.median(pts, 0, keepdims=True))[0]))
+            seen[p].append((int(idx), transform(wp.c2w(int(idx)), np.median(pts, 0, keepdims=True))[0]))
     spans = sorted(((obs[0][0], obs[-1][0], p, obs) for p, obs in seen.items() if obs), key=lambda s: s[0])
     tracks: list[dict] = []
     for first, last, p, obs in spans:
@@ -178,9 +183,9 @@ def person_tracks(v: Vipe, T: np.ndarray, key_ids: np.ndarray) -> list[dict]:
     return tracks
 
 
-def ghosts(work: Path, v: Vipe, T: np.ndarray, frames: FramesInfo) -> list[DynamicObject]:
+def ghosts(work: Path, v: Vipe, wp: WorldPoses, frames: FramesInfo) -> list[DynamicObject]:
     key_ids = np.arange(0, frames.frame_count, frames.key_stride)
-    tracks = person_tracks(v, T, key_ids)
+    tracks = person_tracks(v, wp, key_ids)
     if not tracks:
         return []
     hand_ids = set(v.ids_with(HAND_PHRASES))
@@ -193,12 +198,12 @@ def ghosts(work: Path, v: Vipe, T: np.ndarray, frames: FramesInfo) -> list[Dynam
         idx = int(idx)
         m = v.mask(idx)
         present = set(np.unique(m).tolist()) if m is not None else set()
-        active = [k for k, tr in enumerate(tracks) if present & set(tr["ids"])]
+        active = [k for k, tr in enumerate(tracks) if present & set(tr["ids"])] if wp.good(idx) else []
         if not active:
             for s in seqs:
                 s.append((np.zeros((0, 3)), np.zeros((0, 3), np.uint8)))
             continue
-        d = v.depth(idx)
+        d = v.depth(idx) * wp.depth_scale(idx)
         rgb = reader.get(idx)
         edges = depth_edges(d, rel=0.03, absolute=0.06)
         hands = np.isin(m, list(hand_ids)) if hand_ids else np.zeros_like(m, bool)
@@ -218,7 +223,7 @@ def ghosts(work: Path, v: Vipe, T: np.ndarray, frames: FramesInfo) -> list[Dynam
             if len(pts) > per_frame:
                 pick = rng.choice(len(pts), per_frame, replace=False)
                 pts, vv, uu = pts[pick], vv[pick], uu[pick]
-            seqs[k].append((transform(T @ v.c2w(idx), pts), rgb[vv, uu]))
+            seqs[k].append((transform(wp.c2w(idx), pts), rgb[vv, uu]))
     out = []
     (work / "world" / "ghosts").mkdir(parents=True, exist_ok=True)
     for k, tr in enumerate(tracks):
@@ -240,11 +245,13 @@ def run(work: Path) -> None:
 
     work = Path(work)
     v = Vipe(work / "vipe")
-    T = load_T(work)
+    wp = WorldPoses(work)
     frames = FramesInfo.model_validate_json((work / "input" / "frames.json").read_text())
     winfo = WorldInfo.model_validate_json((work / "world" / "world.json").read_text())
 
-    xyz, rgb = room_points(work, v, T, frames)
+    from .objects import scene_static_ids
+
+    xyz, rgb = room_points(work, v, wp, frames, extra_static=scene_static_ids(work))
     write_splat_ply(work / "world" / "bg_points.ply", xyz, rgb)
     winfo.bgPointsCount = len(xyz)
     lo, hi = np.percentile(xyz, 0.5, axis=0), np.percentile(xyz, 99.5, axis=0)
@@ -257,6 +264,6 @@ def run(work: Path) -> None:
     np.savez(work / "world" / "room_heightfield.npz", H=H, origin=np.array(origin))   # S5 reads heights from this
     print(f"[l0] collider: {H.shape[0]}x{H.shape[1]} cells, {np.mean(H > 0.3) * 100:.0f}% raised")
 
-    people = ghosts(work, v, T, frames)
+    people = ghosts(work, v, wp, frames)
     (work / "world" / "ghosts.json").write_text(ObjectsFragment(objects=people).model_dump_json(indent=2))
     print(f"[l0] ghosts: {len(people)} people")
