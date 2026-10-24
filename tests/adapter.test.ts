@@ -244,12 +244,28 @@ test("two players: pause, seek, grab, hold, throw and replay the same take; a re
   expect(shared.length).toBe(chunks.reduce((n, c) => n + JSON.parse(c.keyframesJson).length, 0));
   for (const t of [1.5, 2, 3, 5]) expect(bob.viewer.timeline.track("ball-1", original, t)).toEqual(alice.viewer.timeline.track("ball-1", original, t));
 
+  // Found in the live check: both screens must hold the landing pose while paused. Bob watched the throw live, so he
+  // no longer snaps back to the release pose when it rests.
+  const landing = shared.at(-1)!;
+  const shown = (p: Player) => p.viewer.memory.objects[0].root.position.toArray().map(v => +v.toFixed(4));
+  await until(() => (guest.tables.objectState.key as any).find(`${x}:ball-1`)?.mode === "rest", "bob sees the rest");
+  alice.viewer.update(0); bob.viewer.update(0);
+  expect(alice.viewer.timeline.time).toBe(1.5);
+  expect(shown(alice)).toEqual(landing.p.map(v => +v.toFixed(4)));
+  expect(shown(bob)).toEqual(landing.p.map(v => +v.toFixed(4)));
+
+  // Grabbing it there catches it at the landing time, as the thrower's viewer does (a landing at the clip end can't be
+  // edited, so that grab stays at the paused time).
+  const forkAt = landing.t < bob.viewer.timeline.duration ? Math.round(landing.t * 1e6) / 1e6 : 1.5;
   expect(await bob.viewer.grab("ball-1")).toBe(true); // the ball rests on X: editing it again forks
   const y = serverTimeline(room, roomId).branchId;
   expect(y).not.toBe(x);
   expect(bob.viewer.timeline.activeId).toBe(String(y));
   await until(() => alice.viewer.timeline.activeId === String(y), "alice on bob's take");
-  expect(alice.viewer.timeline.branches.find(b => b.id === String(y))).toMatchObject({ parentId: String(x), name: "Edit ball-1", forkTime: 1.5 });
+  // Alice's "Throw recorded. Press Play…" is replaced: the room is on Bob's take now.
+  expect(alice.reports).toContain("viewer: The room switched to Edit ball-1.");
+  expect(alice.viewer.timeline.branches.find(b => b.id === String(y))).toMatchObject({ parentId: String(x), name: "Edit ball-1" });
+  expect(alice.viewer.timeline.branches.find(b => b.id === String(y))!.forkTime).toBeCloseTo(forkAt, 6);
 
   // While bob holds it, alice cannot have it; the reason reaches her status line.
   expect(await alice.viewer.grab("ball-1")).toBe(false);

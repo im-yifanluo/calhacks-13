@@ -146,6 +146,8 @@ export class NetAdapter implements InteractionAuthority {
   private readonly warned = new Set<string>();
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly cancelers = new Set<() => void>();
+  /** Other players' objects we are showing live (row keys), so a rest we watched holds its landing pose. */
+  private readonly live = new Set<string>();
   /** Grants handed to the viewer that it has not yet taken ("grab" event) or given back (release). */
   private readonly decisions = new Map<string, () => void>();
   private readonly unhooks: Array<() => void> = [];
@@ -522,8 +524,24 @@ export class NetAdapter implements InteractionAuthority {
   /** Another player's held or thrown object follows their pose; once it rests it replays its track again. */
   private showRemote(row: ObjectState): void {
     if (this.mine(row.simOwner)) return;
-    if (!row.simOwner || (row.mode !== "held" && row.mode !== "physics")) { this.viewer.clearRemotePose(row.objectId); return; }
+    if (!row.simOwner || (row.mode !== "held" && row.mode !== "physics")) {
+      this.viewer.clearRemotePose(row.objectId);
+      // A throw we watched just came to rest: hold its landing pose while paused, as the thrower's viewer does, instead
+      // of falling back to the take's pose at the paused time (the release pose). Late joiners see the take as is.
+      if (row.mode === "rest" && this.live.delete(row.key)) this.holdLanding(row);
+      return;
+    }
+    this.live.add(row.key);
     try { this.viewer.applyRemotePose(row.objectId, { t: 0, p: [row.px, row.py, row.pz], q: [row.qx, row.qy, row.qz, row.qw] }); }
+    catch { this.warn(`pose:${row.key}`, `Ignored an invalid pose for the ${this.label(row.objectId)}.`); }
+  }
+
+  private holdLanding(row: ObjectState): void {
+    const timeline = this.viewer.timeline;
+    if (timeline.playing) return;
+    const last = timeline.active.tracks.get(row.objectId)?.at(-1);
+    const frame = last && last.t >= timeline.time ? last : { t: timeline.time, p: [row.px, row.py, row.pz] as [number, number, number], q: [row.qx, row.qy, row.qz, row.qw] as [number, number, number, number] };
+    try { this.viewer.holdPose(row.objectId, frame); }
     catch { this.warn(`pose:${row.key}`, `Ignored an invalid pose for the ${this.label(row.objectId)}.`); }
   }
 
