@@ -170,10 +170,10 @@ A 16-agent survey checked every branch before the merge, and two independent che
 - **Upload, unverified on real R2:** a wrong-Content-Type PUT should get 403; bucket CORS for the tunnel origin; uploads over 100 MB through the tunnel. `create_memory` still accepts any `sourceUrl`, so the future worker must call `scripts/source_check.py`'s `allowed_source()`.
 - **Never run on real hardware:** Quest 3S (stick and snap-turn feel, ghost performance, audio lag), a real phone, real glasses footage.
 
-**Pipeline (for the rewrite, not touched here)**
-- `pip install -e pipeline` fails ("Multiple top-level packages discovered": `runpod/` sits next to `memreplay/`). Part1's `[tool.setuptools.packages.find] include=["memreplay*"]` fixes it.
-- `memreplay merge` assumes the camera-to-world rotation is pure; a scale folded into it skews the head path.
-- `manifest.py` accepts NaN poses and unknown fields; TypeScript rejects the NaN.
+**Pipeline** (fixed on `pipe/vision`)
+- `pip install -e pipeline` works (`[tool.setuptools.packages.find] include = ["memreplay*"]`).
+- `cameras.json` rotations are pure (S3 divides its scale back out), so the head path isn't skewed.
+- `manifest.py` keyframes reject NaN/inf, like the TypeScript side.
 
 ---
 
@@ -181,8 +181,8 @@ A 16-agent survey checked every branch before the merge, and two independent che
 
 | Gap | What it needs | Owner (suggested) |
 |---|---|---|
-| **Pipeline worker** (upload → pipeline → ready) | Subscribe to `memory`, take rows with `status = 'uploaded'` and its own `pipelineIdentity`; report `processing` with `scripts/pipeline-status.py`; download `sourceUrl` only if `scripts/source_check.py`'s `allowed_source(url, ASSET_BASE_URL or PUBLIC_ORIGIN/api/local-media, owner)` accepts it, with a size and time cap; skip rows whose `pipelineIdentity` is their own `owner` (test uploads); run the pipeline, reporting progress; upload the viewer files; finish with `ready --progress 1 --manifest-url https://…/memory.json`, or `failed`. The pod must reach SpacetimeDB at a public URL. | Vision |
-| **Pipeline steps** | Being rewritten | Vision |
+| **Pipeline worker** (upload → pipeline → ready) | **Written** as `memreplay worker` (`pipeline/memreplay/worker.py`): polls the `memory` table over HTTP SQL, skips test uploads, checks `sourceUrl` with `allowed_source()` and caps the download, runs S1-S7, publishes to the bucket (or a folder), then `ready`/`failed` via `set_memory_status`. Not yet run against a live SpacetimeDB and bucket. Original requirements: Subscribe to `memory`, take rows with `status = 'uploaded'` and its own `pipelineIdentity`; report `processing` with `scripts/pipeline-status.py`; download `sourceUrl` only if `scripts/source_check.py`'s `allowed_source(url, ASSET_BASE_URL or PUBLIC_ORIGIN/api/local-media, owner)` accepts it, with a size and time cap; skip rows whose `pipelineIdentity` is their own `owner` (test uploads); run the pipeline, reporting progress; upload the viewer files; finish with `ready --progress 1 --manifest-url https://…/memory.json`, or `failed`. The pod must reach SpacetimeDB at a public URL. | Vision |
+| **Pipeline steps** | Built: [pipeline/README.md](../pipeline/README.md), results in [VISION_PIPELINE_REPORT.md](VISION_PIPELINE_REPORT.md) | Vision |
 | **Real hardware** | Nothing has run on a Quest 3S, a real phone over the tunnel, or real glasses footage | Everyone |
 
 Until the worker exists, an uploaded clip stays `uploaded`. To show a memory in a room, add its `memory.json` URL to the library by hand.

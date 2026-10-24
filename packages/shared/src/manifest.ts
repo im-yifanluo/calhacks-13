@@ -14,6 +14,9 @@ export interface Keyframe {
   s?: number;
   /** linear velocity in m/s (objects). Handed to physics when time is paused, so a thrown thing keeps flying. */
   v?: Vec3;
+  /** camera keyframes: the recording's exposure, as sRGB gain and bias [gr, gg, gb, br, bg, bb] mapping the room
+   *  splat's colours (one average exposure) onto this frame; the viewer replays it in wearer's view */
+  e?: number[];
 }
 
 export type SplatFormat = "spz" | "ply" | "splat" | "ksplat" | "sog";
@@ -43,6 +46,9 @@ export interface MemoryManifest {
     durationSec: number;
     /** rate the tracks were sampled at (viewer interpolates between samples) */
     sampleHz: number;
+    /** stretches [fromSec, toSec] where the recording's camera tracking was lost: the scene there is unreliable, and
+     *  the wearer's view / guided mode fade out instead of showing it */
+    gaps?: [number, number][];
   };
   /** Static scene with dynamic objects removed (inpainted or just masked out). */
   background: {

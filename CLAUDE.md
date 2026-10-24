@@ -18,13 +18,13 @@ apps/web/            viewer (three.js + Spark splats + Rapier), one URL for Ques
 server/spacetime/    SpacetimeDB 2.13 TypeScript module: memories, rooms, players, shared clock, takes, grabbing
 server/upload/       upload signing (S3/R2) and local-disk upload service
 packages/shared/     memory.json scene format (manifest.ts); Python mirror in pipeline/memreplay/manifest.py
-pipeline/            vision pipeline (Python), being rewritten by its owner
+pipeline/            vision pipeline (Python): memreplay CLI (S1-S7, verify, publish, worker), Runpod scripts in runpod/
 tests/               vitest: module harness, upload, storage
 docs/                plan, integration guide, per-area guides
 ```
 
 ## Rules that bite
-- **Don't touch `pipeline/`** unless you are the vision pipeline owner; it is being rewritten.
+- **`pipeline/`** has its own runbook ([pipeline/README.md](pipeline/README.md)) and synthetic tests (`cd pipeline && python -m pytest -q tests`).
 - **The scene format exists twice:** `packages/shared/src/manifest.ts` and `pipeline/memreplay/manifest.py`. Change both in the same commit.
 - **Never hand-edit generated or lock files.** Regenerate `apps/web/src/module_bindings/` with `npm run stdb:generate` (SpacetimeDB CLI 2.13.0), and `package-lock.json` with `npm install`.
 - **SpacetimeDB module code must be deterministic.** No `Math.random()` or `Date.now()`; use `ctx.random` and `ctx.timestamp`. Wire and SQL names are snake_case; TypeScript names are camelCase.
@@ -36,5 +36,5 @@ docs/                plan, integration guide, per-area guides
 ## Honest status (Sat Oct 24, morning)
 - **Working, checked in a desktop browser and by tests:** viewer engine with physics and replay; multiplayer server and client; network adapter and room panel; upload service and capture page. Run `npm test`, `npm run typecheck`, `npm run build`, and `npm run test:integration` against a local SpacetimeDB.
 - **Never run on real hardware:** Quest 3S, a phone over the tunnel, real glasses footage.
-- **Not built:** the vision pipeline steps and the pipeline worker (upload → pipeline → `ready`). Uploaded clips stay `uploaded`; add a `memory.json` URL to the library by hand to use a memory in a room.
+- **Vision pipeline:** built and run on the 5 sample clips ([docs/VISION_PIPELINE_REPORT.md](docs/VISION_PIPELINE_REPORT.md): per-clip scores against the video from the recorded camera, an independent judge panel's verdicts, and what limits quality). Rooms train with ViPE depth supervision and the appearance model on; colours are baked and calibrated against the frames; each camera keyframe carries the phone's exposure (`e`), replayed in wearer's view. `pipeline/tools/` has the headless capture + scoring (`evalclip.py`) and the judge workflow. The worker (`memreplay worker`: upload → pipeline → `ready`) is written but not yet run against a live SpacetimeDB and bucket; until then, publish with `memreplay publish` and add the `memory.json` URL to the library by hand.
 - **What's fixed and what's still open:** [docs/INTEGRATION.md](docs/INTEGRATION.md) §4.

@@ -39,3 +39,4 @@ apps/ios/**/xcuserdata/
 **/xcuserdata/
 **/DerivedData/
 *.xcuserstate
+pipeline/tools/shots/

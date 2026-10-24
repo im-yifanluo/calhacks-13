@@ -85,11 +85,40 @@ export function desktopInput(canvas: HTMLCanvasElement, camera: THREE.Camera, co
     canvas.addEventListener(name, event => { if (activePointer === event.pointerId) end(); }, { capture: true });
   }
   window.addEventListener("blur", end);
+  // Walking: W/A/S/D (or the up/down arrows) move along the view direction on the floor plane, Q/E lower and
+  // raise, Shift runs. Camera and orbit target move together so a drag still orbits around what is in front of
+  // you; guided mode's corridor clamp in main.ts applies afterwards, so this never walks out of the known area.
+  const held = new Set<string>();
+  const WALK = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE", "ArrowUp", "ArrowDown"]);
+  const forward = new THREE.Vector3(), right = new THREE.Vector3(), step = new THREE.Vector3();
+  let last = performance.now();
+  const walk = (now: number) => {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (held.size && controls.enabled) {
+      const speed = (held.has("ShiftLeft") || held.has("ShiftRight") ? 4 : 1.5) * dt;
+      camera.getWorldDirection(forward); forward.y = 0;
+      if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1); else forward.normalize();
+      right.set(-forward.z, 0, forward.x);
+      step.set(0, 0, 0);
+      if (held.has("KeyW") || held.has("ArrowUp")) step.add(forward);
+      if (held.has("KeyS") || held.has("ArrowDown")) step.sub(forward);
+      if (held.has("KeyD")) step.add(right);
+      if (held.has("KeyA")) step.sub(right);
+      if (held.has("KeyE")) step.y += 1;
+      if (held.has("KeyQ")) step.y -= 1;
+      if (step.lengthSq() > 0) { step.normalize().multiplyScalar(speed); camera.position.add(step); controls.target.add(step); }
+    }
+    requestAnimationFrame(walk);
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(walk);   // (absent in the node tests)
+  window.addEventListener("keyup", event => held.delete(event.code));
+  window.addEventListener("blur", () => held.clear());
   window.addEventListener("keydown", event => {
     if ((event.target as HTMLElement)?.matches("input, select, textarea, button")) return;
     if (event.code === "Space") { event.preventDefault(); viewer.togglePlay(); }
     if (event.code === "ArrowLeft") { event.preventDefault(); viewer.seek(viewer.timeline.time - 0.5); }
     if (event.code === "ArrowRight") { event.preventDefault(); viewer.seek(viewer.timeline.time + 0.5); }
+    if (WALK.has(event.code) || event.code.startsWith("Shift")) { if (WALK.has(event.code)) event.preventDefault(); held.add(event.code); }
     if (event.code === "Escape") end();
   });
 }
