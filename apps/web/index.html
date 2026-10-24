@@ -36,7 +36,7 @@
           <label class="toggle"><input id="eyes" type="checkbox" /> Wearer's view</label>
           <label class="toggle"><input id="debug" type="checkbox" /> Show colliders</label>
           <button id="export" title="Download your local takes as JSON">Export takes</button>
-        </div><div class="help"><p class="desktop-help">Drag to orbit. Scroll to zoom. Press Space to pause.</p><p class="phone-help">Swipe the scene to look around. Pinch to zoom. Use the pad to walk.</p><p>Pause, then drag an object and release to throw. Each edit makes an alternate take.</p><details><summary>Quest controls</summary><p>Enter VR, point at the floating panel and trigger to pause. Squeeze or pinch an object, move your hand, then release. Left stick moves; right stick snap-turns. A/X toggles playback; B/Y cycles takes.</p></details></div></details>
+        </div><div class="help"><p class="desktop-help">Drag to orbit. Scroll to zoom. Press Space to pause.</p><p class="phone-help">Swipe the scene to look around. Pinch to zoom. Use the pad to walk.</p><p>Pause, then drag an object and release to throw. Each edit makes an alternate take.</p><details><summary>Quest controls</summary><p>Enter VR, point at the floating panel and trigger to pause. Squeeze or pinch an object, move your hand, then release. Left stick moves; right stick snap-turns. A/X toggles playback; B/Y hides or shows controls. Click the right stick to bring controls back in front of you. Use the arrows on the panel to switch takes.</p></details></div></details>
       </fieldset>
       <p id="status" role="status" aria-live="polite">Loading the local demo…</p>
       <button id="reload" hidden>Reload viewer</button>
@@ -72,7 +72,11 @@
       </div>
     </dialog>
     <div id="joystick" role="group" aria-label="Drag to walk" title="Drag to walk"><span class="knob"></span><span class="joystick-label">WALK</span></div>
-    <div id="vr-entry"></div>
+    <section id="vr-entry" aria-label="Enter this memory in VR" hidden>
+      <div><strong>Step inside this memory</strong><p>Use controllers or hands. Your controls open in front of you.</p></div>
+      <div id="vr-button"></div>
+    </section>
+    <aside id="xr-preview-note" hidden>Quest UI preview <span>Desktop view · headset tracking is not simulated</span><a href="/">Back to viewer</a></aside>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

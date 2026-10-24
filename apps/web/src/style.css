@@ -69,8 +69,15 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); m
 #loading { position: absolute; top: 36%; left: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 12px; width: max-content; max-width: 90%; font-size: 14px; }
 .spinner { width: 18px; height: 18px; border: 2px solid #5e6458; border-top-color: #ddc8a9; border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-#vr-entry > * { position: absolute !important; bottom: auto !important; top: 114px !important; left: auto !important; right: 28px !important; width: 112px !important; min-height: 44px; font: 11px system-ui !important; border-color: #686e60 !important; border-radius: 5px !important; background: #202320 !important; }
-#vr-entry > button:disabled { display: none !important; }
+#vr-entry { position: absolute; z-index: 4; top: 110px; right: 28px; max-width: calc(100% - 56px); display: flex; gap: 20px; align-items: center; padding: 14px 18px; background: #f4f2eb; color: #282b25; border-radius: 8px; }
+#vr-entry strong { font-size: 15px; font-weight: 600; }
+#vr-entry p { font-size: 12px; margin: 6px 0 0; color: #686b60; }
+#vr-button { flex: none; }
+#vr-button > button { position: static !important; width: auto !important; min-width: 120px; min-height: 52px; padding: 14px 20px !important; font: 600 15px system-ui !important; border: 0 !important; border-radius: 5px !important; background: #b44827 !important; color: #fffaf4 !important; opacity: 1 !important; }
+#xr-preview-note { position: absolute; z-index: 4; top: 20px; left: 24px; right: 24px; display: flex; align-items: center; gap: 16px; font-size: 14px; }
+#xr-preview-note span { color: #aeb3a7; font-size: 12px; }
+#xr-preview-note a { margin-left: auto; color: #eeeDE7; padding: 12px; }
+.xr-preview #hud, .xr-preview header, .xr-preview .scene-meta, .xr-preview #joystick, .xr-preview #vr-entry, .in-xr #vr-entry { display: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
 #room-panel { width: min(460px, calc(100% - 32px)); max-height: 85dvh; padding: 0; color: var(--ink); color-scheme: light; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
 #room-panel[open] { display: flex; flex-direction: column; }
@@ -127,7 +134,8 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); m
   #status { font-size: 11px; }
   #room-panel { width: 100%; max-width: none; max-height: 90dvh; margin: auto 0 0; border: 0; border-radius: 12px 12px 0 0; }
   #room-body { padding-bottom: max(20px, env(safe-area-inset-bottom)); }
-  #vr-entry > * { top: calc(90px + env(safe-area-inset-top)) !important; right: 18px !important; }
+  #vr-entry { top: calc(90px + env(safe-area-inset-top)); right: 18px; left: 18px; max-width: none; padding: 12px; gap: 12px; }
+  #vr-entry p { display: none; }
   #joystick { left: 18px; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
@@ -144,6 +152,9 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); m
   #branches { font-size: 16px; padding: 8px; }
   #original { padding: 8px; }
   #joystick { bottom: max(12px, env(safe-area-inset-bottom)); left: max(16px, env(safe-area-inset-left)); width: 64px; height: 64px; }
-  #vr-entry > * { right: 334px !important; top: 80px !important; }
+  #vr-entry { right: 334px; top: 80px; left: 16px; max-width: none; }
+  #vr-entry p { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+.xr-preview #stage, .in-xr #stage { inset: 0; }

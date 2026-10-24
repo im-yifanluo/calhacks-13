@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { XRHandModelFactory } from "three/examples/jsm/webxr/XRHandModelFactory.js";
 import type { Viewer } from "./viewer.js";
+import { XRPanel, placePanel, runPlaybackAction, timelineFraction, type PanelAction } from "./xr-panel.js";
 
 // Head pose for locomotion: use the user camera (main.ts parents it to the rig), never renderer.xr.getCamera().
 // three's XR camera has no parent, and WebXRManager writes the raw viewer pose (in the reference space, i.e. relative
@@ -35,12 +36,20 @@ export function stickMove(rig: THREE.Object3D, head: THREE.Object3D, x: number, 
   if (Math.abs(x) > 0.2) rig.position.addScaledVector(right, x * distance);
 }
 
-/** Controller squeeze or hand pinch grabs. Trigger also operates the in-world timeline panel. */
+interface XROptions {
+  notice: () => string;
+  openLibrary: () => void;
+  unlockAudio: () => void;
+  preview?: boolean;
+}
+type Press = "select" | "squeeze";
+
 export class XRInput {
   private controllers: THREE.XRTargetRaySpace[] = [];
   private sources = new Map<number, XRInputSource>();
   private owner: number | null = null;
-  private pressed = new Set<number>();
+  private pending: number | null = null;
+  private pressed = new Map<number, Press>();
   private requestVersion = 0;
   private relative = new THREE.Matrix4();
   private raycaster = new THREE.Raycaster();
@@ -50,41 +59,64 @@ export class XRInput {
   private scale = new THREE.Vector3();
   private matrix = new THREE.Matrix4();
   private previousButtons = new Map<string, boolean>();
-  private canvas = document.createElement("canvas");
-  private context: CanvasRenderingContext2D;
-  private texture: THREE.CanvasTexture;
-  private panel: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
-  private lastLabel = "";
+  private panel = new XRPanel();
   private previousSnap = false;
+  private recenterFrames = 0;
+  private scrubbing: number | null = null;
+  private scrubElapsed = 0;
+  private lines: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>[] = [];
+  private dots: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>[] = [];
+  private outlines: THREE.Box3Helper[] = [];
+  private cleanup: (() => void)[] = [];
+  private previewPointer: number | null = null;
 
   constructor(private renderer: THREE.WebGLRenderer, private rig: THREE.Group,
-    private camera: THREE.PerspectiveCamera, private viewer: Viewer) {
-    this.canvas.width = 1024; this.canvas.height = 256;
-    this.context = this.canvas.getContext("2d")!;
-    this.texture = new THREE.CanvasTexture(this.canvas); this.texture.colorSpace = THREE.SRGBColorSpace;
-    this.panel = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.45), new THREE.MeshBasicMaterial({ map: this.texture, side: THREE.DoubleSide }));
-    this.panel.position.set(0, 1.95, -2);
-    rig.add(this.panel); this.panel.visible = false;
+    private camera: THREE.PerspectiveCamera, private viewer: Viewer, private options: XROptions) {
+    rig.add(this.panel.mesh);
     const handModels = new XRHandModelFactory();
     for (let index = 0; index < 2; index++) {
       const controller = renderer.xr.getController(index);
-      this.controllers.push(controller); rig.add(controller);
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -4)]),
-        new THREE.LineBasicMaterial({ color: 0x8ce5dd, transparent: true, opacity: 0.65 }));
-      controller.add(line);
+      this.controllers.push(controller); rig.add(controller); rig.add(renderer.xr.getControllerGrip(index));
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]),
+        new THREE.LineBasicMaterial({ color: 0xbec8b4, transparent: true, opacity: 0.7, depthTest: false }));
+      line.renderOrder = 1001; line.scale.z = 4; controller.add(line); this.lines.push(line);
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 6), new THREE.MeshBasicMaterial({ color: 0xb44827, depthTest: false }));
+      dot.renderOrder = 1002; dot.visible = false; controller.add(dot); this.dots.push(dot);
+      const outline = new THREE.Box3Helper(new THREE.Box3(), 0xe8b16d);
+      for (const material of Array.isArray(outline.material) ? outline.material : [outline.material]) material.depthTest = false; outline.renderOrder = 999; outline.visible = false;
+      viewer.memory.root.parent?.add(outline); this.outlines.push(outline);
       controller.addEventListener("connected", event => { this.sources.set(index, event.data); });
       controller.addEventListener("disconnected", () => { this.end(index); this.sources.delete(index); });
-      controller.addEventListener("selectstart", () => { void this.start(index, true); });
-      controller.addEventListener("selectend", () => this.end(index));
-      controller.addEventListener("squeezestart", () => { void this.start(index, false); });
-      controller.addEventListener("squeezeend", () => this.end(index));
+      controller.addEventListener("selectstart", () => { void this.start(index, "select"); });
+      controller.addEventListener("selectend", () => this.end(index, "select"));
+      controller.addEventListener("squeezestart", () => { void this.start(index, "squeeze"); });
+      controller.addEventListener("squeezeend", () => this.end(index, "squeeze"));
       const hand = renderer.xr.getHand(index);
       hand.add(handModels.createHandModel(hand, "spheres")); rig.add(hand);
     }
-    renderer.xr.addEventListener("sessionend", () => {
-      ++this.requestVersion; this.pressed.clear(); this.owner = null; viewer.release();
-      this.sources.clear(); this.previousButtons.clear(); this.panel.visible = false;
-    });
+    const start = () => { this.recenterFrames = 2; this.panel.compact = false; this.panel.help = false; };
+    const end = () => { this.reset(); this.panel.mesh.visible = false; };
+    const visibility = () => {
+      if (renderer.xr.getSession()?.visibilityState !== "visible") this.reset();
+    };
+    let activeSession: XRSession | null = null;
+    const bindVisibility = () => {
+      activeSession = renderer.xr.getSession(); activeSession?.addEventListener("visibilitychange", visibility); start();
+    };
+    const unbindVisibility = () => { activeSession?.removeEventListener("visibilitychange", visibility); activeSession = null; end(); };
+    renderer.xr.addEventListener("sessionstart", bindVisibility);
+    renderer.xr.addEventListener("sessionend", unbindVisibility);
+    this.cleanup.push(() => { unbindVisibility(); renderer.xr.removeEventListener("sessionstart", bindVisibility); renderer.xr.removeEventListener("sessionend", unbindVisibility); });
+    if (options.preview) this.bindPreview();
+    if (renderer.xr.isPresenting) bindVisibility();
+  }
+
+  private reset(): void {
+    ++this.requestVersion; this.pending = null; this.pressed.clear(); this.owner = null;
+    this.viewer.release(); this.scrubbing = null; this.previousButtons.clear(); this.previousSnap = false;
+    this.panel.hover = null;
+    this.outlines.forEach(outline => { outline.visible = false; });
+    this.dots.forEach(dot => { dot.visible = false; });
   }
 
   private ray(index: number): void {
@@ -94,86 +126,177 @@ export class XRInput {
     this.raycaster.set(this.position, this.direction);
   }
 
-  private async start(index: number, allowUI: boolean): Promise<void> {
-    if (this.pressed.has(index) || this.owner !== null) return;
-    this.pressed.add(index); this.ray(index);
-    if (allowUI) {
-      const hit = this.raycaster.intersectObject(this.panel)[0];
-      if (hit?.uv) {
-        const x = hit.uv.x;
-        if (x < 0.23) this.viewer.togglePlay();
-        else if (x < 0.43) this.viewer.seek(this.viewer.timeline.time - 1);
-        else if (x < 0.63) this.viewer.seek(this.viewer.timeline.time + 1);
-        else if (x < 0.82) this.cycleBranch();
-        else this.viewer.selectBranch("original");
-        return;
+  private grip(index: number): THREE.Object3D {
+    const source = this.sources.get(index);
+    const wrist = this.renderer.xr.getHand(index).joints["wrist"];
+    if (source?.hand && wrist) return wrist;
+    const grip = this.renderer.xr.getControllerGrip(index);
+    return grip.visible ? grip : this.controllers[index];
+  }
+
+  private async start(index: number, press: Press): Promise<void> {
+    if (this.pressed.has(index) || this.owner !== null || this.pending !== null || this.scrubbing !== null) return;
+    this.options.unlockAudio();
+    this.pressed.set(index, press); this.ray(index);
+    const panelHit = this.panel.hit(this.raycaster);
+    if (panelHit) {
+      if (press === "select" && panelHit.region) {
+        if (panelHit.region.action === "seek") this.scrubbing = index;
+        this.activate(panelHit.region.action, timelineFraction(panelHit.uv.x));
       }
+      return;
     }
     const hit = this.viewer.pick(this.raycaster);
     if (!hit) return;
-    const version = ++this.requestVersion;
-    if (!await this.viewer.grab(hit.object.userData.objectId)) return;
+    if (this.viewer.timeline.playing) { this.viewer.report("Pause the memory before grabbing an object."); return; }
+    const version = ++this.requestVersion; this.pending = index;
+    const acquired = await this.viewer.grab(hit.object.userData.objectId);
+    if (version === this.requestVersion && this.pending === index) this.pending = null;
+    if (!acquired) return;
     if (!this.pressed.has(index) || version !== this.requestVersion) { this.viewer.release(); return; }
     this.owner = index;
-    this.controllers[index].updateWorldMatrix(true, false);
+    const grip = this.grip(index); grip.updateWorldMatrix(true, false);
     this.viewer.held!.root.updateWorldMatrix(true, false);
-    this.relative.copy(this.controllers[index].matrixWorld).invert().multiply(this.viewer.held!.root.matrixWorld);
+    this.relative.copy(grip.matrixWorld).invert().multiply(this.viewer.held!.root.matrixWorld);
+    const haptic = this.sources.get(index)?.gamepad?.hapticActuators?.[0];
+    void haptic?.pulse(0.35, 35).catch(() => {});
   }
 
-  private end(index: number): void {
+  private end(index: number, press?: Press): void {
+    if (press && this.pressed.get(index) !== press) return;
+    if (this.scrubbing === index) { this.ray(index); this.seekFromRay(); this.scrubbing = null; }
     this.pressed.delete(index);
     if (this.owner === index) { this.viewer.release(); this.owner = null; }
-    else if (this.owner === null) { ++this.requestVersion; this.viewer.cancelPendingGrab(); }
+    else if (this.pending === index) { ++this.requestVersion; this.pending = null; this.viewer.cancelPendingGrab(); }
   }
 
-  private cycleBranch(): void {
-    const timeline = this.viewer.timeline;
-    const next = (timeline.branches.findIndex(b => b.id === timeline.activeId) + 1) % timeline.branches.length;
-    this.viewer.selectBranch(timeline.branches[next].id);
+  private activate(action: PanelAction, fraction = 0): void {
+    if (this.pending !== null || this.owner !== null) return;
+    switch (action) {
+      case "collapse": this.panel.compact = true; break;
+      case "expand": this.panel.compact = false; break;
+      case "help": this.panel.help = !this.panel.help; break;
+      case "recenter": placePanel(this.panel.mesh, this.camera); break;
+      case "library":
+      case "exit": {
+        const session = this.renderer.xr.getSession();
+        const after = () => { if (action === "library") this.options.openLibrary(); };
+        if (session) void session.end().then(after).catch(() => this.viewer.report("Could not leave VR. Use the headset menu to return to the browser."));
+        else if (this.options.preview && action === "exit") location.search = "";
+        else after();
+        break;
+      }
+      default: runPlaybackAction(this.viewer, action, fraction);
+    }
+  }
+
+  private seekFromRay(): void {
+    const hit = this.panel.hit(this.raycaster);
+    if (hit) this.activate("seek", timelineFraction(hit.uv.x));
   }
 
   update(dt: number): void {
-    this.panel.visible = this.renderer.xr.isPresenting;
-    if (!this.renderer.xr.isPresenting) return;
+    const presenting = this.renderer.xr.isPresenting;
+    this.panel.mesh.visible = presenting || !!this.options.preview;
+    if (!presenting) {
+      if (this.options.preview) this.panel.draw(this.viewer, this.options.notice(), "");
+      return;
+    }
+    if (this.recenterFrames > 0 && --this.recenterFrames === 0) placePanel(this.panel.mesh, this.camera);
     if (this.owner !== null) {
       if (!this.viewer.held) this.owner = null;
       else {
-        this.controllers[this.owner].updateWorldMatrix(true, false);
-        this.matrix.copy(this.controllers[this.owner].matrixWorld).multiply(this.relative);
+        const grip = this.grip(this.owner); grip.updateWorldMatrix(true, false);
+        this.matrix.copy(grip.matrixWorld).multiply(this.relative);
         this.matrix.decompose(this.position, this.rotation, this.scale);
         this.viewer.moveHeld(this.position, this.rotation, dt);
       }
     }
-    let snap = 0;
-    for (const [index, source] of this.sources) {
+    let snap = 0, target = "";
+    this.panel.hover = null;
+    this.scrubElapsed += dt;
+    for (let index = 0; index < this.controllers.length; index++) {
+      const source = this.sources.get(index);
+      this.lines[index].visible = !!source;
+      this.dots[index].visible = false; this.outlines[index].visible = false;
+      if (!source || !this.controllers[index].visible) continue;
+      this.ray(index);
+      const panelHit = this.panel.hit(this.raycaster);
+      const objectHit = panelHit ? undefined : this.viewer.pick(this.raycaster);
+      const distance = panelHit?.distance ?? objectHit?.distance ?? 4;
+      this.lines[index].scale.z = distance;
+      this.lines[index].material.color.set(panelHit?.region || objectHit ? 0xe8b16d : 0xbec8b4);
+      if (panelHit?.region || objectHit) {
+        const dot = this.dots[index]; dot.position.set(0, 0, -distance); dot.visible = true;
+        if (panelHit?.region) this.panel.hover = panelHit.region.action;
+        if (objectHit && this.owner === null) {
+          const object = this.viewer.memory.objects.find(o => o.definition.id === objectHit.object.userData.objectId);
+          target = object?.definition.label ?? "Object";
+          this.outlines[index].box.setFromObject(objectHit.object); this.outlines[index].visible = true;
+        }
+      }
+      if (this.scrubbing === index && this.scrubElapsed >= 1 / 15) { this.seekFromRay(); this.scrubElapsed = 0; }
       const pad = source.gamepad;
       if (!pad) continue;
       const x = pad.axes[2] ?? 0, y = pad.axes[3] ?? 0;
-      if (source.handedness === "left") stickMove(this.rig, this.camera, x, y, dt * 1.5);
-      else if (Math.abs(x) > 0.7) snap = Math.sign(x);
-      for (const [button, action] of [[4, () => this.viewer.togglePlay()], [5, () => this.cycleBranch()]] as const) {
-        const pressed = pad.buttons[button]?.pressed ?? false;
-        const key = `${index}-${button}`;
-        if (pressed && !this.previousButtons.get(key)) action();
+      // Moving the rig during a throw would inject locomotion into the object's release velocity.
+      const canMove = this.owner === null && this.pending === null && this.scrubbing === null;
+      if (canMove && source.handedness === "left") stickMove(this.rig, this.camera, x, y, dt * 1.5);
+      else if (canMove && source.handedness === "right" && Math.abs(x) > 0.7) snap = Math.sign(x);
+      for (const button of [3, 4, 5]) {
+        const pressed = pad.buttons[button]?.pressed ?? false, key = `${index}-${button}`;
+        if (pressed && !this.previousButtons.get(key) && canMove) {
+          this.options.unlockAudio();
+          if (button === 4) this.activate("play");
+          else if (button === 5) { this.panel.compact = !this.panel.compact; if (!this.panel.compact) placePanel(this.panel.mesh, this.camera); }
+          else if (source.handedness === "right") { this.panel.compact = false; placePanel(this.panel.mesh, this.camera); }
+        }
         this.previousButtons.set(key, pressed);
       }
     }
-    // Right stick: a 30° snap turn about the head; pushing right turns right (clockwise seen from above).
     if (snap && !this.previousSnap) snapTurn(this.rig, this.camera, -snap * Math.PI / 6);
     this.previousSnap = !!snap;
-    const timeline = this.viewer.timeline;
-    const label = `${timeline.playing ? "PAUSE" : "PLAY"}|${timeline.time.toFixed(1)}|${timeline.active.name}|${this.viewer.held?.definition.label ?? ""}`;
-    if (label !== this.lastLabel) {
-      this.lastLabel = label;
-      const ctx = this.context;
-      ctx.fillStyle = "#101e27"; ctx.fillRect(0, 0, 1024, 256);
-      ctx.fillStyle = "#a1ece0"; ctx.font = "bold 35px sans-serif";
-      ctx.fillText(`MEMORY REPLAY · ${timeline.active.name} · ${timeline.time.toFixed(1)}s`, 28, 56);
-      ctx.fillStyle = "#ffffff"; ctx.font = "28px sans-serif";
-      [timeline.playing ? "PAUSE" : "PLAY", "−1 SEC", "+1 SEC", "TAKES", "ORIGINAL"].forEach((text, i) => ctx.fillText(text, 28 + i * 202, 140));
-      ctx.fillStyle = "#bdcbd3"; ctx.font = "23px sans-serif";
-      ctx.fillText(this.viewer.held ? "Release to throw" : "Pause, then squeeze or pinch an object. Trigger selects controls.", 28, 218);
-      this.texture.needsUpdate = true;
+    this.panel.draw(this.viewer, this.options.notice(), target);
+  }
+
+  private bindPreview(): void {
+    placePanel(this.panel.mesh, this.camera); this.panel.mesh.visible = true;
+    const canvas = this.renderer.domElement;
+    const ray = (event: PointerEvent) => {
+      const bounds = canvas.getBoundingClientRect();
+      this.raycaster.setFromCamera(new THREE.Vector2((event.clientX - bounds.left) / bounds.width * 2 - 1, 1 - (event.clientY - bounds.top) / bounds.height * 2), this.camera);
+      return this.panel.hit(this.raycaster);
+    };
+    const down = (event: PointerEvent) => {
+      const hit = ray(event);
+      if (!hit) return;
+      event.stopImmediatePropagation(); this.options.unlockAudio();
+      if (!hit.region) return;
+      if (hit.region.action === "seek") { this.previewPointer = event.pointerId; canvas.setPointerCapture(event.pointerId); }
+      this.activate(hit.region.action, timelineFraction(hit.uv.x));
+    };
+    const move = (event: PointerEvent) => {
+      const hit = ray(event); this.panel.hover = hit?.region?.action ?? null;
+      if (this.previewPointer === event.pointerId) { event.stopImmediatePropagation(); if (hit) this.activate("seek", timelineFraction(hit.uv.x)); }
+    };
+    const end = (event: PointerEvent) => {
+      if (this.previewPointer !== event.pointerId) return;
+      this.previewPointer = null; if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+      event.stopImmediatePropagation();
+    };
+    canvas.addEventListener("pointerdown", down, true); canvas.addEventListener("pointermove", move, true);
+    canvas.addEventListener("pointerup", end, true); canvas.addEventListener("pointercancel", end, true);
+    this.cleanup.push(() => {
+      canvas.removeEventListener("pointerdown", down, true); canvas.removeEventListener("pointermove", move, true);
+      canvas.removeEventListener("pointerup", end, true); canvas.removeEventListener("pointercancel", end, true);
+    });
+  }
+
+  dispose(): void {
+    this.cleanup.forEach(dispose => dispose()); this.panel.dispose();
+    for (const object of [...this.lines, ...this.dots, ...this.outlines]) {
+      object.removeFromParent(); object.geometry.dispose();
+      for (const material of Array.isArray(object.material) ? object.material : [object.material]) material.dispose();
     }
   }
 }

@@ -15,7 +15,7 @@ Open `http://127.0.0.1:5173`. The default demo creates a small Spark splat floor
 
 1. Pause near the ball's high point around 2 seconds, or use the scrubber.
 2. Drag the ball and release. This forks a take and previews/records its physics trajectory. A grab starts after 6 px of movement or 150 ms held, so a quick tap does nothing. A held object can't go below the floor. When the preview comes to rest, the object holds its landing pose and the status says "Throw recorded. Press Play to replay this take."
-3. Press **Play take** to replay the recorded trajectory from the paused time. If the preview is still simulating, it is finished before replay begins.
+3. Press **Play** to replay the recorded trajectory from the paused time. If the preview is still simulating, it is finished before replay begins.
 4. Scrub or select **Original**. The original motion is unchanged. A second edit creates a child take that inherits earlier edits.
 5. Use **Export takes** to download the local branch records as JSON. Local takes live in memory and are lost on reload unless exported or persisted by P4. Export is data for inspection/integration; the UI does not yet import files.
 
@@ -26,14 +26,27 @@ Desktop: drag empty space to orbit, scroll to zoom, Space to play/pause, arrow k
 Use the README's USB/adb setup (`LOCAL_HTTP=1 npm run dev`, `adb reverse tcp:5173 tcp:5173`) and open `http://localhost:5173` in Quest Browser. For direct LAN access, plain `npm run dev` serves self-signed HTTPS on every interface; for a public HTTPS URL use `npm run tunnel`. A plain LAN-IP HTTP URL is not a secure context for WebXR.
 
 - The rig starts at the first camera keyframe's x/z position, at `world.floorY`, with that keyframe's yaw. Headset height is supplied by `local-floor` tracking.
-- Squeeze a controller or pinch a hand ray over a paused grabbable object. Release to throw. The object preserves its offset relative to the controller, including rotation.
-- The floating panel works without the DOM HUD: trigger/pinch selects Play, −1 second, +1 second, Takes, or Original. A/X toggles play, B/Y cycles takes.
+- Point at a paused grabbable object. Its outline and ray tip highlight. Hold controller grip (or pinch with hands), move, then release to throw. The held pose follows the controller grip or hand wrist, preserving its initial offset and rotation. Locomotion is suspended while holding or scrubbing so walking does not add throw velocity.
+- The floating panel opens 1.4 m ahead and slightly below the eyes, using the actual tracked height for seated or standing users. It stays level and does not chase head turns. Trigger/pinch selects its buttons. Hold trigger/pinch on the timeline to scrub; seeking pauses playback. Arrows cycle takes in both directions. Original preserves alternate takes.
+- **A/X** plays or pauses. **B/Y** hides or shows the panel. Clicking the **right thumbstick** restores the panel in front of you. The panel also has Recenter and Hide controls; when hidden, a small Show controls button remains usable with hand rays.
+- **How to use** opens instructions inside VR. **Library** ends the immersive session and opens the existing browser library. **Leave VR** returns to the browser viewer. VR entry appears only after the scene has loaded and immersive VR support is confirmed. Upload, room setup, and scene selection happen in the browser or on the phone before entering VR.
+- The panel prevents clicks from grabbing objects behind it. System-menu visibility changes, disconnect, and session exit release held objects and cancel pending grabs. Controller haptics give a short confirmation when a grab succeeds, where supported.
 - Left stick moves; right stick turns in 30° steps. Both use the user camera under the rig, so the stick follows where you look after spawn and after snap turns, and a snap turn pivots around your head. Hand-only users can move physically and use the panel; joystick locomotion requires controllers.
 - One local grab/simulation is active at a time. Hand disconnect, cancelled pointers, lost focus, and XR exit release local input. Network ownership loss can explicitly stop simulation via the API below.
 
 The renderer uses antialiasing off, pixel ratio 1, fixed foveation 1, a shared Three.js instance, Spark `preUpdate:false`, and `maxStdDev: Math.sqrt(5)`. Declared/loaded static scenes above one million splats fail visibly; above 500,000 emit a warning. Sequence frames have a three-frame cache with one request in flight. Sequence frames must also be budgeted by the pipeline; the viewer's initial total-count check cannot account for all future sequence assets.
 
 **Still requires a physical Quest:** controller/hand pose accuracy, throwing feel, 72 FPS with the team's real scene, spawn/floor alignment, and USB/LAN access. Desktop software-rendering FPS is not a headset benchmark. The IWSDK spike was not attempted without hardware; this uses the plan's default Three.js stack.
+
+### Desktop preview and verification
+
+In the development server, open `?xrPreview=1` to render and click the same 3D controls with a mouse. Hide the panel to drag an object with the existing desktop input, then restore it to switch or replay takes. The preview is not a headset emulator and is disabled in production builds. It does not prove stereo rendering, controller tracking, or hand recognition.
+
+`apps/web/src/xr-panel.ts` owns the panel layout, hit regions, and drawing. `input-xr.ts` owns device input, grip poses, ray feedback, session cleanup, and the preview pointer adapter. Both use the existing Viewer methods, so playback, physics, branching, and shared-room authority keep the same behavior.
+
+The automated checks use real Three.js transforms and Rapier/Viewer behavior with a simulated headset event boundary. They cover seated/standing placement, scrub endpoints, take selection, panel click-through, grip movement, unrelated trigger releases, pending-grab cancellation on exit, and release on system-menu visibility changes. Browser checks cover the rendered panel, timeline dragging, help, hide/show, and a desktop throw that appears as a new take.
+
+For the first physical Quest 3S run, verify entry and exit; seated recenter; controller selection, grip, and throw; hand pinch; playback and take switching; returning to Library; opening the system menu during a hold; and real-scene frame rate. Use the port printed by Vite if 5173 is already occupied, and reverse that same port when using USB.
 
 ## Assets and time
 

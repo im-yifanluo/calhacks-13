@@ -26,6 +26,9 @@ async function main(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const manifestUrl = params.get("memory") ?? "/mock/memory.json";
   const demo = !params.has("memory");
+  const xrPreview = import.meta.env.DEV && params.has("xrPreview");
+  document.body.classList.toggle("xr-preview", xrPreview);
+  element("xr-preview-note").hidden = !xrPreview;
   element("mode").textContent = demo ? "Demo" : "Recording";
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
   const stage = element("stage");
@@ -34,11 +37,6 @@ async function main(): Promise<void> {
   renderer.domElement.setAttribute("aria-label", "Interactive 3D memory. Pause, then drag an object to throw it.");
   stage.appendChild(renderer.domElement);
   const vrEntry = element("vr-entry");
-  vrEntry.appendChild(VRButton.createButton(renderer, { optionalFeatures: ["hand-tracking"] }));
-  vrEntry.hidden = true;
-  navigator.xr?.isSessionSupported("immersive-vr").then(supported => {
-    vrEntry.hidden = !supported;
-  }).catch(() => { vrEntry.hidden = true; });
   const scene = new THREE.Scene(); scene.background = new THREE.Color(0x202320);
   scene.add(new THREE.HemisphereLight(0xbfeaf4, 0x374454, 2.5));
   const light = new THREE.DirectionalLight(0xffd7b5, 3); light.position.set(3, 5, 2); scene.add(light);
@@ -49,6 +47,9 @@ async function main(): Promise<void> {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0.8, -1); controls.enableDamping = true; controls.maxDistance = 20; controls.minDistance = 0.4;
   controls.maxPolarAngle = Math.PI * 0.49;
+  if (xrPreview) {
+    camera.position.set(0, 1.65, 2); controls.target.set(0, 1.65, -1); controls.update(); controls.enabled = false;
+  }
   const spark = new SparkRenderer({ renderer, preUpdate: false, maxStdDev: Math.sqrt(5), lodSplatCount: 500_000 });
   scene.add(spark);
   // Shared rooms (session.ts) connect while the memory loads. Without a room the viewer stays local.
@@ -94,8 +95,6 @@ async function main(): Promise<void> {
   const grid = new THREE.GridHelper(10, 20, 0x666e5c, 0x343b30); grid.position.y = memory.manifest.world.floorY; scene.add(grid);
   viewer = new Viewer(memory, message => { status.textContent = message; }); window.memoryReplay = viewer;
   const currentViewer = viewer;
-  const xr = new XRInput(renderer, rig, camera, viewer);
-  desktopInput(renderer.domElement, camera, controls, viewer);
   element("title").textContent = demo ? "Practice room" : memory.manifest.title;
   element("subtitle").textContent = "Explore the scene. Make a different take.";
   element("asset-info").textContent = `${memory.objects.length} objects · ${demo ? "Sample scene" : "Recorded scene"}`;
@@ -113,6 +112,21 @@ async function main(): Promise<void> {
   // The clip's audio follows the timeline (play, pause, seek, takes, the room's clock); the first tap or key starts it.
   const audioUrl = memory.manifest.source?.audioUrl;
   const audio = audioUrl ? mountAudio(new URL(audioUrl, new URL(manifestUrl, location.href)).href, document.querySelector("#timeline-controls .tools"), showWarning) : undefined;
+  const xr = new XRInput(renderer, rig, camera, currentViewer, {
+    preview: xrPreview,
+    notice: () => warning.hidden ? status.textContent ?? "" : warning.textContent ?? "",
+    unlockAudio: () => audio?.sync.unlock(),
+    openLibrary: () => {
+      const library = element<HTMLDialogElement>("room-panel");
+      if (!library.open) element("room-toggle").click();
+    },
+  });
+  desktopInput(renderer.domElement, camera, controls, viewer);
+  navigator.xr?.isSessionSupported("immersive-vr").then(supported => {
+    if (!supported || xrPreview) return;
+    element("vr-button").appendChild(VRButton.createButton(renderer, { optionalFeatures: ["hand-tracking"] }));
+    vrEntry.hidden = false;
+  }).catch(() => { vrEntry.hidden = true; });
   let branchCount = 0;
   play.onclick = () => currentViewer.togglePlay();
   scrub.oninput = () => currentViewer.seek(Number(scrub.value) / 1000 * currentViewer.timeline.duration);
@@ -138,7 +152,7 @@ async function main(): Promise<void> {
     if (eyes.checked && !renderer.xr.isPresenting) {
       sampleTrack(memory.cameraTrack, currentViewer.timeline.time, camera);
       camera.fov = memory.manifest.camera.fovYDeg; camera.updateProjectionMatrix();
-    } else if (!renderer.xr.isPresenting) { joystick.update(dt); if (controls.enabled) controls.update(); }
+    } else if (!renderer.xr.isPresenting) { joystick.update(dt); if (controls.enabled && !xrPreview) controls.update(); }
     const tl = currentViewer.timeline;
     if (timestamp - lastUI > 100) {
       lastUI = timestamp; play.textContent = tl.playing ? "Pause" : "Play";
@@ -178,7 +192,7 @@ async function main(): Promise<void> {
     renderer.render(scene, camera);
   });
   document.addEventListener("visibilitychange", () => { previous = 0; if (document.hidden) currentViewer.release(); });
-  addEventListener("pagehide", () => { stageObserver.disconnect(); renderer.setAnimationLoop(null); audio?.dispose(); currentViewer.dispose(); spark.dispose(); renderer.dispose(); }, { once: true });
+  addEventListener("pagehide", () => { stageObserver.disconnect(); renderer.setAnimationLoop(null); xr.dispose(); audio?.dispose(); currentViewer.dispose(); spark.dispose(); renderer.dispose(); }, { once: true });
   session.attach(currentViewer);
   if (import.meta.env.DEV) {
     // Dev-only probe for multi-tab checks: compare positionsAt(t) across tabs of one room.
