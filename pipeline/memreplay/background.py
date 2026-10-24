@@ -1,0 +1,137 @@
+"""S6 background splat: gsplat (MCMC) on our world-frame cameras with people and props masked out of the loss.
+
+  prepare()  <work>/colmap/{images,masks,sparse/0} from cameras.json, ViPE masks and bg_points.ply
+  train()    runs gsplat's examples/simple_trainer.py through train_splat.py (adds per-image masks)
+  convert()  last PLY -> world/bg.spz with splat-transform (<= 300k splats)
+"""
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+import cv2
+import numpy as np
+
+from .handoff import Cameras, FramesInfo, WorldInfo
+from .l0 import read_splat_ply_xyz_rgb
+from .vipe_io import Frames, Vipe, dilate
+
+MAX_IMAGES = 300
+INIT_POINTS = 150_000
+CAP = 300_000
+
+
+def _quat_wxyz(R: np.ndarray) -> np.ndarray:
+    tr = np.trace(R)
+    if tr > 0:
+        s = np.sqrt(tr + 1.0) * 2
+        q = [0.25 * s, (R[2, 1] - R[1, 2]) / s, (R[0, 2] - R[2, 0]) / s, (R[1, 0] - R[0, 1]) / s]
+    elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+        s = np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]) * 2
+        q = [(R[2, 1] - R[1, 2]) / s, 0.25 * s, (R[0, 1] + R[1, 0]) / s, (R[0, 2] + R[2, 0]) / s]
+    elif R[1, 1] > R[2, 2]:
+        s = np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]) * 2
+        q = [(R[0, 2] - R[2, 0]) / s, (R[0, 1] + R[1, 0]) / s, 0.25 * s, (R[1, 2] + R[2, 1]) / s]
+    else:
+        s = np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]) * 2
+        q = [(R[1, 0] - R[0, 1]) / s, (R[0, 2] + R[2, 0]) / s, (R[1, 2] + R[2, 1]) / s, 0.25 * s]
+    q = np.array(q)
+    return q / np.linalg.norm(q)
+
+
+def pick_frames(work: Path, cams: Cameras, n: int) -> list:
+    """About n keyframes spread over the clip, taking the sharpest one in each window."""
+    frames = cams.frames
+    if len(frames) <= n:
+        return frames
+    reader = Frames(Path(work) / "input" / "clip.mp4")
+    edges = np.linspace(0, len(frames), n + 1).astype(int)
+    picked = []
+    for a, b in zip(edges[:-1], edges[1:]):
+        window = frames[a:max(b, a + 1)]
+        scores = []
+        for c in window:
+            g = cv2.cvtColor(reader.get(c.idx), cv2.COLOR_RGB2GRAY)
+            scores.append(cv2.Laplacian(cv2.resize(g, None, fx=0.5, fy=0.5), cv2.CV_64F).var())
+        picked.append(window[int(np.argmax(scores))])
+    return picked
+
+
+def prepare(work: Path) -> Path:
+    work = Path(work)
+    cams = Cameras.model_validate_json((work / "world" / "cameras.json").read_text())
+    v = Vipe(work / "vipe")
+    col = work / "colmap"
+    if col.exists():
+        shutil.rmtree(col)
+    for d in ("images", "masks", "sparse/0"):
+        (col / d).mkdir(parents=True)
+    chosen = pick_frames(work, cams, MAX_IMAGES)
+    reader = Frames(work / "input" / "clip.mp4")
+    c0 = chosen[0]
+    K = np.array(c0.K).reshape(3, 3)
+    # ViPE puts pixel centres at integer coordinates; COLMAP/gsplat at +0.5
+    (col / "sparse/0/cameras.txt").write_text(
+        f"1 PINHOLE {c0.w} {c0.h} {K[0, 0]:.6f} {K[1, 1]:.6f} {K[0, 2] + 0.5:.6f} {K[1, 2] + 0.5:.6f}\n")
+    lines = []
+    for i, c in enumerate(chosen, start=1):
+        name = f"{c.idx:05d}"
+        rgb = reader.get(c.idx)
+        cv2.imwrite(str(col / "images" / f"{name}.jpg"), cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 95])
+        m = v.mask(c.idx)
+        static = np.ones(rgb.shape[:2], bool) if m is None else ~dilate(m > 0, 5)
+        cv2.imwrite(str(col / "masks" / f"{name}.png"), static.astype(np.uint8) * 255)
+        c2w = np.array(c.c2w).reshape(4, 4)
+        w2c = np.linalg.inv(c2w)
+        q = _quat_wxyz(w2c[:3, :3])
+        t = w2c[:3, 3]
+        lines.append(f"{i} {q[0]:.9f} {q[1]:.9f} {q[2]:.9f} {q[3]:.9f} {t[0]:.9f} {t[1]:.9f} {t[2]:.9f} 1 {name}.jpg\n\n")
+    (col / "sparse/0/images.txt").write_text("".join(lines))
+    xyz, rgb = read_splat_ply_xyz_rgb(work / "world" / "bg_points.ply")
+    if len(xyz) > INIT_POINTS:
+        sel = np.random.default_rng(0).choice(len(xyz), INIT_POINTS, replace=False)
+        xyz, rgb = xyz[sel], rgb[sel]
+    with open(col / "sparse/0/points3D.txt", "w") as f:
+        for i, (p, c) in enumerate(zip(xyz, rgb), start=1):
+            f.write(f"{i} {p[0]:.5f} {p[1]:.5f} {p[2]:.5f} {c[0]} {c[1]} {c[2]} 0\n")
+    print(f"[background] colmap dir: {len(chosen)} images, {len(xyz)} seed points")
+    return col
+
+
+def train(work: Path, steps_scaler: float = 0.25) -> Path:
+    work = Path(work)
+    out = work / "gsplat"
+    env = dict(os.environ)
+    cmd = [sys.executable, "-m", "memreplay.train_splat", "mcmc", "--data_dir", str(work / "colmap"),
+           "--data_factor", "1", "--result_dir", str(out), "--strategy.cap-max", str(CAP),
+           "--steps_scaler", str(steps_scaler), "--save_ply", "--app_opt", "--disable_viewer",
+           "--eval_steps", "-1", "--no-normalize-world-space", "--test_every", "100000"]
+    subprocess.run(cmd, check=True, env=env)
+    plys = sorted((out / "ply").glob("point_cloud_*.ply"), key=lambda p: int(p.stem.split("_")[-1]))
+    if not plys:
+        raise SystemExit("gsplat wrote no PLY")
+    return plys[-1]
+
+
+def convert(work: Path, ply: Path) -> int:
+    work = Path(work)
+    out = work / "world" / "bg.spz"
+    tmp = work / "gsplat" / "bg_capped.ply"
+    subprocess.run(["splat-transform", "-w", str(ply), "--filter-nan", "--decimate", str(CAP), str(tmp)], check=True)
+    subprocess.run(["splat-transform", "-w", str(tmp), str(out)], check=True)
+    raw = tmp.read_bytes()[:2000].decode(errors="ignore")
+    n = int(next(ln.split()[-1] for ln in raw.splitlines() if ln.startswith("element vertex")))
+    winfo = WorldInfo.model_validate_json((work / "world" / "world.json").read_text())
+    winfo.bgSplatCount = n
+    (work / "world" / "world.json").write_text(winfo.model_dump_json(indent=2))
+    print(f"[background] world/bg.spz: {n} splats")
+    return n
+
+
+def run(work: Path, steps_scaler: float = 0.25) -> None:
+    FramesInfo.model_validate_json((Path(work) / "input" / "frames.json").read_text())
+    prepare(work)
+    convert(work, train(work, steps_scaler))

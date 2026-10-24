@@ -88,6 +88,7 @@ class WorldInfo(BaseModel):
     boundsMax: tuple[float, float, float]
     bgPointsCount: int = 0  # filled by S4 (bg_points.ply)
     bgSplatCount: int = 0  # filled by S6 (bg.spz)
+    diagnostics: dict = {}  # S3 floor fit quality etc., for the verification report
 
 
 # --- S5 -------------------------------------------------------------------------------------
