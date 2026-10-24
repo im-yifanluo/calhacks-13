@@ -102,26 +102,28 @@ means and listed separately. "Room Gaussians" is what is left after pruning floa
 <!-- RESULTS-TABLE -->
 | clip | length | floor fit | cam height | room Gaussians (pruned) | props | ghosts | lost tracking | PSNR | SSIM | colour | centre SSIM |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| Hotel room (`img8013`) | 42 s | assumed | 1.42 m | 380,785 (107,967) | 19 | 0 | none | 13.9 | 0.71 | 0.62 | 0.71 |
-| Hotel room corner (`img8014`) | 11 s | found | 1.61 m | 378,725 (70,279) | 4 | 0 | none | 20.6 | 0.87 | 0.75 | 0.91 |
-| Hotel corridor (`img8015`) | 73 s | found | 1.62 m | 334,570 (164,296) | 4 | 0 | 1.2 s | 16.4 | 0.62 | 0.78 | 0.59 |
-| Hotel lobby (`img8016`) | 34 s | found | 1.40 m | 378,143 (120,777) | 6 | 1 | 13.3 s in 4 stretches | 18.2 | 0.70 | 0.58 | 0.68 |
-| Night walk downtown (`img8017`) | 142 s | found | 1.58 m | 241,221 (258,779) | 0 | 2 | none | 17.7 | 0.61 | 0.69 | 0.62 |
+| Hotel room (`img8013`) | 42 s | assumed | 1.42 m | 380,785 (107,967) | 19 | 0 | none | 13.9 | 0.72 | 0.64 | 0.72 |
+| Hotel room corner (`img8014`) | 11 s | found | 1.61 m | 378,725 (70,279) | 4 | 0 | none | 20.5 | 0.87 | 0.83 | 0.90 |
+| Hotel corridor (`img8015`) | 73 s | found | 1.62 m | 334,570 (164,296) | 4 | 0 | 1.2 s | 16.4 | 0.62 | 0.79 | 0.59 |
+| Hotel lobby (`img8016`) | 34 s | found | 1.40 m | 378,143 (120,777) | 6 | 1 | 13.3 s in 4 stretches | 18.2 | 0.70 | 0.60 | 0.68 |
+| Night walk downtown (`img8017`) | 142 s | found | 1.58 m | 241,221 (258,779) | 0 | 2 | none | 17.6 | 0.60 | 0.68 | 0.61 |
 <!-- /RESULTS-TABLE -->
 
 How the day's changes moved the numbers (PSNR / SSIM from the recorded camera, tracked rows):
 
-| clip | morning (first run) | clean retrain | + depth supervision + bake | + exposure replay (final) |
+| clip | morning (first run) | clean retrain | + depth supervision + bake | + exposure replay + viewer gain (final) |
 |---|---|---|---|---|
-| Hotel room | fog (floor fit on the bed) | 14.6 / 0.73 | 13.8 / 0.70 | 13.9 / 0.71 |
-| Room corner | 19.0 / 0.88 | 20.3 / 0.89 | 20.2 / 0.88 | 20.6 / 0.87 |
+| Hotel room | fog (floor fit on the bed) | 14.6 / 0.73 | 13.8 / 0.70 | 13.9 / 0.72 |
+| Room corner | 19.0 / 0.88 | 20.3 / 0.89 | 20.2 / 0.88 | 20.5 / 0.87 |
 | Corridor | ~11, streaked | 11.2 / 0.50 | 15.9 / 0.60 | 16.4 / 0.62 |
 | Lobby (tracked half) | ~17 | 17.9 / 0.72 | 18.1 / 0.70 | 18.2 / 0.70 |
-| Night walk | not scored | 18.2 / 0.68 | 17.6 / 0.64 | 17.7 / 0.61 |
+| Night walk | not scored | 18.2 / 0.68 | 17.6 / 0.64 | 17.6 / 0.60 |
 
 Depth supervision is what rescued the corridor (+5 dB); it did nothing for the short room corner and cost the night
 walk a little (its ViPE depth is noisy at street distances). Exposure replay adds 0.3–0.5 dB where the camera's
-exposure moved, and makes the lamp rows of the room corner clip to white exactly as the video does.
+exposure moved, and makes the lamp rows of the room corner clip to white exactly as the video does. The viewer gain
+(the last change) left PSNR and SSIM where they were and raised the colour-histogram match a little on four clips
+(room corner 0.75 → 0.83); it was not re-judged.
 
 What the grids show (`apps/web/public/memories/<id>/compare.jpg`, also linked from the status page):
 - **Room corner**: the same scene at a glance: TV, couch, pillow, papers, lamp in place; the bright wall around the
