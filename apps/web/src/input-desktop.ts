@@ -86,7 +86,7 @@ export function desktopInput(canvas: HTMLCanvasElement, camera: THREE.Camera, co
   }
   window.addEventListener("blur", end);
   window.addEventListener("keydown", event => {
-    if ((event.target as HTMLElement)?.matches("input, select, textarea, button")) return;
+    if (event.target instanceof Element && event.target.closest("input, select, textarea, button, summary, dialog[open], [contenteditable='true']")) return;
     if (event.code === "Space") { event.preventDefault(); viewer.togglePlay(); }
     if (event.code === "ArrowLeft") { event.preventDefault(); viewer.seek(viewer.timeline.time - 0.5); }
     if (event.code === "ArrowRight") { event.preventDefault(); viewer.seek(viewer.timeline.time + 0.5); }

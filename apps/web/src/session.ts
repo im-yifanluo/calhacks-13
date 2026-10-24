@@ -383,7 +383,7 @@ export class Session {
   private headRotation = new THREE.Quaternion();
   private hands = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly ui = {
-    panel: $("room-panel"),
+    panel: $<HTMLDialogElement>("room-panel"),
     toggle: $<HTMLButtonElement>("room-toggle"),
     summary: $("room-summary"),
     connection: $("room-connection"),
@@ -426,8 +426,12 @@ export class Session {
       this.profileDirty = true;
     });
     ui.toggle.onclick = () =>
-      this.expand(ui.panel.classList.contains("collapsed"));
-    this.expand(innerWidth > 650);
+      this.expand(!ui.panel.open);
+    $("room-close").onclick = () => this.expand(false);
+    ui.panel.addEventListener("close", () => {
+      ui.toggle.setAttribute("aria-expanded", "false");
+    });
+    this.expand(false);
     ui.create.onclick = () => void this.create();
     ui.join.onclick = () => void this.join(ui.code.value, false);
     ui.code.addEventListener("keydown", (event) => {
@@ -847,7 +851,8 @@ export class Session {
   }
 
   private expand(open: boolean): void {
-    this.ui.panel.classList.toggle("collapsed", !open);
+    if (open && !this.ui.panel.open) this.ui.panel.showModal();
+    if (!open && this.ui.panel.open) this.ui.panel.close();
     this.ui.toggle.setAttribute("aria-expanded", String(open));
   }
 

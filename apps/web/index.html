@@ -3,16 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0c151e" />
+    <meta name="theme-color" content="#202320" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%23a2e8d6' stroke-width='4'/%3E%3C/svg%3E" />
     <title>Memory Replay</title>
   </head>
   <body>
     <main id="stage"></main>
     <header>
-      <div class="eyebrow"><span class="brand-dot"></span> MEMORY REPLAY <span id="mode">LOCAL DEMO</span></div>
-      <h1 id="title">A moment. Another possibility.</h1>
-      <p id="subtitle">Pause the memory. Change the throw. Replay your take.</p>
+      <div class="identity"><div class="eyebrow">Memory Replay <span id="mode">Demo</span></div>
+      <h1 id="title">Practice room</h1>
+      <p id="subtitle">Explore the scene. Make a different take.</p></div>
+      <button id="room-toggle" aria-expanded="false" aria-controls="room-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="14" height="14" rx="1"/><path d="M7 21h14V7M7 8h6M7 12h4"/></svg><span>Library</span><span id="room-summary" class="sr-only">Solo</span></button>
     </header>
     <aside class="scene-meta"><span id="state">LOADING</span><span id="fps">— fps</span></aside>
     <div id="loading" role="status"><span class="spinner"></span> Opening your memory…</div>
@@ -23,32 +24,35 @@
         <legend class="sr-only">Playback and alternate takes</legend>
         <div class="transport">
           <button id="play" class="primary">Pause</button>
-          <button id="restart" title="Return to the start" aria-label="Return to the start">↤</button>
+          <button id="restart" title="Return to the start" aria-label="Return to the start"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5v14M18 5 8 12l10 7z"/></svg></button>
           <div class="scrubber"><label class="sr-only" for="scrub">Memory time</label><input id="scrub" type="range" min="0" max="1000" step="1" value="0" /><div id="markers" aria-label="Timeline forks"></div></div>
           <output id="time">0.0 / 0.0s</output>
         </div>
-        <div class="tools">
-          <label class="take-label" for="branches">TAKE</label><select id="branches"><option value="original">Original recording</option></select>
-          <button id="original">Original</button><button id="export" title="Download your local takes as JSON">Export takes</button>
-          <label class="toggle"><input id="debug" type="checkbox" /> Colliders</label>
-          <label class="toggle"><input id="eyes" type="checkbox" /> Wearer's view</label>
+        <div class="take-row">
+          <label class="take-label" for="branches">Take</label><select id="branches"><option value="original">Original recording</option></select>
+          <button id="original">Original</button>
         </div>
+        <details class="view-options"><summary>View & controls</summary><div class="tools">
+          <label class="toggle"><input id="eyes" type="checkbox" /> Wearer's view</label>
+          <label class="toggle"><input id="debug" type="checkbox" /> Show colliders</label>
+          <button id="export" title="Download your local takes as JSON">Export takes</button>
+        </div><div class="help"><p class="desktop-help">Drag to orbit. Scroll to zoom. Press Space to pause.</p><p class="phone-help">Swipe the scene to look around. Pinch to zoom. Use the pad to walk.</p><p>Pause, then drag an object and release to throw. Each edit makes an alternate take.</p><details><summary>Quest controls</summary><p>Enter VR, point at the floating panel and trigger to pause. Squeeze or pinch an object, move your hand, then release. Left stick moves; right stick snap-turns. A/X toggles playback; B/Y cycles takes.</p></details></div></details>
       </fieldset>
       <p id="status" role="status" aria-live="polite">Loading the local demo…</p>
-      <div class="help"><span>Drag to orbit · scroll to zoom · <kbd>Space</kbd> to pause · drag a paused object to throw</span><details><summary>Quest controls</summary><p>Enter VR, point at the floating panel and trigger to pause. Squeeze or pinch an object, move your hand, then release. Left stick moves; right stick snap-turns. A/X toggles playback; B/Y cycles takes. Hand tracking also needs browser/device permission.</p></details></div>
       <button id="reload" hidden>Reload viewer</button>
     </section>
-    <section id="room-panel" aria-label="Shared room">
+    <dialog id="room-panel" aria-labelledby="library-heading">
       <div class="room-head">
-        <button id="room-toggle" aria-expanded="true" aria-controls="room-body"><span class="room-eyebrow">ROOM</span><span id="room-summary">Solo</span></button>
-        <span id="room-connection" role="status">Connecting…</span>
+        <h2 id="library-heading">Your library</h2>
+        <button id="room-close" aria-label="Close library" autofocus>✕</button>
       </div>
       <div id="room-body">
+        <p id="room-connection" role="status">Connecting…</p>
         <details open>
-          <summary>Your room</summary>
+          <summary>Watch together</summary>
           <label>Your name<input id="player-name" maxlength="40" autocomplete="nickname" /></label>
           <label>Memories<select id="room-memories" aria-label="Memory library"></select></label>
-          <div class="row"><button id="room-create" class="primary" disabled>Create room</button><button id="upload-toggle" aria-expanded="false" aria-controls="upload-panel">Upload</button></div>
+          <div class="row"><button id="room-create" class="primary" disabled>Create room</button><button id="upload-toggle" aria-expanded="false" aria-controls="upload-panel">Upload video</button></div>
           <div class="row"><input id="room-code" aria-label="Room code" placeholder="ROOM CODE" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false" /><button id="room-join" class="primary" disabled>Join</button></div>
           <strong id="room-label">Explore solo or join a room</strong>
           <ul id="room-people" aria-label="People in this room"></ul>
@@ -56,9 +60,9 @@
         </details>
         <details>
           <summary>Load a finished memory</summary>
-          <label>memory.json URL<input id="library-url" type="url" placeholder="Blank = mock memory" /></label>
+          <label>Scene link<input id="library-url" type="url" placeholder="Paste a memory.json URL" /></label>
           <button id="library-add" class="primary" disabled>Add to library</button>
-          <p>Local demo: add the mock memory, create a room, then share the code.</p>
+          <p>Add a finished scene, then create a room to watch together. Leave the link blank to try a sample.</p>
         </details>
         <div id="upload-panel" hidden></div>
         <p><a href="/capture.html">Capture test · upload and play video</a></p>
@@ -66,7 +70,7 @@
         <p id="library-errors" role="status"></p>
         <p id="room-error" role="alert"></p>
       </div>
-    </section>
+    </dialog>
     <div id="joystick" role="group" aria-label="Drag to walk" title="Drag to walk"><span class="knob"></span><span class="joystick-label">WALK</span></div>
     <div id="vr-entry"></div>
     <script type="module" src="/src/main.ts"></script>

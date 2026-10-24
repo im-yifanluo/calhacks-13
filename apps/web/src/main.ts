@@ -26,21 +26,28 @@ async function main(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const manifestUrl = params.get("memory") ?? "/mock/memory.json";
   const demo = !params.has("memory");
-  element("mode").textContent = demo ? "LOCAL DEMO" : "MEMORY VIEWER";
+  element("mode").textContent = demo ? "Demo" : "Recording";
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
-  renderer.setPixelRatio(1); renderer.setSize(innerWidth, innerHeight);
+  const stage = element("stage");
+  renderer.setPixelRatio(1); renderer.setSize(stage.clientWidth, stage.clientHeight);
   renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType("local-floor"); renderer.xr.setFoveation(1);
   renderer.domElement.setAttribute("aria-label", "Interactive 3D memory. Pause, then drag an object to throw it.");
-  element("stage").appendChild(renderer.domElement);
-  element("vr-entry").appendChild(VRButton.createButton(renderer, { optionalFeatures: ["hand-tracking"] }));
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0c151e);
+  stage.appendChild(renderer.domElement);
+  const vrEntry = element("vr-entry");
+  vrEntry.appendChild(VRButton.createButton(renderer, { optionalFeatures: ["hand-tracking"] }));
+  vrEntry.hidden = true;
+  navigator.xr?.isSessionSupported("immersive-vr").then(supported => {
+    vrEntry.hidden = !supported;
+  }).catch(() => { vrEntry.hidden = true; });
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x202320);
   scene.add(new THREE.HemisphereLight(0xbfeaf4, 0x374454, 2.5));
   const light = new THREE.DirectionalLight(0xffd7b5, 3); light.position.set(3, 5, 2); scene.add(light);
-  const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.05, 200);
+  const camera = new THREE.PerspectiveCamera(65, stage.clientWidth / stage.clientHeight, 0.05, 200);
   camera.position.set(2.5, 2.1, 3.5);
+  if (demo && innerWidth < 650) camera.position.set(1.3, 1.7, 1.2);
   const rig = new THREE.Group(); scene.add(rig); rig.add(camera);
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, innerWidth < 650 ? 0.2 : 0.8, -1); controls.enableDamping = true; controls.maxDistance = 20; controls.minDistance = 0.4;
+  controls.target.set(0, 0.8, -1); controls.enableDamping = true; controls.maxDistance = 20; controls.minDistance = 0.4;
   controls.maxPolarAngle = Math.PI * 0.49;
   const spark = new SparkRenderer({ renderer, preUpdate: false, maxStdDev: Math.sqrt(5), lodSplatCount: 500_000 });
   scene.add(spark);
@@ -49,10 +56,17 @@ async function main(): Promise<void> {
   addEventListener("pagehide", () => session.dispose(), { once: true });
   const joystick = new PhoneJoystick(element("joystick"), camera, controls);
   document.body.classList.toggle("touch", isTouchDevice());
-  // Keep the room panel and the WALK pad clear of the bottom HUD, whatever its height.
   const hud = element("hud");
-  const hudSpace = () => document.documentElement.style.setProperty("--hud-space", `${Math.max(0, Math.round(innerHeight - hud.getBoundingClientRect().top))}px`);
+  const hudSpace = () => document.documentElement.style.setProperty("--hud-space", `${Math.max(0, Math.round(document.body.clientHeight - hud.getBoundingClientRect().top))}px`);
   new ResizeObserver(hudSpace).observe(hud); addEventListener("resize", hudSpace); hudSpace();
+  const resizeScene = () => {
+    if (renderer.xr.isPresenting) return;
+    const { width, height } = stage.getBoundingClientRect();
+    camera.aspect = width / Math.max(1, height);
+    camera.updateProjectionMatrix(); renderer.setSize(width, Math.max(1, height));
+  };
+  const stageObserver = new ResizeObserver(resizeScene);
+  stageObserver.observe(stage);
   const savedCamera = new THREE.Vector3(), savedTarget = new THREE.Vector3();
   // Keep main's corrected spawn: start at the wearer's horizontal position on the scene floor.
   let vrSpawn = { x: 0, y: 0, z: 2, yaw: 0 };
@@ -64,9 +78,7 @@ async function main(): Promise<void> {
   renderer.xr.addEventListener("sessionend", () => {
     rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0); camera.position.copy(savedCamera);
     controls.target.copy(savedTarget); controls.enabled = true; eyes.disabled = false; document.body.classList.remove("in-xr");
-  });
-  addEventListener("resize", () => {
-    camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight);
+    resizeScene();
   });
   renderer.domElement.addEventListener("webglcontextlost", event => {
     event.preventDefault(); renderer.setAnimationLoop(null); status.textContent = "Graphics context lost. Reload to recover.";
@@ -79,15 +91,15 @@ async function main(): Promise<void> {
     yaw: new THREE.Euler().setFromQuaternion(new THREE.Quaternion(...firstPose.q).normalize(), "YXZ").y };
   if (renderer.xr.isPresenting) { rig.position.set(vrSpawn.x, vrSpawn.y, vrSpawn.z); rig.rotation.set(0, vrSpawn.yaw, 0); }
   scene.add(memory.root);
-  const grid = new THREE.GridHelper(10, 40, 0x437979, 0x243642); grid.position.y = memory.manifest.world.floorY; scene.add(grid);
+  const grid = new THREE.GridHelper(10, 20, 0x666e5c, 0x343b30); grid.position.y = memory.manifest.world.floorY; scene.add(grid);
   viewer = new Viewer(memory, message => { status.textContent = message; }); window.memoryReplay = viewer;
   const currentViewer = viewer;
   const xr = new XRInput(renderer, rig, camera, viewer);
   desktopInput(renderer.domElement, camera, controls, viewer);
-  element("title").textContent = demo ? "A moment. Another possibility." : memory.manifest.title;
-  element("subtitle").textContent = demo ? "Pause the memory. Change the throw. Replay your take." : "Explore this recording, then create an alternate take.";
-  element("asset-info").textContent = `${memory.objects.length} objects · ${memory.manifest.timeline.durationSec.toFixed(1)} seconds · ${demo ? "synthetic scene" : "pipeline assets"}`;
-  status.textContent = "Playing the original. Pause, then drag the ball to make a new take.";
+  element("title").textContent = demo ? "Practice room" : memory.manifest.title;
+  element("subtitle").textContent = "Explore the scene. Make a different take.";
+  element("asset-info").textContent = `${memory.objects.length} objects · ${demo ? "Sample scene" : "Recorded scene"}`;
+  status.textContent = "Pause to move an object and make a new take.";
   loading.hidden = true; element<HTMLFieldSetElement>("timeline-controls").disabled = false;
   const debugLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false }));
   debugLines.frustumCulled = false; debugLines.renderOrder = 100; scene.add(debugLines);
@@ -129,7 +141,7 @@ async function main(): Promise<void> {
     } else if (!renderer.xr.isPresenting) { joystick.update(dt); if (controls.enabled) controls.update(); }
     const tl = currentViewer.timeline;
     if (timestamp - lastUI > 100) {
-      lastUI = timestamp; play.textContent = tl.playing ? "Pause" : "Play take";
+      lastUI = timestamp; play.textContent = tl.playing ? "Pause" : "Play";
       scrub.value = String(tl.time / tl.duration * 1000);
       scrub.setAttribute("aria-valuetext", `${tl.time.toFixed(1)} of ${tl.duration.toFixed(1)} seconds`);
       element("time").textContent = `${tl.time.toFixed(1)} / ${tl.duration.toFixed(1)}s`;
@@ -166,7 +178,7 @@ async function main(): Promise<void> {
     renderer.render(scene, camera);
   });
   document.addEventListener("visibilitychange", () => { previous = 0; if (document.hidden) currentViewer.release(); });
-  addEventListener("pagehide", () => { renderer.setAnimationLoop(null); audio?.dispose(); currentViewer.dispose(); spark.dispose(); renderer.dispose(); }, { once: true });
+  addEventListener("pagehide", () => { stageObserver.disconnect(); renderer.setAnimationLoop(null); audio?.dispose(); currentViewer.dispose(); spark.dispose(); renderer.dispose(); }, { once: true });
   session.attach(currentViewer);
   if (import.meta.env.DEV) {
     // Dev-only probe for multi-tab checks: compare positionsAt(t) across tabs of one room.
