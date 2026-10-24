@@ -8,10 +8,11 @@ import { Viewer } from "./viewer.js";
 import { XRInput } from "./input-xr.js";
 import { desktopInput } from "./input-desktop.js";
 import { sampleTrack } from "./tracks.js";
+import { Session } from "./session.js";
 import { PhoneJoystick, isTouchDevice } from "./phone-joystick.js";
 import "./style.css";
 
-declare global { interface Window { memoryReplay?: Viewer } }
+declare global { interface Window { memoryReplay?: Viewer; __memreplay?: unknown } }
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const status = element("status"), loading = element("loading"), warning = element("warning");
 const play = element<HTMLButtonElement>("play"), scrub = element<HTMLInputElement>("scrub");
@@ -41,9 +42,12 @@ async function main(): Promise<void> {
   controls.maxPolarAngle = Math.PI * 0.49;
   const spark = new SparkRenderer({ renderer, preUpdate: false, maxStdDev: Math.sqrt(5), lodSplatCount: 500_000 });
   scene.add(spark);
+  // Shared rooms (session.ts) connect while the memory loads. Without a room the viewer stays local.
+  const session = new Session({ renderer, scene, camera, manifestUrl, showStatus: message => { status.textContent = message; } });
+  addEventListener("pagehide", () => session.dispose(), { once: true });
   const joystick = new PhoneJoystick(element("joystick"), camera, controls);
   document.body.classList.toggle("touch", isTouchDevice());
-  // Keep the WALK pad clear of the bottom HUD, whatever its height.
+  // Keep the room panel and the WALK pad clear of the bottom HUD, whatever its height.
   const hud = element("hud");
   const hudSpace = () => document.documentElement.style.setProperty("--hud-space", `${Math.max(0, Math.round(innerHeight - hud.getBoundingClientRect().top))}px`);
   new ResizeObserver(hudSpace).observe(hud); addEventListener("resize", hudSpace); hudSpace();
@@ -150,10 +154,26 @@ async function main(): Promise<void> {
     }
     frames++; elapsed += dt;
     if (elapsed >= 1) { element("fps").textContent = `${Math.round(frames / elapsed)} fps`; frames = 0; elapsed = 0; }
+    session.update(dt);
     renderer.render(scene, camera);
   });
   document.addEventListener("visibilitychange", () => { previous = 0; if (document.hidden) currentViewer.release(); });
   addEventListener("pagehide", () => { renderer.setAnimationLoop(null); currentViewer.dispose(); spark.dispose(); renderer.dispose(); }, { once: true });
+  session.attach(currentViewer);
+  if (import.meta.env.DEV) {
+    // Dev-only probe for multi-tab checks: compare positionsAt(t) across tabs of one room.
+    const probe = new THREE.Object3D();
+    window.__memreplay = {
+      viewer: currentViewer, session, memory,
+      get adapter() { return session.adapter; },
+      positionsAt: (t: number) => Object.fromEntries(memory.objects.map(o => {
+        sampleTrack(currentViewer.timeline.track(o.definition.id, o.track, t), t, probe);
+        return [o.definition.id, probe.position.toArray().map(v => Math.round(v * 1e4) / 1e4)];
+      })),
+      takes: () => currentViewer.timeline.branches.map(b => ({ id: b.id, parentId: b.parentId, name: b.name, forkTime: b.forkTime,
+        frames: Object.fromEntries([...b.tracks].map(([id, frames]) => [id, frames.length])) })),
+    };
+  }
   window.dispatchEvent(new CustomEvent("memoryreplay:ready", { detail: currentViewer }));
 }
 element("reload").onclick = () => location.reload();
