@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import Literal, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 Vec3 = tuple[float, float, float]
 Quat = tuple[float, float, float, float]  # x, y, z, w
@@ -10,6 +10,7 @@ SplatFormat = Literal["spz", "ply", "splat", "ksplat", "sog"]
 
 
 class Keyframe(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)  # the viewer rejects NaN poses
     t: float
     p: Vec3
     q: Quat

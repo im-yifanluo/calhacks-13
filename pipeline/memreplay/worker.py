@@ -89,8 +89,41 @@ def _identity_hex(v) -> str:
     return str(v).lower().removeprefix("0x")
 
 
+def _source_check():
+    """scripts/source_check.py (repo root): only download what the upload service issued."""
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[2] / "scripts" / "source_check.py"
+    spec = importlib.util.spec_from_file_location("source_check", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
+
+
+def download(url: str, dest: Path, max_bytes: int, timeout_s: float = 300.0) -> None:
+    """Capped download: Content-Length checked, bytes counted, no redirects, overall time limit."""
+    opener = urllib.request.build_opener(_NoRedirect)
+    t0 = time.time()
+    with opener.open(url, timeout=30) as r:
+        if int(r.headers.get("Content-Length") or 0) > max_bytes:
+            raise RuntimeError("source is larger than the upload limit")
+        n = 0
+        with open(dest, "wb") as f:
+            while chunk := r.read(1 << 20):
+                n += len(chunk)
+                if n > max_bytes or time.time() - t0 > timeout_s:
+                    raise RuntimeError("source too large or too slow")
+                f.write(chunk)
+
+
 def pending_jobs() -> list[dict]:
-    """Rows of the public memory table with status 'uploaded' assigned to this worker."""
+    """Rows of the public memory table with status 'uploaded' assigned to this worker. Test uploads (the
+    uploader assigned the row to itself: pipelineIdentity == owner) are skipped."""
     raw = json.loads(_stdb("sql", "SELECT * FROM memory WHERE status = 'uploaded'"))
     me = os.environ.get("PIPELINE_IDENTITY", "").lower().removeprefix("0x")
     jobs = []
@@ -99,7 +132,10 @@ def pending_jobs() -> list[dict]:
                 for e in stmt["schema"]["elements"]]
         for row in stmt["rows"]:
             r = dict(zip(cols, row))
-            if not me or _identity_hex(r.get("pipelineIdentity", r.get("pipeline_identity"))) == me:
+            pid = _identity_hex(r.get("pipelineIdentity", r.get("pipeline_identity")))
+            if pid and pid == _identity_hex(r.get("owner")):
+                continue
+            if not me or pid == me:
                 jobs.append(r)
     return jobs
 
@@ -115,9 +151,13 @@ def process(job: dict, root: Path) -> str:
     progress = 0.1
     set_status(mid, "processing", progress)
     src = job.get("sourceUrl") or job.get("source_url")
+    sc = _source_check()
+    base = os.environ.get("ASSET_BASE_URL") or os.environ.get("PUBLIC_ORIGIN", "").rstrip("/") + "/api/local-media"
+    if not sc.allowed_source(src, base, owner=_identity_hex(job.get("owner")) or None):
+        raise RuntimeError("sourceUrl is not an upload issued by the upload service")
     seen = (work / "source.txt").read_text().strip() if (work / "source.txt").exists() else None
     if seen != src or not (work / "clip.mov").exists():          # new clip (or a different one under this key)
-        urllib.request.urlretrieve(src, work / "clip.mov")
+        download(src, work / "clip.mov", sc.MAX_SOURCE_BYTES)
         (work / "source.txt").write_text(src)
     for name in STAGES:
         run_stage(name, work)

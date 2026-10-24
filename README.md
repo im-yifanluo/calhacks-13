@@ -5,7 +5,7 @@ Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves 
 - **How the pieces fit, and known issues:** [docs/INTEGRATION.md](docs/INTEGRATION.md). Agents should read [CLAUDE.md](CLAUDE.md) first.
 - **Full plan** (tracks, design, timeline, risks): [docs/PLAN.md](docs/PLAN.md)
 - **Viewer:** [docs/P3_VIEWER.md](docs/P3_VIEWER.md) · **Multiplayer and upload:** [docs/P4.md](docs/P4.md) · **Upload test:** [docs/CAPTURE_TEST.md](docs/CAPTURE_TEST.md)
-- **Vision pipeline runbook:** [pipeline/README.md](pipeline/README.md) (being rewritten)
+- **Vision pipeline runbook:** [pipeline/README.md](pipeline/README.md); results on the 5 sample clips: [docs/VISION_PIPELINE_REPORT.md](docs/VISION_PIPELINE_REPORT.md)
 
 ## Status (Sat Oct 24, morning)
 
@@ -14,7 +14,7 @@ Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves 
 | Viewer: splats, physics, VR controls, timeline replay, people ghosts, audio (Nikko) | Merged. Checked in a desktop browser; never run on a Quest. |
 | Multiplayer: rooms, shared clock, avatars, grabbing, shared takes (Jerry + the new network adapter) | Merged. Checked live with two browser tabs against a local SpacetimeDB. |
 | Upload service and capture test page (Jerry) | Merged. Uploads to local disk or S3/R2 and registers the clip in SpacetimeDB. |
-| Vision pipeline (`pipeline/`) | Being rewritten. Nothing turns a clip into `memory.json` automatically yet, and no worker picks up uploads. |
+| Vision pipeline (`pipeline/`) | Built and run on all 5 sample clips (iPhone): video → ViPE → world frame → room splat, collider, people ghosts, grabbable props → `memory.json`, plus a static walk-through file (`memory.static.json`) per clip. `memreplay worker` picks up uploads; not yet run against a live SpacetimeDB. |
 | Left out | Andrew's `origin/part1` (pipeline rewrite) and Jerry's iOS app (never compiled). See [docs/INTEGRATION.md](docs/INTEGRATION.md) §1. |
 
 What's fixed and what's still open: [docs/INTEGRATION.md](docs/INTEGRATION.md) §4.
@@ -137,11 +137,9 @@ The app, SpacetimeDB (`/stdb`) and the upload service (`/api`) share that one li
 
 ## Part 4 · Vision pipeline (GPU)
 
-> **Being rewritten by the pipeline owner.** The runbook below describes the current design. `pip install -e pipeline` currently fails on a packaging issue ([docs/INTEGRATION.md](docs/INTEGRATION.md) §4).
+> **Full runbook: [pipeline/README.md](pipeline/README.md).** Every step, the tool it uses, the exact commands, and how to set up and run everything on Runpod. **Results and limitations:** [docs/VISION_PIPELINE_REPORT.md](docs/VISION_PIPELINE_REPORT.md).
 
-> **Full runbook: [pipeline/README.md](pipeline/README.md).** Every step, the tool it uses, the exact commands, and how to set up and run everything on Runpod.
-
-**The plan.** One glasses clip in, one `memory.json` out, built by one person. ViPE runs first because everything depends on it: from the single video it gives the camera path, the lens, metric depth for every pixel and per-frame object masks. The glasses have one camera (the second opening is the capture LED), so there is no stereo pair; depth comes from the wearer's head moving over time plus ViPE's metric depth model. L0 (room points + ghosts + head path) comes first, then L1 (pause, grab and throw objects). **Gate at Sat 11:30 AM:** any failing step switches to its fallback. **L1 is frozen at Sat 12:00 PM (Checkpoint 2).**
+**What it does.** One clip in, one `memory.json` out: `memreplay run work/<id> --title "..." --eye-height 1.35` on the GPU pod. NVIDIA ViPE gives the camera path, lens, metric depth for every pixel and object masks; our code puts everything in a level, metric world frame, builds the room (points, then a trained Gaussian splat), a room collider, people as point ghosts and the small props as grabbable shapes (Claude picks shape and mass). **Walk through a room on the Quest:** `memory.static.json` is the room alone (Part 3 for the headset; open `/?memory=/memories/<id>/memory.static.json`).
 
 **Recording rules:**
 - **1080p at 30 fps, stabilization OFF.**
