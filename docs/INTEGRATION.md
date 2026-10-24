@@ -57,9 +57,9 @@ What the viewer does with the new fields today:
 |---|---|
 | `primitive` visual | Drawn as a tinted sphere / box / cylinder |
 | `cylinder` collider | Rapier cylinder; drawn as a cylinder proxy |
-| `points-sequence` (people ghosts) | **Placeholder:** a faint collider proxy at the track origin, and it also gets a physics collider (follow-up, §4) |
-| `Keyframe.v` | **Ignored:** the viewer uses finite-difference velocity on pause (follow-up) |
-| `source.audioUrl` | **Not played yet** (follow-up) |
+| `points-sequence` (people ghosts) | Drawn as one `THREE.Points` from the MRPS file; frame k shows from t = k / sampleHz. No pick proxy, collider or physics body. If the file's header disagrees with the manifest, the file wins and a warning shows. |
+| `Keyframe.v` | Used on pause and grab, interpolated between keyframes; finite differences when it's missing. A malformed `v` is rejected. |
+| `source.audioUrl` | Played in sync with the timeline (resync past 100 ms, follows speed), starting on the first user gesture; a "Sound" toggle mutes it |
 | `background.colliderUrl` | Loaded as the room trimesh |
 
 Rules every producer and consumer must agree on:
@@ -76,7 +76,11 @@ The demo scene `apps/web/public/mock/memory.json` uses primitive objects (a ball
 - **Edits need a paused timeline.** Grabbing on Original forks a take named "First edit". Grabbing an object that already rests on the current take forks a new take "Edit <id>", so a recorded take never changes. Grabbing a different object on a take edits that take in place.
 - **Catching** an object another player is still simulating is rejected ("owned by another player"). This is team decision 1; we kept the rejection.
 - **Keyframe chunks:** 1–120 frames, `t` in absolute media seconds, `startMediaUs = round(frames[0].t × 1e6)`, start at or after the grab time, no overlaps. Saved by the simulation owner before `release(rest: true)`.
-- **Simulation lock:** seek, fork and setBranch are rejected while any object on the take is still owned by a simulation. Disconnecting or leaving clears your ownership.
+- **Simulation lock:** seek, fork and setBranch are rejected while any object on the take is still owned by a simulation. Disconnecting or leaving clears your ownership. A throw nobody has updated for 15 s is abandoned: the next seek, fork or take switch settles it, and grabbing it forks a new take that keeps its saved chunks. Moves, chunk saves and the release all keep a live throw fresh. A held object never expires (the page turns a hold into a throw when it's hidden).
+- **Leaving mid-grab:** if a player leaves, switches rooms or loses their connection before any keyframe chunk of their grab was saved, the room goes back to the parent take, paused at the fork time, unless someone else is editing that take. Branch rows are never deleted.
+- **Re-grabbing your own object** while you still hold or simulate it trims your own chunks from the new grab time on, so the next throw's chunks fit.
+- **Leaving means no room:** `leaveRoom` sets `roomId` to 0, so a reconnect resumes players who dropped but not ones who left.
+- **Input checks:** `saveBranchKeyframes` rejects non-object frames such as `[null]` with a clean error; auto take names "Edit <id>" are cut to 100 characters; join codes skip the SDK's biased first random draw.
 - **Clock:** the `sampleClock` reducer and `clockSample` table calibrate each client's offset; `net.time()` gives shared media time.
 - **Child takes copy nothing.** The client resolves what a take inherits from its parent (§3).
 
@@ -131,63 +135,42 @@ The demo scene `apps/web/public/mock/memory.json` uses primitive objects (a ball
 | Someone else holds or simulates an object | `applyRemotePose` on the active take only |
 | Your ownership cleared (disconnect, leave) | `revokeOwnership` |
 
+**Connection:** after a SpacetimeDB restart, pages reconnect within about 5 s (`withAutomaticReconnect({ maxDelayMs: 5000 })`, and the same cap for first-connection retries). Each tab is one player: a tab that finds its stored token already locked by another live tab (Web Locks; a duplicated tab copies `sessionStorage`) connects as a new guest. Without Web Locks (plain-http LAN IPs) that check is off.
+
 Every server call goes through one queue, so a throw's chunks and its `release(rest: true)` always land before the next seek or grab. Two exceptions: giving back a grant the viewer couldn't use (or one that arrived after the 8 s grab timeout) jumps the queue, and moves are sent in order without waiting for each reply, to keep 15 Hz. Other calls time out after 5 s. Takes made locally before joining a room are never sent.
 
-**Wiring** (`session.ts`): create one adapter per room, after the player is in the room and the connection is ready: `const adapter = new NetAdapter(net, viewer, report); viewer.setAuthority(adapter); adapter.start();`. Dispose it before the viewer. `?room=<code>` rejoins after a reload; a room whose memory differs from the loaded manifest reloads with `?memory=<url>&room=<code>` (at most once per target); joining drops solo takes; **Leave** returns to a solo session.
+**Wiring** (`session.ts`): create one adapter per room, after the player is in the room and the connection is ready: `const adapter = new NetAdapter(net, viewer, report, resolved); viewer.setAuthority(adapter); adapter.start();`. `report(message, { kind, error })` carries the kind of action (clock, grab, throw, release, hold, take, data, internal), and `resolved(kind)` is called when an action of that kind next succeeds, so the status line can clear a stale error. The adapter's messages appear only in the viewer's status line. Dispose it before the viewer; `dispose()` sends nothing, so on a reload the disconnect clears your holds and the server reverts a take you hadn't recorded anything on. `?room=<code>` rejoins after a reload; a room whose memory differs from the loaded manifest reloads with `?memory=<url>&room=<code>` (at most once per target); joining drops solo takes; **Leave** returns to a solo session.
 
 **Tests:**
 - `tests/adapter.test.ts` (in `npm test`) runs on `tests/room-harness.ts`: an in-process room that runs the real module reducers through SpacetimeDB's test harness, with per-client latency. Reusable for other client tests.
 - `scripts/test-adapter.ts` is a live check over real WebSockets. Two players share a room, throw, re-grab into a new take, and a late third player rebuilds every take; all three end on identical tracks. Run it against a local server: `STDB_WS_URL=ws://127.0.0.1:3055 STDB_DATABASE=memory-replay npx tsx scripts/test-adapter.ts`.
 
-**What a take inherits:** `Timeline.track()` uses the take's own recording of an object from its first frame on. Before that it falls back to the parent take's recording, then the grandparent's, and finally to the original track. Known issue: a parent take edited *after* a child was forked also changes the child (§4).
+**What a take inherits** (`Timeline.track()`): a take's own recording of an object applies from its first frame on, even before the take's fork time. Before that, walk up the parent takes with a limit, starting at this take's fork time and lowering it to each parent's fork time on the way. A parent's recording applies only if it starts at or before the limit, and then in full: a throw in flight at the fork carries on. Otherwise the original track applies. So edits a parent gains after a child was forked never leak into the child. An edit that starts before the fork time is shared history and does reach it. Times within 1 ms count as the same instant.
 
 ---
 
-## 4. Known issues found during the merge
+## 4. Known issues
 
-A 16-agent survey checked every branch before the merge. Its findings below were **not** fixed in this PR, which only merges and adds the integration. Fixes for several already exist on local branches (`int/server` is committed; `int/viewer` and `int/upload` are uncommitted drafts in their worktrees). They are unverified, so review them before using them.
+A 16-agent survey checked every branch before the merge, and two independent checkers tested the merged app. PR #1 merged the branches and added the integration. PR #2 (branch `fixes`) fixed the issues they found:
+- **Server:** clean errors for malformed keyframes, long object ids, abandoned throws no longer lock the room, unbiased join codes, leavers not revived on reconnect, and an empty take given up when its grabber leaves or reloads.
+- **Viewer:** takes no longer inherit parent edits that start after their fork time, people ghosts, keyframe velocity, audio, no snap-back after a throw (for the thrower and everyone who watched it), objects stay visible while a take moves them, the Quest stick and snap turn, the mock scene, `revokeOwnership` scope, a tap never grabs, objects can't go under the floor, the status line after a throw, input stuck when pointer capture fails.
+- **Room panel and client:** messages expire or clear, one call no longer wipes another's error, reconnect within 5 s, one player per tab, a plain message while the server is down.
+- **Upload:** signed Content-Type, path routing, PUT tickets vs receipts, no file paths in errors, test uploads kept off the worker queue, worker status-script errors, a source-URL check for the worker.
 
-**Server (Jerry)**
-- `saveBranchKeyframes` throws a TypeError instead of a clean error on a non-object frame such as `[null]`.
-- Re-grabbing an object whose id is close to 100 characters fails: the auto take name "Edit <id>" is too long.
-- A client that stalls mid-throw while staying connected keeps the simulation lock, so seek, fork and take switching stay blocked for the whole room until it disconnects.
-- Join codes: the first random draw is biased, and about 11% of codes look like `0000000`.
-- `setPaused` isn't blocked during a throw, so another player pressing play finishes your throw's simulation instantly. The adapter still saves it.
-- A player who left a room shows up in it again after reconnecting.
+**Still open**
+- **By design:** another player pressing play while you throw finishes your throw's preview instantly (it is still saved). `Multiplayer.connect()` only works in a browser; scripts attach a connection by hand. When a take is given up because its grabber left, the room pauses at the take's fork time, even if someone had pressed play meanwhile. Takes made with `forkBranch` are never given up.
+- **Right after a throw**, other players' copy of the new take has no frames until the throw comes to rest and its chunks are saved (the flight time plus a round trip per chunk). They see the throw live meanwhile, and the room's seek and take switch are refused until it settles.
+- **A reload mid-throw after some chunks were saved** keeps that partial take. With nothing saved, the room goes back to the parent take.
+- **Edits a parent take gains after a fork** still reach the child if they *start* at or before the child's fork time, for example seeking a take back to 0.5 s and throwing an object it never edited, after a child was forked at 1 s. The viewer can't tell when an edit was made: chunks carry media times, not creation times. Telling them apart needs a creation order on `branchKeyframes`, which is a schema change.
+- **A take given up after its grabber left** stays in everyone's take list. Branch rows are never deleted, and selecting it shows the parent's history.
+- **Late joiners** see a just-finished throw at the paused time's pose, not its landing pose. The players who watched it hold the landing pose until someone plays or seeks.
+- **One player per tab** relies on Web Locks, which plain-http LAN IPs don't have.
+- **Durations:** a memory row's `durationUs` must equal the manifest's `timeline.durationSec`, or the clip ends at different times. That's for whoever registers memories.
+- **Bundle:** 7.7 MB (2.8 MB gzip), almost all Spark and Rapier, which are needed before anything renders. Measure load time on the Quest and venue Wi-Fi.
+- **Upload, unverified on real R2:** a wrong-Content-Type PUT should get 403; bucket CORS for the tunnel origin; uploads over 100 MB through the tunnel. `create_memory` still accepts any `sourceUrl`, so the future worker must call `scripts/source_check.py`'s `allowed_source()`.
+- **Never run on real hardware:** Quest 3S (stick and snap-turn feel, ghost performance, audio lag), a real phone, real glasses footage.
 
-**Viewer (Nikko)**
-- Take inheritance leaks: edits made to a parent take after a child was forked also change the child.
-- `points-sequence` ghosts render as a placeholder and add a phantom collider at the origin.
-- Keyframe `v` is ignored on pause, and `source.audioUrl` isn't played.
-- After a throw preview, the object snaps back to its release pose.
-- An object can vanish past its `visibleTo` even while a take still moves it.
-- Quest stick direction and snap turn use `renderer.xr.getCamera()`, which may be wrong after the rig turns. Never tested on a Quest.
-- The mock scene's `background.splatCount` is 0 (the real count is 177132).
-- The bundle is 7.7 MB (2.8 MB gzip); measure load time on the Quest.
-- `revokeOwnership` cancels any pending grab, not just the revoked object's.
-- In a room, a quick tap on a paused object leaves an empty take on the server: the server forks on grab, and the viewer gives back a grant that arrives after the pointer is released.
-- If the memory row's duration differs from the manifest's, the clip ends at different times; keep `timeline.durationSec` equal to the source duration.
-
-**Client (Jerry)**
-- `Multiplayer.run()` clears `net.error` on any success, so one call can wipe another's error (the adapter tracks its own errors).
-- `Multiplayer.connect()` only works in a browser (`import.meta.env`, `location`, `sessionStorage`); scripts attach a connection by hand.
-
-**Room panel and adapter (found by the final checks; minor)**
-- The status line keeps an old message (for example "Could not change the shared clock…" or "Recording this throw…") after later actions succeed.
-- Reloading the page mid-throw loses that throw and leaves an empty take, which becomes the room's active take.
-- For the 4–7 s while a throw settles and its chunks upload, other players' copy of the new take has no frames yet, so a scrub there shows the parent take. They see the ball move live, and the take matches once the chunks arrive.
-- After a server restart, reconnecting can take up to about 25 s because of the SDK's backoff.
-- A duplicated browser tab copies `sessionStorage`, so both tabs share one identity and can release each other's objects. Open a fresh tab per player.
-- Seen once in a live check and not reproduced: a grab at t = 0 in a fresh room right after a server restart released the ball below the floor, and its take recorded it falling for seconds.
-
-**Upload (Jerry)**
-- Presigned PUTs don't sign `Content-Type`, and routes match on `req.url`, so a query string breaks routing.
-- Any client can register any `sourceUrl` for the worker. The worker must only download URLs under `ASSET_BASE_URL`.
-- `upload:local` leaks absolute file paths in errors, accepts the completion receipt as a PUT ticket, and doesn't list PUT in CORS.
-- Test uploads (capture simulation, `test-video`) are queued for the GPU worker; there is no "not for the pipeline" flag.
-- `pipeline-status.py` crashes on HTTP errors instead of printing the server's reason, and errors over 2000 characters are rejected.
-
-**Pipeline (for the rewrite)**
+**Pipeline (for the rewrite, not touched here)**
 - `pip install -e pipeline` fails ("Multiple top-level packages discovered": `runpod/` sits next to `memreplay/`). Part1's `[tool.setuptools.packages.find] include=["memreplay*"]` fixes it.
 - `memreplay merge` assumes the camera-to-world rotation is pure; a scale folded into it skews the head path.
 - `manifest.py` accepts NaN poses and unknown fields; TypeScript rejects the NaN.
@@ -198,9 +181,8 @@ A 16-agent survey checked every branch before the merge. Its findings below were
 
 | Gap | What it needs | Owner (suggested) |
 |---|---|---|
-| **Pipeline worker** (upload → pipeline → ready) | Subscribe to `memory`, take rows with `status = 'uploaded'` and its own `pipelineIdentity`; report `processing` with `scripts/pipeline-status.py`; download `sourceUrl` (only under `ASSET_BASE_URL`); run the pipeline, reporting progress; upload the viewer files; finish with `ready --progress 1 --manifest-url https://…/memory.json`, or `failed`. The pod must reach SpacetimeDB at a public URL. | Vision |
+| **Pipeline worker** (upload → pipeline → ready) | Subscribe to `memory`, take rows with `status = 'uploaded'` and its own `pipelineIdentity`; report `processing` with `scripts/pipeline-status.py`; download `sourceUrl` only if `scripts/source_check.py`'s `allowed_source(url, ASSET_BASE_URL or PUBLIC_ORIGIN/api/local-media, owner)` accepts it, with a size and time cap; skip rows whose `pipelineIdentity` is their own `owner` (test uploads); run the pipeline, reporting progress; upload the viewer files; finish with `ready --progress 1 --manifest-url https://…/memory.json`, or `failed`. The pod must reach SpacetimeDB at a public URL. | Vision |
 | **Pipeline steps** | Being rewritten | Vision |
-| **Viewer support for ghosts, `v`, audio** | §2 A | P3 |
 | **Real hardware** | Nothing has run on a Quest 3S, a real phone over the tunnel, or real glasses footage | Everyone |
 
 Until the worker exists, an uploaded clip stays `uploaded`. To show a memory in a room, add its `memory.json` URL to the library by hand.

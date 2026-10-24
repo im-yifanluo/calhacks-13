@@ -127,13 +127,15 @@ try {
   assert.equal(b.viewer.timeline.playing, true, "a new room plays");
 
   step("A pauses and seeks; B follows; nothing echoes back");
-  const bobCalls = b.calls.length;
+  const bobCalls = b.calls.length, aliceCalls = a.calls.length;
   a.viewer.togglePlay();
   await until(() => a.net.timeline!.paused && !b.viewer.timeline.playing, "the shared pause");
   a.viewer.seek(1.2);
   await until(() => Math.abs(b.viewer.timeline.time - 1.2) < 1e-6, "the shared seek");
   assert.equal(a.net.timeline!.anchorMediaUs, 1_200_000n);
-  assert.deepEqual(a.calls.filter(name => name !== "sampleClock").slice(-3), ["setPaused", "seek", "seek"]);
+  // The pause also pins the room's time with a seek, but only when the two clocks differ by 1 ms or more.
+  const aliceSent = a.calls.slice(aliceCalls).filter(name => name !== "sampleClock").join(",");
+  assert.ok(["setPaused,seek", "setPaused,seek,seek"].includes(aliceSent), `Alice sent ${aliceSent}`);
   await sleep(1200); // past the adapter's 1 s drift check
   assert.deepEqual(b.calls.slice(bobCalls), [], "Bob sent nothing back");
 

@@ -2,6 +2,39 @@ import * as THREE from "three";
 import { XRHandModelFactory } from "three/examples/jsm/webxr/XRHandModelFactory.js";
 import type { Viewer } from "./viewer.js";
 
+// Head pose for locomotion: use the user camera (main.ts parents it to the rig), never renderer.xr.getCamera().
+// three's XR camera has no parent, and WebXRManager writes the raw viewer pose (in the reference space, i.e. relative
+// to the rig) into its matrix, position and quaternion every frame. getWorldDirection/getWorldPosition on it rebuild
+// matrixWorld from that local pose alone, so they ignore the rig's spawn yaw, earlier snap turns and stick moves:
+// the stick walks in the wrong direction once the rig has turned, and the snap-turn head correction is always zero.
+// WebXRManager.updateCamera writes the same head pose into the user camera relative to its parent on every render,
+// so the user camera's world matrix is rig.matrixWorld × head pose: the head in the world, one frame old.
+const up = new THREE.Vector3(0, 1, 0);
+const headBefore = new THREE.Vector3(), headAfter = new THREE.Vector3(), right = new THREE.Vector3();
+const headRotation = new THREE.Quaternion(), heading = new THREE.Euler();
+
+/** The head's horizontal forward in world space (unit length), from its yaw, so it stays defined looking straight down. */
+export function headForward(head: THREE.Object3D, out = new THREE.Vector3()): THREE.Vector3 {
+  heading.setFromQuaternion(head.getWorldQuaternion(headRotation), "YXZ");
+  return out.set(-Math.sin(heading.y), 0, -Math.cos(heading.y));
+}
+
+/** Turn the rig by `angle` radians about the vertical axis through the head, so the head does not move. */
+export function snapTurn(rig: THREE.Object3D, head: THREE.Object3D, angle: number): void {
+  head.getWorldPosition(headBefore);
+  rig.rotateOnWorldAxis(up, angle); rig.updateMatrixWorld(true);
+  head.getWorldPosition(headAfter);
+  rig.position.add(headBefore.sub(headAfter)); rig.updateMatrixWorld(true);
+}
+
+/** Left stick: pushing forward (negative y) walks along the head's horizontal forward, x strafes to its right. 0.2 dead zone. */
+export function stickMove(rig: THREE.Object3D, head: THREE.Object3D, x: number, y: number, distance: number): void {
+  const forward = headForward(head);
+  right.crossVectors(forward, up);
+  if (Math.abs(y) > 0.2) rig.position.addScaledVector(forward, -y * distance);
+  if (Math.abs(x) > 0.2) rig.position.addScaledVector(right, x * distance);
+}
+
 /** Controller squeeze or hand pinch grabs. Trigger also operates the in-world timeline panel. */
 export class XRInput {
   private controllers: THREE.XRTargetRaySpace[] = [];
@@ -116,11 +149,8 @@ export class XRInput {
       const pad = source.gamepad;
       if (!pad) continue;
       const x = pad.axes[2] ?? 0, y = pad.axes[3] ?? 0;
-      if (source.handedness === "left") {
-        this.renderer.xr.getCamera().getWorldDirection(this.direction); this.direction.y = 0; this.direction.normalize();
-        if (Math.abs(y) > 0.2) this.rig.position.addScaledVector(this.direction, -y * dt * 1.5);
-        if (Math.abs(x) > 0.2) this.rig.position.addScaledVector(this.position.crossVectors(this.direction, THREE.Object3D.DEFAULT_UP), x * dt * 1.5);
-      } else if (Math.abs(x) > 0.7) snap = Math.sign(x);
+      if (source.handedness === "left") stickMove(this.rig, this.camera, x, y, dt * 1.5);
+      else if (Math.abs(x) > 0.7) snap = Math.sign(x);
       for (const [button, action] of [[4, () => this.viewer.togglePlay()], [5, () => this.cycleBranch()]] as const) {
         const pressed = pad.buttons[button]?.pressed ?? false;
         const key = `${index}-${button}`;
@@ -128,14 +158,8 @@ export class XRInput {
         this.previousButtons.set(key, pressed);
       }
     }
-    if (snap && !this.previousSnap) {
-      // Rotate around the user's head, avoiding a positional jump during snap turning.
-      this.renderer.xr.getCamera().getWorldPosition(this.position);
-      const before = this.position.clone();
-      this.rig.rotateY(-snap * Math.PI / 6); this.rig.updateMatrixWorld(true);
-      this.renderer.xr.getCamera().getWorldPosition(this.position);
-      this.rig.position.add(before.sub(this.position));
-    }
+    // Right stick: a 30° snap turn about the head; pushing right turns right (clockwise seen from above).
+    if (snap && !this.previousSnap) snapTurn(this.rig, this.camera, -snap * Math.PI / 6);
     this.previousSnap = !!snap;
     const timeline = this.viewer.timeline;
     const label = `${timeline.playing ? "PAUSE" : "PLAY"}|${timeline.time.toFixed(1)}|${timeline.active.name}|${this.viewer.held?.definition.label ?? ""}`;

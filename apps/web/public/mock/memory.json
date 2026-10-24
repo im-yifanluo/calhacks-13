@@ -23,7 +23,7 @@
     "kind": "splat",
     "url": "https://sparkjs.dev/assets/splats/butterfly.spz",
     "format": "spz",
-    "splatCount": 0
+    "splatCount": 177132
   },
   "camera": {
     "track": [
@@ -166,7 +166,7 @@
           "t": 0,
           "p": [
             0.7,
-            0.18,
+            0.12,
             -0.7
           ],
           "q": [
@@ -180,7 +180,7 @@
           "t": 6,
           "p": [
             0.7,
-            0.18,
+            0.12,
             -0.7
           ],
           "q": [

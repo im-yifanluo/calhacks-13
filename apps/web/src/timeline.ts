@@ -1,6 +1,9 @@
 import type { Keyframe } from "@memreplay/shared";
 import { validateTrack } from "./tracks.js";
 
+/** Two clock times closer than this (seconds) are the same instant. */
+export const SAME_TIME = 0.001;
+
 export interface Branch {
   id: string;
   parentId: string | null;
@@ -96,15 +99,37 @@ export class Timeline {
     branch.tracks.set(objectId, frames.map(f => ({ ...f, p: [...f.p], q: [...f.q], ...(f.v && { v: [...f.v] }) })));
   }
 
-  /** Child edits apply only after their first frame. Earlier history resolves through ancestors. */
+  /**
+   * The track that drives objectId at time t on the active take. This is the canonical inheritance rule; every device
+   * resolves takes with it, so they all replay the same thing:
+   * 1. The active take's own recording of the object applies whenever t ≥ its first frame, even if that frame is
+   *    before the take's forkTime (the server edits a take in place when you seek back on it and grab).
+   * 2. Otherwise walk up the ancestors with limit = the smallest forkTime of the takes walked so far (starting with the
+   *    active take's). An ancestor's recording applies only if its first frame t0 ≤ limit, and then in full when
+   *    t ≥ t0: a throw already in flight at the fork, or thrown at the very instant of the fork, keeps flying in the
+   *    child past the fork. A recording that starts after the limit is the ancestor's own future, so edits a parent
+   *    gains after a child was forked never leak into the child. If t < t0, older ancestors are tried next.
+   * 3. Otherwise the original track.
+   * Times within SAME_TIME (1 ms) count as the same instant, because server fork times are rounded to microseconds.
+   * A parent edit that starts before a child's fork time is shared history, so it does reach the child.
+   */
   track(objectId: string, original: Keyframe[], t = this.time): Keyframe[] {
-    let branch: Branch | undefined = this.active;
-    while (branch) {
-      const override = branch.tracks.get(objectId);
-      if (override?.length && t >= override[0].t) return override;
-      branch = this.branches.find(b => b.id === branch!.parentId);
+    const active = this.active;
+    const own = active.tracks.get(objectId);
+    if (own?.length && t >= own[0].t - SAME_TIME) return own;
+    let limit = active.forkTime;
+    const seen = new Set([active.id]);
+    for (let branch = this.parent(active); branch && !seen.has(branch.id); branch = this.parent(branch)) {
+      seen.add(branch.id);
+      const recording = branch.tracks.get(objectId);
+      if (recording?.length && recording[0].t <= limit + SAME_TIME && t >= recording[0].t - SAME_TIME) return recording;
+      limit = Math.min(limit, branch.forkTime);
     }
     return original;
+  }
+
+  private parent(branch: Branch): Branch | undefined {
+    return branch.parentId === null ? undefined : this.branches.find(b => b.id === branch.parentId);
   }
 
   export(memoryId: string): unknown {

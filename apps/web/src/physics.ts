@@ -21,6 +21,36 @@ export function collider(definition: DynamicObject["collider"], scale: number, h
   }
 }
 
+const axis = new Vector3();
+/** World-space y of the given local axis once rotated. */
+const axisY = (x: number, y: number, z: number, rotation: Quaternion) => axis.set(x, y, z).applyQuaternion(rotation).y;
+
+/**
+ * How far the collider reaches below the body's origin when rotated by `rotation` and scaled by `scale`: its
+ * vertical half-height for the centred shapes, the lowest hull point for a convex hull. A held object is kept at
+ * least this far above the floor, so it is never released inside or under it.
+ */
+export function colliderDepth(definition: DynamicObject["collider"], rotation: Quaternion, scale: number, hull?: Float32Array): number {
+  switch (definition.kind) {
+    case "sphere": return definition.radius * scale;
+    case "box": {
+      const [x, y, z] = definition.halfExtents;
+      return scale * (Math.abs(axisY(1, 0, 0, rotation)) * x + Math.abs(axisY(0, 1, 0, rotation)) * y + Math.abs(axisY(0, 0, 1, rotation)) * z);
+    }
+    case "capsule": case "cylinder": {
+      // Both stand on the local Y axis. A cylinder's rim sticks out by radius·sin(tilt); a capsule's cap by its radius.
+      const up = Math.min(1, Math.abs(axisY(0, 1, 0, rotation)));
+      const rim = definition.kind === "capsule" ? 1 : Math.sqrt(1 - up * up);
+      return scale * (definition.halfHeight * up + definition.radius * rim);
+    }
+    case "convex": {
+      let lowest = Infinity;
+      for (let i = 0; hull && i + 2 < hull.length; i += 3) lowest = Math.min(lowest, axisY(hull[i], hull[i + 1], hull[i + 2], rotation));
+      return Number.isFinite(lowest) ? -lowest * scale : 0;
+    }
+  }
+}
+
 let ready: Promise<void> | undefined;
 export async function initPhysics(): Promise<void> { await (ready ??= RAPIER.init()); }
 

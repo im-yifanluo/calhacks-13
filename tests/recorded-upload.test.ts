@@ -87,3 +87,79 @@ test("automatic capture retries confirmation without another PUT and independent
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+test("a test recording asks for pipeline:false and checks its row is not the worker's", async () => {
+  const identity = "a".repeat(64),
+    worker = "b".repeat(64);
+  let presigned: any,
+    echo: boolean | undefined = false,
+    assigned = identity,
+    puts = 0,
+    base = "";
+  const stored = new Uint8Array([5, 6, 7, 8]);
+  const server = createServer(async (req, res) => {
+    const json = (value: unknown) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(value));
+    };
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const row = {
+      id: "7",
+      requestId: "sim",
+      sourceUrl: `${base}/video`,
+      pipelineIdentity: assigned,
+    };
+    if (req.url === "/api/uploads/presign") {
+      presigned = JSON.parse(Buffer.concat(chunks).toString());
+      return json({
+        putUrl: `${base}/put`,
+        receipt: "r",
+        requestId: "sim",
+        receiptExpiresAt: Date.now() + 60000,
+        headers: { "Content-Type": "video/webm" },
+        ...(echo === undefined ? {} : { pipeline: echo }),
+      });
+    }
+    if (req.url === "/put") {
+      puts++;
+      res.writeHead(200);
+      return res.end();
+    }
+    if (req.url === "/api/uploads/complete") return json({ memory: row });
+    if (req.url?.startsWith("/api/memories?")) return json({ memories: [row] });
+    res.writeHead(200);
+    res.end(stored);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  base = `http://127.0.0.1:${(server.address() as any).port}`;
+  const recording = () =>
+    new RecordedUpload(
+      new File([stored], "sim.webm", { type: "video/webm" }),
+      2,
+      "[SIMULATION] Test",
+      identity,
+      "token",
+      base,
+      false,
+    );
+  try {
+    expect((await recording().run(() => {})).id).toBe("7");
+    expect(presigned.pipeline).toBe(false);
+    expect(puts).toBe(1);
+    // An upload service that ignores the flag: stop before any bytes are sent.
+    echo = undefined;
+    await expect(recording().run(() => {})).rejects.toThrow(
+      "does not support test uploads",
+    );
+    expect(puts).toBe(1);
+    // The database row is assigned to the worker: the verification fails.
+    echo = false;
+    assigned = worker;
+    await expect(recording().run(() => {})).rejects.toThrow(
+      "assigned to the pipeline worker",
+    );
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
