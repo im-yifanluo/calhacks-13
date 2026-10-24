@@ -50,8 +50,6 @@ interface Owned {
   thrown: boolean;
   /** The viewer is done with it; release(rest: true) is queued. */
   releasing: boolean;
-  /** release(rest: true) has been sent. */
-  sent: boolean;
   /** A call for this hold failed, so finishing it does not clear earlier errors. */
   failed?: boolean;
   finalPose?: Pose;
@@ -204,7 +202,12 @@ export class NetAdapter implements InteractionAuthority {
     this.interval = setInterval(safe(this.tick), TICK_MS);
   }
 
-  /** Removes every hook, listener and timer. Queued calls are dropped; anything still held is released, best effort. */
+  /**
+   * Removes every hook, listener and timer. Queued calls are dropped, and nothing more is sent: anything still held
+   * stays held until the connection closes. session.ts disposes the adapter on pagehide and disconnects right after;
+   * the server then clears the hold and, when the grab's take has nothing recorded yet, puts the room back on the
+   * parent take. Releasing here would look like an ordinary give-back and leave everyone on an empty take.
+   */
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -214,11 +217,6 @@ export class NetAdapter implements InteractionAuthority {
     this.timers.clear();
     for (const cancel of [...this.cancelers]) cancel();
     for (const entry of this.queue.splice(0)) void entry(); // resolves its caller without calling the server
-    // A forgotten hold would block seek, fork and take changes for the whole room until we disconnect.
-    for (const owned of this.owned.values()) {
-      const row = this.ownRow(owned);
-      if (!owned.sent && row && this.net.ready) void this.net.release(owned.objectId, true, owned.finalPose ?? rowPose(row));
-    }
     this.owned.clear(); this.moves.clear();
   }
 
@@ -307,7 +305,7 @@ export class NetAdapter implements InteractionAuthority {
     if (!granted) { this.giveBack(objectId); return fail("the server's confirmation did not arrive"); }
     this.syncBranches();
     this.owned.set(objectId, { objectId, branchId: granted.row.branchId, fromMediaUs: granted.row.fromMediaUs,
-      thrown: false, releasing: false, sent: false });
+      thrown: false, releasing: false });
     if (attempt.abandoned) { this.giveBack(objectId); return false; }
     return { branch: granted.branch };
   }
@@ -324,11 +322,7 @@ export class NetAdapter implements InteractionAuthority {
 
   /** Release an object the server granted that the viewer will not use (a late or abandoned grant). */
   private giveBack(objectId: string): void {
-    if (this.disposed) {
-      const row = this.net.connection?.db.objectState.key.find(`${this.net.timeline?.branchId}:${objectId}`);
-      if (row && this.mine(row.simOwner) && this.net.ready) void this.net.release(objectId, true, rowPose(row));
-      return;
-    }
+    if (this.disposed) return; // the connection closes next, which clears the hold (see dispose)
     const owned = this.owned.get(objectId);
     if (owned) { owned.releasing = true; void this.enqueue(() => this.sendRelease(owned), true); this.decided(objectId); return; }
     void this.enqueue(async () => {
@@ -343,7 +337,6 @@ export class NetAdapter implements InteractionAuthority {
     if (this.owned.get(owned.objectId) !== owned) return; // revoked meanwhile
     const row = this.ownRow(owned);
     if (row) {
-      owned.sent = true;
       // A throw is done once it rests: if none of its calls failed, an older throw error is stale.
       const kind = owned.thrown ? "throw" : "release";
       if (await this.calling(`release the ${this.label(owned.objectId)}`, kind,

@@ -36,7 +36,7 @@ function makeViewer(reports: string[]): Viewer {
   for (const object of objects) root.add(object.root);
   const memory = { manifest: structuredClone(manifest), root, objects, cameraTrack: manifest.camera.track, roomGeometry: [], warnings: [], dispose() {} };
   const viewer = new Viewer(memory as never, message => reports.push(`viewer: ${message}`));
-  cleanup.push(() => viewer.dispose());
+  cleanup.push(() => { if (!(viewer as never as { disposed: boolean }).disposed) viewer.dispose(); }); // a test may close the page itself
   return viewer;
 }
 
@@ -373,6 +373,103 @@ test("clock: a refused change is reported and the viewer returns to the room's c
   expect(drift()).toBeGreaterThan(0.3);
   await until(() => { tick(); return Math.abs(drift()) < 0.05; }, "the drift correction", 2500);
   expect(bob.viewer.timeline.playing).toBe(true);
+});
+
+/** The client's connection closes: it hears nothing more, and the server runs its disconnect hook. */
+function dropConnection(room: RoomServer, client: FakeClient): void {
+  client.connected = false;
+  room.mutate(client.auth, ctx => (mod.onDisconnect as any)(ctx, {}));
+}
+const connected = (room: RoomServer, client: FakeClient) => room.mutate(client.auth, ctx => (mod.onConnect as any)(ctx, {}));
+
+test("a grab on the Original forks; if the connection then drops before anything is saved, the room and every viewer go back to the Original", async () => {
+  const room = new RoomServer();
+  const hostClient = room.client("alice");
+  const { code, roomId } = await openRoom(room, hostClient);
+  connected(room, hostClient);
+  const alice = attach(hostClient);
+  const bob = attach(await joined(room, "bob", code));
+  alice.viewer.seek(1);
+  await until(() => Math.abs(bob.viewer.timeline.time - 1) < 1e-6, "the shared seek");
+  expect(await alice.viewer.grab("ball-1")).toBe(true);
+  const take = serverTimeline(room, roomId).branchId;
+  expect(room.h.db.branch.id.find(take)).toMatchObject({ parentId: 0n, forkMediaUs: 1_000_000n, name: "First edit" });
+  await until(() => bob.viewer.timeline.activeId === String(take), "bob on alice's take");
+  alice.viewer.moveHeld(new Vector3(0.3, 1.4, -1.2), new Quaternion(), 1 / 60);
+  const remotes = () => (bob.viewer as any).remotePoses as Map<string, unknown>;
+  await until(() => remotes().has("ball-1"), "alice's hold on bob's screen");
+
+  dropConnection(room, hostClient); // no release and no saves: the server clears her hold
+  expect(serverTimeline(room, roomId)).toMatchObject({ branchId: 0n, paused: true, anchorMediaUs: 1_000_000n });
+  await until(() => bob.viewer.timeline.activeId === "original", "bob back on the Original");
+  expect(bob.viewer.timeline.time).toBeCloseTo(1, 9);
+  expect(bob.viewer.timeline.playing).toBe(false);
+  expect(remotes().has("ball-1")).toBe(false);
+  expect(bob.viewer.timeline.branches.map(b => b.id)).toContain(String(take)); // the empty take stays listed
+  expect(trackOf(bob, take)).toBeUndefined();
+  expect(bob.reports.filter(m => m.startsWith("Could not"))).toEqual([]);
+  // The room carries on: bob's own grab forks a fresh take from the Original.
+  expect(await bob.viewer.grab("ball-1")).toBe(true);
+  expect(room.h.db.branch.id.find(serverTimeline(room, roomId).branchId)).toMatchObject({ parentId: 0n, forkMediaUs: 1_000_000n });
+});
+
+test("reloading mid-grab or mid-throw sends nothing on the way out; the disconnect puts the room back on the parent take", async () => {
+  for (const midThrow of [false, true]) {
+    const room = new RoomServer();
+    const page = room.client("alice");
+    const { code, roomId } = await openRoom(room, page);
+    connected(room, page);
+    const alice = attach(page);
+    const bob = attach(await joined(room, "bob", code));
+    // A first throw, saved: the take the next edit forks from.
+    alice.viewer.seek(1);
+    await until(() => serverTimeline(room, roomId).anchorMediaUs === 1_000_000n, "the seek");
+    expect(await alice.viewer.grab("ball-1")).toBe(true);
+    const parent = serverTimeline(room, roomId).branchId;
+    alice.viewer.moveHeld(new Vector3(0.3, 1.4, -1.2), new Quaternion(), 1 / 60);
+    alice.viewer.release();
+    await settle(alice);
+    await until(() => serverRow(room, parent, "ball-1")?.mode === "rest" && !!trackOf(bob, parent), "the first throw saved");
+    // Edit it again at 2 s: a new take forked from the first.
+    alice.viewer.seek(2);
+    await until(() => serverTimeline(room, roomId).anchorMediaUs === 2_000_000n, "the second seek");
+    expect(await alice.viewer.grab("ball-1")).toBe(true);
+    const take = serverTimeline(room, roomId).branchId;
+    expect(room.h.db.branch.id.find(take)).toMatchObject({ parentId: parent, forkMediaUs: 2_000_000n });
+    await until(() => bob.viewer.timeline.activeId === String(take), "bob on the new take");
+    if (midThrow) {
+      alice.viewer.moveHeld(new Vector3(0.2, 1.6, -1.2), new Quaternion(), 1 / 60);
+      alice.viewer.release();
+      for (let i = 0; i < 10; i++) alice.viewer.update(STEP);
+      expect(alice.viewer.recording).toBe(true); // its keyframes go up only once it rests
+      await until(() => serverRow(room, take, "ball-1")?.mode === "physics", "the throw on the server");
+    }
+
+    // pagehide, as main.ts runs it: session.dispose() (adapter, then the connection), then viewer.dispose().
+    const before = room.log.length;
+    alice.adapter.dispose();
+    dropConnection(room, page);
+    alice.viewer.dispose(); // finishes the preview; the adapter no longer listens
+    await sleep(20);
+    // Nothing started on the way out (a move already in flight may still finish): no release(rest) that would look
+    // like an ordinary give-back.
+    expect(room.log.slice(before).filter(c => c.phase === "start")).toEqual([]);
+    expect(serverTimeline(room, roomId)).toMatchObject({ branchId: parent, paused: true, anchorMediaUs: 2_000_000n });
+    expect([...room.h.db.branchKeyframes.iter()].filter(c => c.branchId === take)).toEqual([]);
+    await until(() => bob.viewer.timeline.activeId === String(parent), "bob back on the parent take");
+    expect(bob.viewer.timeline.time).toBeCloseTo(2, 9);
+
+    // The reloaded page: same identity, a new connection, and ?room= joins again.
+    const reloaded = room.client("alice");
+    connected(room, reloaded);
+    await reloaded.reducers.joinRoom({ joinCode: code, name: "Alice", device: "desktop" });
+    const again = attach(reloaded);
+    expect(again.viewer.timeline.activeId).toBe(String(parent));
+    expect(again.viewer.timeline.time).toBeCloseTo(2, 9);
+    expect(JSON.stringify(trackOf(again, parent))).toBe(JSON.stringify(trackOf(bob, parent))); // the first throw is intact
+    expect([...room.h.db.objectState.iter()].some(o => o.simOwner)).toBe(false);
+    expect([...again.reports, ...bob.reports].filter(m => m.startsWith("Could not"))).toEqual([]);
+  }
 });
 
 test("a refused clock change stays up until a later one succeeds, and never lands in the room panel's error", async () => {
