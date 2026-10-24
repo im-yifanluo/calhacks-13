@@ -4,7 +4,7 @@
 import * as THREE from "three";
 import type { Identity } from "spacetimedb";
 import type { MemoryManifest } from "@memreplay/shared";
-import { Multiplayer, type Player } from "./net/index.js";
+import { type Failure, Multiplayer, type Player } from "./net/index.js";
 import { NetAdapter } from "./net/adapter.js";
 import { validateManifest } from "./loader.js";
 import { isTouchDevice } from "./phone-joystick.js";
@@ -20,6 +20,75 @@ const NAME_KEY = "memreplay-name";
 const POSE_INTERVAL_MS = 80;
 /** An unchanged pose is re-sent this often, in case a send was dropped. */
 const POSE_REFRESH_MS = 1000;
+/** How long an informational message stays up (ms). */
+export const NOTICE_MS = 6000;
+
+export interface NoticeOptions {
+  /** What the message is about. A later success of the same kind (resolve) clears an error. */
+  kind?: string;
+  /** Errors stay until a newer message replaces them or their kind succeeds; other messages expire. */
+  error?: boolean;
+  /** Information that stays until replaced: a page about to reload, a link to copy by hand. */
+  persist?: boolean;
+}
+
+/**
+ * One message slot. A newer message replaces the older one; information expires after NOTICE_MS; an
+ * error stays until a newer message replaces it or an action of its kind succeeds. When a message
+ * goes, the slot shows `idle()` instead, unless someone else has written over it (`showing` is false).
+ */
+export class Notice {
+  private current?: { text: string; kind?: string; error: boolean };
+  private timer?: ReturnType<typeof setTimeout>;
+
+  constructor(
+    private readonly display: (text: string, error: boolean) => void,
+    private readonly showing: (text: string) => boolean = () => true,
+    private readonly idle: () => string = () => "",
+  ) {}
+
+  get text(): string {
+    return this.current?.text ?? "";
+  }
+  get error(): boolean {
+    return this.current?.error ?? false;
+  }
+
+  show(text: string, options: NoticeOptions = {}): void {
+    clearTimeout(this.timer);
+    this.timer = undefined;
+    const notice = { text, kind: options.kind, error: !!options.error };
+    this.current = notice;
+    this.display(text, notice.error);
+    if (!notice.error && !options.persist)
+      this.timer = setTimeout(() => {
+        if (this.current === notice) this.clear();
+      }, NOTICE_MS);
+  }
+
+  /** An action of this kind succeeded: an error about it is stale. */
+  resolve(kind: string): void {
+    if (this.current?.error && this.current.kind === kind) this.clear();
+  }
+
+  clear(): void {
+    clearTimeout(this.timer);
+    this.timer = undefined;
+    const shown = this.current;
+    this.current = undefined;
+    if (shown && this.showing(shown.text)) this.display(this.idle(), false);
+  }
+
+  /** Stops the expiry timer without touching the display. */
+  dispose(): void {
+    clearTimeout(this.timer);
+    this.timer = undefined;
+  }
+}
+
+/** The status line's resting text while this page is in a room. */
+const roomHint = (code: string) =>
+  `In room ${code}. Pause to grab and throw; everyone sees the same take.`;
 
 export type Device = "quest" | "phone" | "desktop";
 
@@ -298,7 +367,12 @@ export class Session {
   private rejoinCycle = 0;
   private profileDirty = false;
   private selectRequest = "";
-  private message = "";
+  /** The room panel's message: room actions, the library and connection problems. */
+  private readonly panel: Notice;
+  /** The room's messages in the viewer's status line (the adapter's and this panel's). */
+  private readonly status: Notice;
+  /** The last connection failure shown, to notice a new one or its end. */
+  private failureSeen?: Failure;
   private memoryKey = "";
   private peopleKey = "";
   private poseSentAt = -Infinity;
@@ -334,6 +408,14 @@ export class Session {
 
   constructor(private readonly host: SessionHost) {
     this.avatars = new Avatars(host.scene);
+    this.panel = new Notice(() => this.render());
+    // The viewer writes its own messages to the same line: only clear ours while they are still shown.
+    const line = document.getElementById("status");
+    this.status = new Notice(
+      (text) => host.showStatus(text),
+      (text) => !line || line.textContent === text,
+      () => (this.adapter ? roomHint(this.room) : ""),
+    );
     this.urlRoom = normalizeCode(
       new URL(location.href).searchParams.get("room"),
     );
@@ -403,6 +485,8 @@ export class Session {
   dispose(): void {
     this.adapter?.dispose();
     this.avatars.dispose();
+    this.panel.dispose();
+    this.status.dispose();
     this.net.dispose();
   }
 
@@ -410,6 +494,7 @@ export class Session {
     const { net } = this;
     if (net.ready && !this.wasReady) this.readyCycle++;
     this.wasReady = net.ready;
+    this.showFailure(net.failure);
     this.render();
     if (!net.ready || this.navigating) return;
     if (this.firstReady) {
@@ -418,7 +503,7 @@ export class Session {
       // The server put this identity back in its old room on connect, but this page has no
       // ?room=, so it is a local session: leave, or the others see a ghost.
       else if (net.room)
-        void net.run(() => net.connection!.reducers.leaveRoom({}), false);
+        void net.attempt(() => net.connection!.reducers.leaveRoom({}), null);
       return;
     }
     if (this.room && !this.busy) {
@@ -451,12 +536,27 @@ export class Session {
     return name;
   }
 
+  /**
+   * One server call for the panel. A failure shows as "<what>: <reason>" and stays until a newer
+   * message or a later success of the same kind; it never touches another kind's error.
+   */
+  private async act(
+    kind: string,
+    what: string,
+    action: () => Promise<unknown>,
+  ): Promise<boolean> {
+    const error = await this.net.attempt(action, null);
+    if (error) this.panel.show(`${what}: ${error}`, { kind, error: true });
+    else this.panel.resolve(kind);
+    return !error;
+  }
+
   private async create(): Promise<void> {
     const value = this.ui.memories.value;
     if (!value || this.busy) return;
     this.busy = true;
     this.render();
-    const ok = await this.net.run(() =>
+    const ok = await this.act("room", "Could not create a room", () =>
       this.net.connection!.reducers.createRoom({
         memoryId: BigInt(value),
         ...this.who(),
@@ -472,35 +572,47 @@ export class Session {
     if (!joinCode || this.busy) return;
     if (joinCode === this.room) {
       // Joining again would clear this player's object ownership mid-throw on the server.
-      this.message = `You're already in room ${joinCode}.`;
-      return this.render();
+      return this.panel.show(`You're already in room ${joinCode}.`);
     }
     this.busy = true;
     this.render();
-    const ok = await this.net.run(() =>
-      this.net.connection!.reducers.joinRoom({ joinCode, ...this.who() }),
+    const error = await this.net.attempt(
+      () => this.net.connection!.reducers.joinRoom({ joinCode, ...this.who() }),
+      null,
     );
     this.busy = false;
-    if (ok) this.entered(fromUrl);
-    else if (fromUrl)
+    if (!error) {
+      this.panel.resolve("room");
+      this.entered(fromUrl);
+    } else if (fromUrl)
       // Stay a local session, and do not retry this code on reload. A reconnect can put this identity back in its
       // previous room on the server; abandonJoin leaves that too, or the others keep seeing a frozen avatar.
-      this.abandonJoin(`Could not join room ${joinCode}. You're exploring on your own.`);
+      this.abandonJoin(`Could not join room ${joinCode} (${error}). You're exploring on your own.`);
+    else
+      this.panel.show(`Could not join room ${joinCode}: ${error}`, {
+        kind: "room",
+        error: true,
+      });
     this.render();
   }
 
   private async rejoin(): Promise<void> {
     this.busy = true;
-    const ok = await this.net.run(
+    const error = await this.net.attempt(
       () =>
         this.net.connection!.reducers.joinRoom({
           joinCode: this.room,
           ...this.who(),
         }),
-      false,
+      null,
     );
     this.busy = false;
-    if (!ok) this.message = `Lost room ${this.room}. Reload to try again.`;
+    if (error)
+      this.panel.show(`Lost room ${this.room} (${error}). Reload to try again.`, {
+        kind: "room",
+        error: true,
+      });
+    else this.panel.resolve("room");
     this.render();
   }
 
@@ -537,7 +649,6 @@ export class Session {
     }
     if (this.adapter) return;
     this.room = this.urlRoom = code;
-    this.message = "";
     // Keep ?room= in the address bar, so a reload rejoins and the link can be shared.
     history.replaceState(history.state, "", roomUrl(location.href, code));
     this.startAdapter();
@@ -548,10 +659,10 @@ export class Session {
    * ghost avatar, and stay a local session that won't retry this room on reload.
    */
   private abandonJoin(text: string): void {
-    void this.net.run(() => this.net.connection!.reducers.leaveRoom({}), false);
+    void this.net.attempt(() => this.net.connection!.reducers.leaveRoom({}), null);
     this.urlRoom = "";
     history.replaceState(history.state, "", roomUrl(location.href, null));
-    this.message = text;
+    this.panel.show(text, { kind: "room", error: true });
   }
 
   private startAdapter(): void {
@@ -570,13 +681,14 @@ export class Session {
       );
       return;
     }
-    this.host.showStatus(
-      `In room ${this.room}. Pause to grab and throw; everyone sees the same take.`,
-    );
-    const adapter = new NetAdapter(this.net, viewer, (message) =>
-      this.host.showStatus(message),
+    const adapter = new NetAdapter(
+      this.net,
+      viewer,
+      (message, options) => this.status.show(message, options),
+      (kind) => this.status.resolve(kind),
     );
     this.adapter = adapter;
+    this.status.show(roomHint(this.room), { persist: true });
     viewer.setAuthority(adapter);
     adapter.start();
   }
@@ -586,7 +698,7 @@ export class Session {
     if (this.net.ready && this.net.room) {
       this.busy = true;
       this.render();
-      const ok = await this.net.run(() =>
+      const ok = await this.act("room", "Could not leave the room", () =>
         this.net.connection!.reducers.leaveRoom({}),
       );
       this.busy = false;
@@ -597,9 +709,8 @@ export class Session {
 
   private navigate(url: string, message: string): void {
     this.navigating = true;
-    this.message = message;
-    this.host.showStatus(message);
-    this.render();
+    this.panel.show(message, { persist: true });
+    this.status.show(message, { persist: true });
     if (url === location.href) location.reload();
     else location.replace(url);
   }
@@ -609,11 +720,11 @@ export class Session {
     const url = roomUrl(location.href, this.room);
     try {
       await navigator.clipboard.writeText(url);
-      this.message = "Room link copied.";
+      this.panel.show("Room link copied.");
     } catch {
-      this.message = url;
+      // Shown until replaced, so it can be copied by hand.
+      this.panel.show(url, { persist: true });
     }
-    this.render();
   }
 
   private async addToLibrary(): Promise<void> {
@@ -630,7 +741,7 @@ export class Session {
       );
       if (existing) {
         this.ui.memories.value = existing.id.toString();
-        this.message = `“${existing.title}” is already in the library.`;
+        this.panel.show(`“${existing.title}” is already in the library.`);
         return;
       }
       const response = await fetch(manifestUrl);
@@ -640,23 +751,27 @@ export class Session {
       const requestId =
         crypto.randomUUID?.() ??
         `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-      const ok = await this.net.run(() =>
-        this.net.connection!.reducers.createMemory({
-          requestId,
-          title: manifest.title,
-          sourceUrl: "",
-          manifestUrl,
-          pipelineIdentity: this.net.identity!,
-          durationUs: BigInt(Math.round(manifest.timeline.durationSec * 1e6)),
-        }),
+      const error = await this.net.attempt(
+        () =>
+          this.net.connection!.reducers.createMemory({
+            requestId,
+            title: manifest.title,
+            sourceUrl: "",
+            manifestUrl,
+            pipelineIdentity: this.net.identity!,
+            durationUs: BigInt(Math.round(manifest.timeline.durationSec * 1e6)),
+          }),
+        null,
       );
-      if (ok) {
-        this.selectRequest = requestId;
-        this.memoryKey = "";
-        this.message = `Added “${manifest.title}” to the library.`;
-      }
+      if (error) throw new Error(error);
+      this.selectRequest = requestId;
+      this.memoryKey = "";
+      this.panel.show(`Added “${manifest.title}” to the library.`);
     } catch (error) {
-      this.net.report(error);
+      this.panel.show(
+        `Could not add it to the library: ${error instanceof Error ? error.message : String(error)}`,
+        { kind: "library", error: true },
+      );
     } finally {
       this.adding = false;
       this.render();
@@ -723,13 +838,11 @@ export class Session {
     )
       return;
     this.profileDirty = false;
-    void net.run(
-      () =>
-        net.connection!.reducers.joinRoom({
-          joinCode: this.room,
-          ...this.who(),
-        }),
-      false,
+    void this.act("profile", "Could not update your name", () =>
+      net.connection!.reducers.joinRoom({
+        joinCode: this.room,
+        ...this.who(),
+      }),
     );
   }
 
@@ -746,11 +859,22 @@ export class Session {
     this.ui.upload.scrollIntoView({ block: "nearest" });
   }
 
+  /** A new connection failure replaces the panel's message; it goes once the connection recovers. */
+  private showFailure(failure: Failure | undefined): void {
+    if (failure === this.failureSeen) return;
+    const previous = this.failureSeen;
+    this.failureSeen = failure;
+    if (failure)
+      this.panel.show(failure.message, { kind: failure.kind, error: true });
+    else if (previous) this.panel.resolve(previous.kind);
+  }
+
   private render(): void {
-    const { net, ui } = this;
+    const { net, ui, panel } = this;
     setText(ui.connection, net.status);
-    setText(ui.error, net.error);
-    setText(ui.message, this.message);
+    // One message at a time: the newest, in red when it is an error.
+    setText(ui.message, panel.error ? "" : panel.text);
+    setText(ui.error, panel.error ? panel.text : "");
     this.renderLibrary();
     const room = net.ready ? net.room : undefined;
     const players = room ? net.players : [];
