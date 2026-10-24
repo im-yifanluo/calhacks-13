@@ -63,6 +63,8 @@ def test_person_ghost(work):
 
 
 def test_ball_track_follows_the_throw(work):
+    report = json.loads((work / "objects/report.json").read_text())
+    assert next(r for r in report if r["label"] == "ball")["motion"] == "moving"
     objs = json.loads((work / "objects/objects.json").read_text())["objects"]
     balls = [o for o in objs if o["label"] == "ball"]
     assert len(balls) == 1

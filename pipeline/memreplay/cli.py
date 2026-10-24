@@ -32,6 +32,16 @@ DONE_MARKER = {"normalize": "input/frames.json", "nouns": "nouns.json", "vipe": 
                "world": "world/cameras.json", "l0": "world/ghosts.json", "objects": "objects/objects.json",
                "background": "world/bg_static.spz", "layers": "world/bg_room.spz"}
 KF_GAP_SEC = 0.5   # ViPE re-runs detection every 0.5 s (default 2 s leaves new things unmasked too long)
+PROP_POLICY_STAGES = ("objects", "background", "layers")
+
+
+def policy_marker(work: Path, stage: str) -> Path:
+    return work / ".cache" / f"{stage}-prop-motion-v1"
+
+
+def stage_complete(work: Path, stage: str) -> bool:
+    return ((work / DONE_MARKER[stage]).exists()
+            and (stage not in PROP_POLICY_STAGES or policy_marker(work, stage).exists()))
 
 
 def run_vipe(work: Path) -> None:
@@ -51,6 +61,10 @@ def run_vipe(work: Path) -> None:
 
 def run_stage(name: str, work: Path, args: argparse.Namespace | None = None) -> None:
     work = Path(work).resolve()
+    following = list(STAGES)[list(STAGES).index(name):]
+    for stage in PROP_POLICY_STAGES:
+        if stage in following:
+            policy_marker(work, stage).unlink(missing_ok=True)
     if name == "normalize":
         from . import normalize
         eye = getattr(args, "eye_height", None)
@@ -91,26 +105,33 @@ def run_stage(name: str, work: Path, args: argparse.Namespace | None = None) -> 
         layers.run(work)
     elif name == "background":
         from . import background
-        # `memreplay run` trains the static room (props stay in; S6b carves them out); `stage background` without
+        # `memreplay run` keeps stationary props for S6b extraction; moving props are masked.
+        # `stage background` without
         # --static trains the older room-without-props splat
         background.run(work, steps_scaler=getattr(args, "steps_scaler", None), static=getattr(args, "static", True))
     else:
         raise SystemExit(f"unknown step {name}")
+    if name in PROP_POLICY_STAGES and (name != "background" or getattr(args, "static", True)):
+        marker = policy_marker(work, name)
+        marker.parent.mkdir(exist_ok=True)
+        marker.touch()
 
 
 def run_all(work: Path, title: str, args: argparse.Namespace) -> Path:
     work = Path(work)
     timings = {}
     skip = set(args.skip or [])
+    changed = False
     for name in STAGES:
         if name in skip:
             continue
-        if not args.force and (work / DONE_MARKER[name]).exists() and name not in (args.redo or []):
+        if not args.force and not changed and stage_complete(work, name) and name not in (args.redo or []):
             print(f"[run] {name}: already done")
             continue
         t0 = time.time()
         print(f"[run] {name} ...", flush=True)
         run_stage(name, work, args)
+        changed = True
         timings[name] = round(time.time() - t0, 1)
         if name in ("l0", "objects", "layers"):            # a viewable memory after every layer
             merge(work, title, args.memory_id or work.name, args.device)
@@ -244,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
     rn.add_argument("--eye-height", type=float)
     rn.add_argument("--steps-scaler", type=float, default=0.25)
     rn.add_argument("--force", action="store_true", help="rerun finished steps too")
-    rn.add_argument("--redo", nargs="*", choices=list(STAGES), help="rerun just these finished steps")
+    rn.add_argument("--redo", nargs="*", choices=list(STAGES), help="rerun these steps and their downstream steps")
     rn.add_argument("--skip", nargs="*", choices=list(STAGES), help="leave these steps out")
     cl = sub.add_parser("clean", help="prune splat floaters and drop false ghosts in a published memory folder")
     cl.add_argument("dir", type=Path)

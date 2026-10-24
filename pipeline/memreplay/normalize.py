@@ -92,6 +92,8 @@ def run(work: Path, eye_height_m: float | None = None, nouns: list[str] | None =
         if transfer == "smpte2084":
             print("[normalize] warning: PQ HDR input is converted without tone mapping; colours will look flat")
         vf = f"fps={FPS},{scale}:out_color_matrix=bt709:out_range=tv,format=yuv420p"
+    # Frame colour tags can override encoder flags, so reset them after tone mapping.
+    vf += ",setparams=range=limited:color_primaries=bt709:color_trc=bt709:colorspace=bt709"
     # ffmpeg applies the phone's rotation flag while decoding, so the output is upright with no flag.
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-vf", vf, "-an", "-c:v", "libx264", "-crf", str(crf),
                     "-preset", "medium", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",

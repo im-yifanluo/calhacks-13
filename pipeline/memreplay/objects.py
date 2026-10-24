@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
+from typing import Literal
 
 import cv2
 import numpy as np
@@ -379,6 +380,31 @@ def scene_static_ids(work: Path) -> list[int]:
     return sorted({i for e in sel if not e["keep"] for i in e["ids"]} - kept)
 
 
+def prop_motions(work: Path) -> dict[str, Literal["stationary", "moving"]]:
+    """Read the motion decision made by object tracking, before any visual extraction."""
+    selection = json.loads((work / "objects/selection.json").read_text())
+    expected = {e["id"] for e in selection if e["keep"]}
+    report_path = work / "objects/report.json"
+    report = json.loads(report_path.read_text()) if report_path.exists() else []
+    motions = {}
+    for entry in report:
+        if entry["kept"]:
+            motion = entry.get("motion")
+            if motion not in ("stationary", "moving"):
+                raise ValueError("Missing prop motion classification; rerun the objects stage")
+            motions[entry["id"]] = motion
+    if motions.keys() != expected:
+        raise ValueError("Prop selection changed; rerun the objects stage")
+    return motions
+
+
+def room_training_policy(work: Path) -> dict:
+    motions = prop_motions(work)
+    selection = json.loads((work / "objects/selection.json").read_text())
+    moving_ids = {i for e in selection if e["keep"] and motions[e["id"]] == "moving" for i in e["ids"]}
+    return {"version": 1, "moving_ids": sorted(moving_ids)}
+
+
 def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
     work = Path(work)
     frames = FramesInfo.model_validate_json((work / "input" / "frames.json").read_text())
@@ -445,11 +471,13 @@ def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
                    for tt, p, vv in zip(t, P, V)]))
         speeds = np.linalg.norm(V, axis=1)
         report.append({"id": oid, "label": spec.label, "kept": True, "mask_ids": g["ids"], "sightings": len(g["obs"]), "spec_source": source,
-                       "static": bool(static), "sighting_spread_m": round(spread, 3),
+                       "static": bool(static), "motion": "stationary" if static else "moving",
+                       "sighting_spread_m": round(spread, 3),
                        "shape": spec.shape, "size_m": spec.size_m, "observed_size_m": seen, "mass_kg": round(mass, 3),
                        "visible": [float(t[0]), float(t[-1])], "max_speed_m_s": float(speeds.max()),
                        "path_length_m": float(np.sum(np.linalg.norm(np.diff(P, axis=0), axis=1))) if len(P) > 1 else 0.0})
     (work / "objects" / "objects.json").write_text(ObjectsFragment(objects=result).model_dump_json(indent=2))
+    (work / "objects" / "objects.base.json").write_text(ObjectsFragment(objects=result).model_dump_json(indent=2))
     (work / "objects" / "report.json").write_text(json.dumps(report, indent=2))
     print(f"[objects] {len(result)} objects: " + ", ".join(f"{r['id']} ({r['shape']}, {r['mass_kg']} kg, "
                                                           f"{r['sightings']} sightings)" for r in report if r["kept"]))

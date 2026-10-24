@@ -1,12 +1,12 @@
 """S6b props layer: carve each grabbable prop out of the static room splat.
 
-The static splat (S6 --static) is trained on every frame with only people masked, so the props are in it at full
-quality. A Gaussian belongs to a prop if, in the frames where ViPE masked that prop, its centre lands on the prop's
-mask and is not hidden behind the depth there (multi-view vote). Those Gaussians become the prop's own splat
+The static splat keeps stationary props, while moving props are masked out and retain primitive visuals.
+A Gaussian belongs to a stationary prop if its centre lands on the prop's mask in multiple views.
+Those Gaussians become the prop's own splat
 (object-local coordinates, so the viewer can move it along its track); the rest is the room.
 
 Writes world/bg_room.spz (room without props), objects/<id>.spz, and switches those objects' visual to the splat
-(the primitive stays as the physics collider). Props with too few Gaussians keep their primitive.
+(the primitive stays as the physics collider). Failed extractions stay in the room without a separate object.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import numpy as np
 
 from .handoff import Cameras, WorldInfo
 from .vipe_io import Vipe, dilate
-from .world import WorldPoses
+from .objects import prop_motions, room_training_policy
 
 MIN_GAUSSIANS = 50
 MAX_VIEWS = 30
@@ -69,6 +69,10 @@ def to_spz(ply: Path, spz: Path) -> None:
 
 def run(work: Path) -> dict:
     work = Path(work).resolve()
+    motions = prop_motions(work)
+    policy_path = work / "world/background_policy.json"
+    if not policy_path.exists() or json.loads(policy_path.read_text()) != room_training_policy(work):
+        raise ValueError("Retrain the static background with current prop motion masks before extracting layers")
     plys = sorted((work / "gsplat_static" / "ply").glob("point_cloud_*.ply"), key=lambda p: int(p.stem.split("_")[-1]))
     if not plys:
         raise SystemExit("no static splat yet: run `memreplay stage background --static` first")
@@ -77,11 +81,10 @@ def run(work: Path) -> dict:
     ok = np.isfinite(xyz).all(1)
     data, xyz = data[ok], xyz[ok]
     selection = json.loads((work / "objects" / "selection.json").read_text())
-    objs_doc = json.loads((work / "objects" / "objects.json").read_text())
+    objs_doc = json.loads((work / "objects" / "objects.base.json").read_text())
     objs = {o["id"]: o for o in objs_doc["objects"]}
     cams = {c.idx: c for c in Cameras.model_validate_json((work / "world" / "cameras.json").read_text()).frames}
-    scale = WorldInfo.model_validate_json((work / "world" / "world.json").read_text()).scale
-    v, wp = Vipe(work / "vipe"), WorldPoses(work)
+    v = Vipe(work / "vipe")
     # 1. put the splat's floor exactly at y = 0, and rewrite the static room with it
     cam_xz = np.array([[c.c2w[3], c.c2w[11]] for c in cams.values()])
     opacity = 1 / (1 + np.exp(-data["opacity"].astype(np.float64)))
@@ -94,6 +97,10 @@ def run(work: Path) -> dict:
     report = []
     kept = [e for e in selection if e["keep"] and e["id"] in objs]
     for oi, e in enumerate(kept):
+        if motions[e["id"]] == "moving":
+            report.append({"id": e["id"], "motion": "moving", "gaussians": 0,
+                           "method": "masked-from-room", "visual": "primitive"})
+            continue
         o = objs[e["id"]]
         p0 = np.array(o["track"][0]["p"], float)
         size = e.get("spec", {}).get("size_m") or o["visual"].get("size") or [0.3, 0.3, 0.3]   # stable across reruns
@@ -119,24 +126,21 @@ def run(work: Path) -> dict:
             seen += inb
             votes += inb & on
         mine = (seen >= 3) & (votes >= 0.7 * np.maximum(seen, 1))
-        how = "vote"
-        if mine.sum() < MIN_GAUSSIANS:
-            # Fallback: the splat's surfaces sit a little off the measured geometry, so votes can miss. Take what is
-            # inside the prop's box (20 % larger), above the surface it rests on.
-            half = 0.6 * np.array(size, float) + 0.03
-            inside = np.all(np.abs(xyz[cand] - p0) <= half, axis=1) & (xyz[cand, 1] > p0[1] - size[1] / 2 + 0.03)
-            mine, how = inside, "box"
         owner[cand[mine]] = oi
         report.append({"id": e["id"], "candidates": int(len(cand)), "gaussians": int(mine.sum()), "views": len(views),
-                       "method": how})
+                       "method": "vote", "motion": "stationary"})
 
     (work / "objects").mkdir(exist_ok=True)
     tmp = work / "gsplat_static"
+    room_only = set()
     for oi, (e, r) in enumerate(zip(kept, report)):
         o = objs[e["id"]]
+        if motions[e["id"]] == "moving":
+            continue
         if r["gaussians"] < MIN_GAUSSIANS:
-            r["visual"] = "primitive (too few Gaussians)"
-            owner[owner == oi] = -1                                  # leave them in the room
+            r["visual"] = "room-only (extraction failed)"
+            owner[owner == oi] = -1
+            room_only.add(e["id"])
             continue
         sub = data[owner == oi].copy()
         p0 = np.array(o["track"][0]["p"], float)
@@ -144,14 +148,12 @@ def run(work: Path) -> dict:
             sub[name] = (sub[name] - p0[k]).astype(np.float32)
         write_ply(tmp / f"obj_{e['id']}.ply", sub)
         to_spz(tmp / f"obj_{e['id']}.ply", work / "objects" / f"{e['id']}.spz")
-        o.setdefault("primitive", o["visual"])                        # keep the shape for reference
         o["visual"] = {"kind": "splat", "url": f"objects/{e['id']}.spz", "format": "spz"}
         r["visual"] = "splat"
     room = data[owner == -1]
     write_ply(tmp / "room.ply", room)
     to_spz(tmp / "room.ply", work / "world" / "bg_room.spz")
-    for o in objs_doc["objects"]:
-        o.pop("primitive", None)                                      # not part of the scene format
+    objs_doc["objects"] = [o for o in objs_doc["objects"] if o["id"] not in room_only]
     (work / "objects" / "objects.json").write_text(json.dumps(objs_doc, indent=2))
     winfo = WorldInfo.model_validate_json((work / "world" / "world.json").read_text())
     winfo.diagnostics["room_splat_count"] = int(len(room))

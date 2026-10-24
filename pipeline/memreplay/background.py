@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import subprocess
 import sys
@@ -22,7 +23,8 @@ from .vipe_io import Frames, Vipe, dilate
 MAX_IMAGES = 300
 INIT_POINTS = 150_000
 CAP = 300_000
-# static mode: the walk-through room. Only people/hands are masked (props stay in the room), more frames and
+# static mode: the walk-through room. People, hands and moving props are masked; stationary props stay in it.
+# More frames and
 # Gaussians (Spark's default budget on Quest is 500k), longer training, camera poses refined, PSNR on held-out frames.
 STATIC = {"images": 400, "cap": 500_000, "steps_scaler": 0.67, "test_every": 12, "out": "bg_static.spz"}
 
@@ -74,10 +76,11 @@ def prepare(work: Path, static: bool = False) -> Path:
         (col / d).mkdir(parents=True)
     chosen = pick_frames(work, cams, STATIC["images"] if static else MAX_IMAGES)
     reader = Frames(work / "input" / "clip.mp4")
-    from .objects import scene_static_ids
+    from .objects import scene_static_ids, room_training_policy
     from .vipe_io import HAND_PHRASES, PEOPLE_PHRASES
-    if static:   # everything but people and hands belongs to the room
-        movers = set(v.ids_with(PEOPLE_PHRASES | HAND_PHRASES))
+    moving_ids = set(room_training_policy(work)["moving_ids"]) if static else set()
+    if static:
+        movers = set(v.ids_with(PEOPLE_PHRASES | HAND_PHRASES)) | moving_ids
         keep_in_room = [i for i in v.phrases if i > 0 and i not in movers]
     else:
         keep_in_room = scene_static_ids(work)
@@ -93,6 +96,8 @@ def prepare(work: Path, static: bool = False) -> Path:
         cv2.imwrite(str(col / "images" / f"{name}.jpg"), cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 95])
         static = v.static_mask(c.idx, margin_px=5, extra_static=keep_in_room)
         if static is None:
+            if moving_ids:
+                raise ValueError(f"Missing masks for frame {c.idx}; cannot exclude moving props from background")
             static = np.ones(rgb.shape[:2], bool)
         cv2.imwrite(str(col / "masks" / f"{name}.png"), static.astype(np.uint8) * 255)
         c2w = np.array(c.c2w).reshape(4, 4)
@@ -157,5 +162,12 @@ def run(work: Path, steps_scaler: float | None = None, static: bool = False) -> 
     FramesInfo.model_validate_json((Path(work) / "input" / "frames.json").read_text())
     if steps_scaler is None:
         steps_scaler = STATIC["steps_scaler"] if static else 0.25
+    from .objects import room_training_policy
+    policy = room_training_policy(work) if static else None
+    policy_path = work / "world/background_policy.json"
+    if static:
+        policy_path.unlink(missing_ok=True)
     prepare(work, static)
     convert(work, train(work, steps_scaler, static), static)
+    if static:
+        policy_path.write_text(json.dumps(policy, indent=2))

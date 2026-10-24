@@ -21,7 +21,8 @@ memreplay verify $WORK/kitchen                                    # numbers + pi
 memreplay publish $WORK/kitchen --to /some/public/dir/kitchen     # or --to s3 (bucket settings from the env)
 ```
 `--eye-height` is the camera's height while recording (phone at the chest of a 185 cm person ≈ 1.35 m; glasses ≈ eye
-height). `run` skips finished steps; `--redo world l0` reruns some, `--force` all. Each step also runs alone:
+height). `run` skips finished steps; `--redo world` reruns world and downstream steps, `--force` all. Old outputs from
+before motion-aware prop separation automatically rerun objects, background and layers. Each step also runs alone:
 `memreplay stage <normalize|nouns|vipe|world|l0|objects|background> --work <dir>`.
 
 Many clips at once, GPU kept busy (ViPE back to back while the other steps follow): `bash pipeline/runpod/batch.sh $WORK/a $WORK/b ...`
@@ -40,7 +41,8 @@ Viewer: copy the published folder to `apps/web/public/memories/<id>/` and open
 ### The static walk-through (start here)
 The room alone, as a high-quality splat you walk through on the Quest: no people, objects or timeline.
 ```bash
-memreplay stage background --static --work $W      # props stay in the room, only people masked; ≤ 500k splats; poses refined
+memreplay stage objects --work $W                  # classify props before training
+memreplay stage background --static --work $W      # stationary props stay; moving props and people are masked
 memreplay merge $W --static --title "Kitchen"       # -> memory.static.json (room splat, collider, start position, audio)
 ```
 On the Quest (USB): `LOCAL_HTTP=1 npm run dev`, `adb reverse tcp:5173 tcp:5173`, then in the Quest Browser open
@@ -68,6 +70,21 @@ clip ─► S1 normalize ─► S1 nouns ─► S2 ViPE ─► S3 world ─► S
 | S6 splat | `background.py`, `train_splat.py` | gsplat MCMC (7.5k steps, ≤ 300k Gaussians) on our world-frame cameras, seeded from the room points, with **people and props masked out of the loss** (gsplat's loader only has per-camera masks; `train_splat.py` adds per-image masks, then runs `simple_trainer.py` unchanged). Then `splat-transform` → `.spz`. | `world/bg.spz` |
 | S7 merge | `cli.merge` | Everything → validated `memory.json` (prefers `bg.spz` over the points). | `memory.json` |
 | verify | `verify.py` | Room points rendered from the recorded cameras vs the real frames; floor flatness; each object's track projected into the frames where ViPE saw it (inside its mask?); a pause-and-drop physics test; a top-down map. | `verify/report.json`, `verify/*.jpg`, `verify/map.png` |
+
+**Prop motion and extraction.** S5 writes one `motion` classification per kept prop to `objects/report.json`.
+It uses the existing world-position spread and sustained-excursion checks; this is a heuristic, so inspect the
+classification on real footage. Both room training and extraction use that same decision.
+
+- Stationary props remain in static-room training. S6b extracts their splats only when at least 50 Gaussians pass
+  the multi-view mask vote. The old bounding-box fallback is removed.
+- Moving props are masked out of room training and retain their primitive visual, collider and recorded track.
+  They are not carved out of the static splat. Training stops if masks needed to exclude them are missing.
+- Failed stationary extraction leaves the prop in the room and removes its separate object from `memory.json`.
+  It is not grabbable; there is no second primitive covering the baked appearance.
+- `objects/objects.base.json` preserves the original tracked objects so extraction can be retried. The final
+  `objects/objects.json` contains only moving props and successfully extracted stationary props.
+- `world/background_policy.json` records the moving mask IDs excluded by successful static training. Layers
+  reject older or mismatched backgrounds. Rerun `memreplay run $W` to regenerate affected assets, then publish again.
 
 **S3 in detail** (each part exists because a real clip broke without it):
 1. **Up direction** from the cameras' right axes: a hand-held camera barely rolls, so up is the direction most perpendicular

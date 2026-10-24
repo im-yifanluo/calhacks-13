@@ -2,6 +2,12 @@
 
 Oct 24, CalHacks 13. Built on branch `pipe/vision`; runbook in [pipeline/README.md](../pipeline/README.md).
 
+**Prop separation update.** The results below describe the earlier GPU runs. The current code classifies props
+before training, masks moving props out of the static room, and keeps their primitive visuals. Only stationary
+props are extracted by multi-view mask vote. Failed extraction leaves the prop in the room without a separate
+grabbable object; the bounding-box fallback is removed. Existing scenes must be rerun and republished to use this
+behavior. CPU regression tests cover the change; the GPU scenes below have not been regenerated for it.
+
 ## TL;DR
 
 - **Works today, for all 5 sample clips** (iPhone 14 Pro Max, `data/samples`): each becomes
