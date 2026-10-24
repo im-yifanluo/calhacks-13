@@ -246,8 +246,8 @@ body.idle #topbar > * { pointer-events: none; }
   .title-pill { max-width: calc(100vw - 24px - var(--tap) - 8px - 96px); padding-right: 14px; }
   #room-toggle { padding: 0 14px 0 12px; }
   #room-summary { max-width: 5.5em; }
-  #vr-enter span { display: none; }
-  #vr-enter { width: var(--tap); padding: 0; }
+  #vr-entry span { display: none; }
+  #vr-entry { width: var(--tap); padding: 0; }
   /* Row 2: the take on the left, Play just right of centre (the right thumb's sweet spot), then restart and options. */
   .dock-grid { grid-template-columns: var(--tap) minmax(0, 1fr) 56px var(--tap) var(--tap); grid-template-areas: "now scrub scrub scrub total" "take take play restart more"; row-gap: 2px; }
   .take { justify-self: start; width: 100%; }

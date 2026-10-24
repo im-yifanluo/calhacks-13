@@ -14,7 +14,7 @@ import { PathGuide } from "./guided.js";
 import { AutoHide, formatTime, mountVRButton, percentAt, popover, Toast } from "./ui.js";
 import "./style.css";
 
-declare global { interface Window { memoryReplay?: Viewer; __memreplay?: unknown } }
+declare global { interface Window { memoryReplay?: Viewer; __memreplay?: unknown; __memreplayScene?: unknown } }
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const status = element("status"), loading = element("loading"), warning = element("warning");
 const play = element<HTMLButtonElement>("play"), scrub = element<HTMLInputElement>("scrub");
@@ -50,7 +50,9 @@ async function main(): Promise<void> {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0.8, -1); controls.enableDamping = true; controls.maxDistance = 20; controls.minDistance = 0.4;
   controls.maxPolarAngle = Math.PI * 0.49;
-  const spark = new SparkRenderer({ renderer, preUpdate: false, maxStdDev: Math.sqrt(5), lodSplatCount: 500_000 });
+  // ?lod=0 draws every splat (the pipeline's render-vs-video captures use it).
+  const spark = new SparkRenderer({ renderer, preUpdate: false, maxStdDev: Math.sqrt(5), lodSplatCount: 500_000,
+    enableLod: params.get("lod") !== "0" });
   scene.add(spark);
   // Shared rooms (session.ts) connect while the memory loads. Without a room the viewer stays local.
   const session = new Session({ renderer, scene, camera, manifestUrl, showStatus: message => { status.textContent = message; } });
@@ -118,6 +120,8 @@ async function main(): Promise<void> {
   const grid = new THREE.GridHelper(10, 40, 0x3c6f70, 0x1f3039); grid.position.y = memory.manifest.world.floorY; scene.add(grid);
   // A reconstructed room has its own floor, and splats write no depth, so the grid would draw over it.
   grid.visible = demo || !memory.manifest.background?.url;
+  // For scripted screenshots (the pipeline's capture tool) and debugging, in every build.
+  window.__memreplayScene = { scene, grid, guide, camera, renderer };
   viewer = new Viewer(memory, message => { status.textContent = message; }); window.memoryReplay = viewer;
   const currentViewer = viewer;
   desktopInput(renderer.domElement, camera, controls, viewer);
@@ -162,7 +166,7 @@ async function main(): Promise<void> {
     unlockAudio: () => audio?.sync.unlock(),
   }, xrPreview ? renderer.domElement : undefined);
   if (xrPreview) { standOnPath(); controls.enabled = false; }
-  mountVRButton(renderer, element<HTMLButtonElement>("vr-enter"));
+  mountVRButton(renderer, element<HTMLButtonElement>("vr-entry"));
   const more = popover(element<HTMLButtonElement>("more-toggle"), element("more-sheet"));
   const autoHide = new AutoHide(document.body);
   let branchCount = 0;
