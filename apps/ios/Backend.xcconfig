@@ -1,0 +1,3 @@
+// Override locally or set the server in the app's Settings.
+MEMREPLAY_BACKEND_URL =
+#include? "Backend.local.xcconfig"
