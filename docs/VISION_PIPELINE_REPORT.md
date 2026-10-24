@@ -36,13 +36,13 @@ adb reverse tcp:5173 tcp:5173
 Quest Browser → `http://localhost:5173/?memory=/memories/img8016/memory.static.json` → **Enter VR**. One-time headset
 setup: root README, Part 3.
 
-| Clip | Scene | Static file | Dynamic file |
-|---|---|---|---|
-| `img8013` | Hotel room (bed, desk, kettle, bathroom), 42 s | `memories/img8013/memory.static.json` | `memories/img8013/memory.json` |
-| `img8014` | Room corner (TV, couch, lamp), 11 s | `memories/img8014/memory.static.json` | `memories/img8014/memory.json` |
-| `img8015` | Hotel corridor (vacuums, towels), 73 s | `memories/img8015/memory.static.json` | `memories/img8015/memory.json` |
-| `img8016` | Hotel lobby (plants, front desk, 2 people), 34 s | `memories/img8016/memory.static.json` | `memories/img8016/memory.json` |
-| `img8017` | Night street walk (14 pedestrians), 2 min 22 s | `memories/img8017/memory.static.json` | `memories/img8017/memory.json` |
+| Clip | Scene | Static file | Dynamic file | Hands-on |
+|---|---|---|---|---|
+| `img8013` | Hotel room (bed, desk, kettle, bathroom), 42 s | `memories/img8013/memory.static.json` | `memories/img8013/memory.json` | works, kind of |
+| `img8014` | Room corner (TV, couch, lamp), 11 s | `memories/img8014/memory.static.json` | `memories/img8014/memory.json` | works |
+| `img8015` | Hotel corridor (vacuums, towels), 73 s | `memories/img8015/memory.static.json` | `memories/img8015/memory.json` | works, kind of |
+| `img8016` | Hotel lobby (plants, front desk, 2 people), 34 s | `memories/img8016/memory.static.json` | `memories/img8016/memory.json` | works, kind of (half is lost tracking) |
+| `img8017` | Night street walk (14 pedestrians), 2 min 22 s | `memories/img8017/memory.static.json` | `memories/img8017/memory.json` | not checked by hand |
 
 **On a laptop**: same URLs at `http://127.0.0.1:5173/...`; tick **Wearer's view** to watch from the recorded head
 path, **Colliders** to see the physics shapes. In `memory.json`, pause (Space), then drag a prop to throw it.
@@ -137,6 +137,12 @@ What the grids show (`apps/web/public/memories/<id>/compare.jpg`, also linked fr
 - **Corridor**: layout right (doors, exit sign, carpet, cart) but the Gaussians streak from the vanishing point:
   forward motion with no depth constraint, plus ViPE's path along texture-poor walls. The clip that needs the depth
   supervision described in §4.
+
+### Hands-on check (Oct 24, 3 PM PT)
+
+Walked through in the web viewer: the **room corner** works; the **hotel lobby**, **corridor** and **hotel room**
+work, kind of: you can walk them and recognise the place, with the smears, floaters and washed patches the judges
+list below. The night walk was not checked by hand.
 
 ### Independent judge panel
 
