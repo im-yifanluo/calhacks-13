@@ -189,7 +189,7 @@ If it fails, move down the S2 fallbacks in order.
 
 ### 2.3 Viewer (`apps/web`)
 
-> **Status:** the module layout below is built on Nikko's branch (`origin/nikko`: `loader`, `physics`, `timeline`, `tracks`, `viewer`, `input-xr`, `input-desktop`). Phone touch input and networking are on Jerry's branch (`origin/stdb/jerry-p4`: `input-touch`, `net/`). `main` still has the single-file scaffold. The target layout after merging is in [INTEGRATION.md](INTEGRATION.md) §2 C.
+> **Status:** merged. Nikko's engine (`loader`, `physics`, `timeline`, `tracks`, `viewer`, `input-xr`, `input-desktop`) is the viewer; Jerry's client is `net/index.ts`; `net/adapter.ts` connects them; `session.ts` is the room panel and `phone-joystick.ts` the phone joystick. File-by-file layout in [INTEGRATION.md](INTEGRATION.md) §2 C. The module list below is the original design.
 Modules:
 - `loader`: manifest, Spark `SplatMesh`es, colliders.
 - `clock`: the shared playhead.
@@ -208,30 +208,31 @@ Modules:
 **Phone:** no immersive mode needed. Use orbit plus a joystick; optional gyro look needs `DeviceOrientationEvent.requestPermission()` from a tap on iOS.
 
 **Getting builds onto the Quest:**
-- `adb reverse tcp:5173 tcp:5173`, then open `http://localhost:5173` (localhost is a secure context).
+- `LOCAL_HTTP=1 npm run dev` and `adb reverse tcp:5173 tcp:5173`, then open `http://localhost:5173` (localhost is a secure context).
 - Phones and judges: `npm run tunnel` (cloudflared gives an HTTPS URL; add the host to Vite `server.allowedHosts`).
 
 ### 2.4 Multiplayer and timelines (`server/spacetime`)
 
-> **Status:** the tables below describe `main`'s module. Jerry's branch (`origin/stdb/jerry-p4`) has a more complete module that should replace it. It adds upload fields on `memory`, status transitions only the pipeline can make, string keys on `objectState`, `simOwner`, clock sampling and validated keyframe chunks, and it rejects catching a thrown object. Comparison and decision in [INTEGRATION.md](INTEGRATION.md) §2 B. The upload page and presigned upload in the §2 diagram exist only on that branch. The pipeline's status reporting (`scripts/pipeline-status.py`) is there too, but no worker calls it yet.
+> **Status:** merged. The module is Jerry's (`server/spacetime/src/index.ts`); the table below lists its fields. Rules (who may set status, chunk validation, the simulation lock, catching) are in [INTEGRATION.md](INTEGRATION.md) §2 B. The upload page and presigned upload are in `server/upload/` and `apps/web/src/upload.ts`. `scripts/pipeline-status.py` reports pipeline progress, but no worker calls it yet.
 **Tables**
 
 | Table | Fields (short) | Written by |
 |---|---|---|
-| `memory` | id, owner, title, manifestUrl, status (uploaded/processing/ready/failed), progress | upload page, pipeline |
+| `memory` | id, requestId, owner, pipelineIdentity, title, sourceUrl, manifestUrl, status (uploaded/processing/ready/failed), progress, error, durationUs | upload service (createMemory), pipeline worker (setMemoryStatus) |
 | `room` | id, memoryId, joinCode, host | createRoom |
 | `player` | identity, roomId, name, device (quest/phone/desktop), color, head pose, hand positions, online | setPose at 10–15 Hz |
 | `timeline` | roomId, branchId, paused, speed, anchorMediaUs, anchorServerTs | play / pause / seek only |
-| `branch` | id, memoryId, parentId, forkMediaUs, name, creator | forkBranch |
-| `object_state` | (branchId, objectId), heldBy?, mode (held/thrown/rest), pose, velocity, fromMediaUs | grab / move / release |
-| `branchKeyframes` (wire name `branch_keyframes`) | branchId, objectId, startMediaUs, `keyframesJson` chunk of `[{t,p,q}]` with t in absolute media seconds | owner, after its sim ends |
+| `clock_sample` | identity, clientSentUs, serverTs | sampleClock (clock calibration) |
+| `branch` | id, roomId, memoryId, parentId, forkMediaUs, name, creator | grab (auto fork) / forkBranch |
+| `object_state` | key `"<branch>:<object>"`, branchId, objectId, heldBy?, simOwner?, mode (held/physics/rest), pose, velocity, fromMediaUs, updatedAt | grab / moveObject / release |
+| `branchKeyframes` (wire name `branch_keyframes`) | key, branchId, objectId, startMediaUs, endMediaUs, `keyframesJson` chunk of ≤120 `[{t,p,q}]` with t in absolute media seconds, author | simulation owner, before `release(rest: true)` |
 
 **The shared clock costs nothing per frame.** Each client computes `t = anchorMediaUs + (now − anchorServerTs) × speed`, and the server only writes on play, pause or seek.
 
 **Pause → physics → alternate timeline**
 1. **Pause:** everyone freezes at the same `t`. Each grabbable object becomes a Rapier body at its track pose, **with its track velocity**, so a ball caught mid-air keeps its momentum when released.
-2. **Grab:** the `grab(objectId)` reducer succeeds only if nobody holds the object. The holder simulates it and streams `moveObject` at 15 Hz; others interpolate. On release, the holder keeps simulating until the body sleeps, then writes a rest pose.
-3. **Changing anything while paused** forks a branch: `forkBranch(parent, t0)`. The branch tree shows a new fork marker at `t0`.
+2. **Grab:** the `grab(objectId)` reducer succeeds only if nobody else holds or simulates the object. The holder streams `moveObject` at 15 Hz; others interpolate. On release, the holder keeps simulating until the body sleeps, saves the flight as keyframe chunks, then writes a rest pose. Catching an object someone else threw is rejected.
+3. **Editing while paused** makes a take. Grabbing on the original recording forks "First edit" at `t0`; re-grabbing an object that already rests on a take forks "Edit <id>", so recorded takes never change. Grabbing another object on a take edits that take. `forkBranch` makes an empty take by hand.
 4. **Play on a branch:** objects you touched run physics from their overridden state, and everything else follows its recorded track. The owner records the touched objects' trajectories into `branchKeyframes`, so the branch **replays identically for everyone, including people who join later.**
 5. **Switching branches** in the timeline tree is a `setBranch` reducer.
 6. **Claude "what if":** a typed prompt becomes `{objectId, impulse, t}` on a new branch.
@@ -249,7 +250,7 @@ Modules:
 |---|---|---|
 | **Vision (one person)** | GPU pod, recording the clip, the whole vision pipeline: normalize, ViPE, world frame, L0 export, objects + Claude shapes, background splat, merge | `pipeline/` steps S0–S7 and `pipeline/runpod/`; envs `world` and `vipe` |
 | **P3 · XR client** | Quest rendering, grab and physics, timeline UX | `apps/web` loader, physics, input-xr, ui |
-| **P4 · Multiplayer & phone** | SpacetimeDB module, net sync, phone controls, upload page, storage bucket, demo and Devpost | `server/spacetime`, `apps/web` net and input-touch |
+| **P4 · Multiplayer & phone** | SpacetimeDB module, net sync, phone controls, upload page, storage bucket, demo and Devpost | `server/spacetime`, `server/upload`, `apps/web` net, session and phone joystick |
 
 **How we work**
 - **Contract first.** Changes to `memory.json` go in one PR that touches both the TypeScript and Python files, and get announced in chat.

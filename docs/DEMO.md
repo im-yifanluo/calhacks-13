@@ -3,7 +3,7 @@
 ## Three-minute rehearsal
 
 - **0:00–0:25 — Capture/import:** Show a clip recorded on the Wayfarer glasses and imported through Meta AI. Explain that the web app accepts the exported recording. If storage/worker is not configured, state that this segment is the capture handoff rather than a live reconstruction.
-- **0:25–0:50 — Upload/status:** With real infrastructure ready, upload and show the status row. For a fast demo, use a previously processed scene and disclose the processing time. With only the local P4 branch, register `/mock/memory.json` and keep `?demo=1` visible; call it a geometry fixture.
+- **0:25–0:50 — Upload/status:** With real infrastructure ready, upload and show the status row. For a fast demo, use a previously processed scene and disclose the processing time. Until the pipeline produces a real scene, register `/mock/memory.json` and say it is a demo scene, not a reconstruction.
 - **0:50–1:25 — Share:** Create a room, open its link on the second device, and show two names and a moving remote head. Pause/seek on one screen and point to the matching playhead on the other.
 - **1:25–2:10 — Edit:** Pause near 1 second. Grab the object on the phone and release it. Show the automatic branch and the other client's matching movement. Wait until the simulation ends before seeking.
 - **2:10–2:40 — Replay:** Rewind and play the alternate trajectory. Switch to Original. Open a fresh tab on the branch to demonstrate that the trajectory persists for late joiners.
@@ -21,7 +21,7 @@
 | P3 scene    | Actual object assets/colliders render; headset hands/controllers work; measured frame rate is acceptable |
 | Demo assets | Only intended demo recordings and public URLs; no binary assets or credentials in Git                    |
 
-The local branch was tested with 16 automated module/upload/client/storage tests, the real SpacetimeDB 2.13 network suite, and a browser session at desktop and 390×844 viewport sizes. A real two-second synthetic MP4 also passed upload, independent database lookup, byte-for-byte retrieval, repeated-completion and browser playback checks; see [CAPTURE_TEST.md](CAPTURE_TEST.md). The native iPhone O/F app is implemented but its full SDK build and hardware test require newer Xcode and the devices. Cloud storage, GPU reconstruction and physical-device gates remain unverified. A resized browser is not evidence of a real phone test.
+Jerry's branch was tested with 16 automated module/upload/client/storage tests, the real SpacetimeDB 2.13 network suite, and a browser session at desktop and 390×844 viewport sizes. A real two-second synthetic MP4 also passed upload, independent database lookup, byte-for-byte retrieval, repeated-completion and browser playback checks; see [CAPTURE_TEST.md](CAPTURE_TEST.md). Jerry's native iPhone O/F app is not in the merged build (never compiled). Cloud storage, GPU reconstruction and physical-device gates remain unverified. A resized browser is not evidence of a real phone test.
 
 ## Devpost copy (draft; review before submitting)
 
@@ -37,7 +37,7 @@ The local branch was tested with 16 automated module/upload/client/storage tests
 
 **What we learned:** Releasing a held object must preserve simulation authority until it rests. Reconnection needs both an HTTP token exchange and replayed WebSocket subscriptions. Upload completion must stay idempotent even after processing changes a memory's status.
 
-**Current limits:** This P4 branch uses explicit debug geometry for the local interaction demo. The GPU reconstruction stages and production Quest renderer/input are other team lanes; list them as completed only after their actual device gates pass. Processing speed, visual quality and headset frame rate have not been measured here.
+**Current limits:** The interaction demo runs in Nikko's viewer over a demo scene until the pipeline's output is ready. List the GPU reconstruction and the Quest experience as completed only after their actual device gates pass. Processing speed, visual quality and headset frame rate have not been measured here.
 
 **Next:** Integrate the team's reconstruction output and XR controls, then run the capture-to-headset test with the actual Wayfarer glasses, phone and Quest.
 

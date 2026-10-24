@@ -2,59 +2,55 @@
 
 Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves over time, and you walk back into it with friends on a Quest 3S or a phone. Pause time, grab things, throw them, and branch off an alternate timeline.
 
-- **Integrating the branches? Start with [docs/INTEGRATION.md](docs/INTEGRATION.md).** Agents should read [CLAUDE.md](CLAUDE.md) first.
+- **How the pieces fit, and known issues:** [docs/INTEGRATION.md](docs/INTEGRATION.md). Agents should read [CLAUDE.md](CLAUDE.md) first.
 - **Full plan** (tracks, design, timeline, risks): [docs/PLAN.md](docs/PLAN.md)
-- **Vision pipeline runbook:** [pipeline/README.md](pipeline/README.md)
-- **P3 viewer:** [controls, verification, asset conventions, and the P4 integration API](docs/P3_VIEWER.md).
+- **Viewer:** [docs/P3_VIEWER.md](docs/P3_VIEWER.md) · **Multiplayer and upload:** [docs/P4.md](docs/P4.md) · **Upload test:** [docs/CAPTURE_TEST.md](docs/CAPTURE_TEST.md)
+- **Vision pipeline runbook:** [pipeline/README.md](pipeline/README.md) (being rewritten)
 
-## Status (Sat Oct 24, early morning)
+## Status (Sat Oct 24, morning)
 
-Most of the app is built, but on **separate branches that aren't merged yet and conflict with each other**. [docs/INTEGRATION.md](docs/INTEGRATION.md) has the merge plan.
+| Part | State |
+|---|---|
+| Viewer: splats, physics, VR controls, timeline replay (Nikko) | Merged. Checked in a desktop browser; never run on a Quest. |
+| Multiplayer: rooms, shared clock, avatars, grabbing, shared takes (Jerry + the new network adapter) | Merged. Checked live with two browser tabs against a local SpacetimeDB. |
+| Upload service and capture test page (Jerry) | Merged. Uploads to local disk or S3/R2 and registers the clip in SpacetimeDB. |
+| Vision pipeline (`pipeline/`) | Being rewritten. Nothing turns a clip into `memory.json` automatically yet, and no worker picks up uploads. |
+| Left out | Andrew's `origin/part1` (pipeline rewrite) and Jerry's iOS app (never compiled). See [docs/INTEGRATION.md](docs/INTEGRATION.md) §1. |
 
-| Part | Where | State |
-|---|---|---|
-| Vision pipeline | `main` (`pipeline/`) | Designed, with a runbook, Runpod setup scripts and file formats. Only the merge step (S7) is built, tested by hand on sample data. Steps S3–S6 aren't written. Nothing has run on a pod or real footage. |
-| Scene format (`memory.json`) | `main` (`packages/shared/`) | Latest version, with audio, room collider, people ghosts, simple-shape objects and velocity. Other branches use the older version. |
-| Viewer engine: physics, VR controls, timeline replay | `origin/nikko` | Built, 17 tests pass. Doesn't support main's new scene fields yet, and isn't connected to the server. |
-| Multiplayer server, client, upload, phone, iOS capture | `origin/stdb/jerry-p4` | Built, 16 tests. Replaces main's server module. |
-| Local CPU pipeline, JSON schemas, debug viewer | `origin/part1` | Built, 20 tests. Overlaps main's pipeline; the merge plan says which parts to keep. |
-| What `main` itself runs today | `main` | Scaffold viewer with a mock scene, and the server module with an 18-step two-player smoke test (`/smoke.html`). |
-| Not built by anyone | — | The pipeline worker (upload → pipeline → ready), the viewer↔server adapter, and viewer support for the new scene fields. |
+Known issues found during the merge, with owners: [docs/INTEGRATION.md](docs/INTEGRATION.md) §4.
 
 ---
 
 ## Who does what
 
-| Person | Owns | Folders | First goal tonight |
-|---|---|---|---|
-| **Vision (one person)** | The whole pipeline: one glasses clip in, `memory.json` out. ViPE cameras + depth + masks, world frame, room points + collider, people ghosts, grabbable objects, background splat, merge. Owns the GPU pod. | `pipeline/` (S0–S7) | Pod up and ViPE go/no-go (about 3 hours in), then L0 `memory.json` in the Quest (Checkpoint 1) |
-| **P3 · XR client** | Quest rendering, grab + physics, timeline in VR. New formats to support: `points-sequence` ghosts (three.js Points, Float16 positions), `primitive` objects (tinted sphere / box / cylinder), Rapier with sphere / box / cylinder colliders and the room collider (`background.colliderUrl`, as a trimesh), keyframe velocity `v` handed to physics on pause, `source.audioUrl` played in sync (resync past 100 ms drift), `.ply` background first, then `.spz` | `apps/web/` | Viewer on the Quest at 72 fps, then load the L0 `memory.json` |
-| **P4 · Multiplayer & phone** | SpacetimeDB module, syncing, phone controls, upload page, storage bucket, demo | `server/spacetime/`, `apps/web/` | Two devices in one room seeing each other |
-
-Everyone does **Part 1**. Then do the part for your role.
+| Person | Owns | Folders |
+|---|---|---|
+| **Vision (one person)** | The whole pipeline: one glasses clip in, `memory.json` out, plus the worker that picks up uploads. Owns the GPU pod. | `pipeline/` |
+| **P3 · XR client** | Quest rendering, grab + physics, timeline in VR. Next: people ghosts (`points-sequence`), keyframe velocity `v`, audio (`source.audioUrl`). | `apps/web/` |
+| **P4 · Multiplayer & phone** | SpacetimeDB module, network adapter, room panel, phone controls, upload, demo | `server/`, `apps/web/src/net/`, `apps/web/src/session.ts` |
 
 ---
 
 ## Part 1 · Everyone (5 minutes)
 
-You need **Node 20 or newer** and **git**.
+You need **Node 22.12 or newer** (`.nvmrc` pins 22.23.2) and **git**.
 
 ```bash
-node -v            # should print v20 or higher. If not: brew install node
+node -v            # should print v22.12 or higher. If not: brew install node (or nvm install)
 git clone https://github.com/im-yifanluo/calhacks-13.git memory-replay && cd memory-replay
 npm install
-npm run dev
+LOCAL_HTTP=1 npm run dev
 ```
 
-Open http://localhost:5173. The local demo uses a procedural splat floor, a moving ball, and a cube, with no external asset downloads. Pause, drag an object, release to throw, then play the new take. Select **Original** to return to the untouched recording. Load pipeline assets with `?memory=<encoded-manifest-url>`.
+Open http://127.0.0.1:5173. The local demo uses a procedural splat floor, a moving ball and a can, with no downloads. Pause, drag an object, release to throw, then play the new take. Select **Original** to return to the untouched recording. Load another scene with `?memory=<manifest-url>`; `?memory=/mock/memory.json` loads a demo scene whose splat comes from sparkjs.dev (needs internet).
+
+Plain `npm run dev` serves **HTTPS** with a self-signed certificate on every network interface, for opening the laptop's LAN IP from a headset or phone. `LOCAL_HTTP=1` serves plain http on 127.0.0.1 only.
 
 > If `npm install` times out on venue Wi-Fi, switch to a phone hotspot and run it again.
 
 ---
 
-## Part 2 · P4: SpacetimeDB (multiplayer server)
-
-> This section describes the server on `main`. Jerry's branch (`origin/stdb/jerry-p4`) replaces it, with port 3000, an upload service and tests; see `git show origin/stdb/jerry-p4:docs/P4.md` and [docs/INTEGRATION.md](docs/INTEGRATION.md) §2 B.
+## Part 2 · Multiplayer (local SpacetimeDB)
 
 **Install the CLI** (macOS / Linux; on Windows use WSL):
 
@@ -63,29 +59,46 @@ curl -sSf https://install.spacetimedb.com | sh
 spacetime --version          # expect 2.13.x
 ```
 
-**Run it locally.** Use two terminals:
+**Run it locally.** Use three terminals:
 
 ```bash
-npm run stdb:start           # terminal 1: server on 127.0.0.1:3055
-npm run stdb:publish:local   # terminal 2: build + upload the module
+npm run stdb:start           # terminal 1: SpacetimeDB on 127.0.0.1:3055
+npm run stdb:publish:local   # terminal 2: build + publish the module as memory-replay
+npm run upload:local         # terminal 2: upload service on 127.0.0.1:8788 (local disk storage)
+LOCAL_HTTP=1 npm run dev     # terminal 3: the app on http://127.0.0.1:5173
 ```
 
-**Check it works.** With `npm run dev` running, open http://localhost:5173/smoke.html. Two fake players join a room, pause, fork, grab, throw and leave. All 18 lines should say PASS.
+Port 3055 avoids Docker, which often holds 3000/3001. Set `STDB_PORT=<port>` to use another one; the npm scripts, the Vite proxy, `upload:local` and `test:integration` all follow it. `stdb:publish:local` uses your `spacetime login`; for a throwaway test without a login, see [docs/P4.md](docs/P4.md).
+
+**Share a room** (each browser tab is its own player):
+1. In the **ROOM** panel (top right), open **Load a finished memory**, leave the URL blank (that means the mock memory) and click **Add to library**.
+2. Under **Your room**, enter a name, pick the memory and click **Create room**. The address bar gains `?room=<code>`.
+3. Open that link in a second tab (or **Copy room link**, or type the code and **Join**).
+4. Both tabs see each other's head and share play, pause and seek. Pause, drag the ball and throw it: the other tab sees it fly, and the new take appears for both. Re-grabbing an object makes another take; the original recording never changes.
+
+Without `?room=` the page is a solo session, exactly as before. Joining a room drops takes you made solo; **Leave** returns to solo. A room whose memory differs from the loaded one reloads the page with `?memory=<url>&room=<code>`. In dev builds, `window.__memreplay` exposes the viewer state for debugging.
+
+**Check it works:**
+
+```bash
+npm test                     # vitest (module harness, upload, storage, adapter) + the viewer's node tests
+npm run typecheck
+STDB_DATABASE=memory-replay npm run test:integration   # live: real WebSockets against the local server
+npx tsx scripts/test-adapter.ts                       # live: two players + a late joiner through the viewer adapter
+```
 
 **After changing `server/spacetime/src/index.ts`:**
 
 ```bash
 npm run stdb:publish:local   # add -- --delete-data=always if you changed a table
-npm run stdb:generate        # refresh apps/web/src/module_bindings
+npm run stdb:generate        # refresh apps/web/src/module_bindings (never edit by hand)
 ```
 
-**For the demo** (optional): `spacetime login`, then publish to Maincloud with `spacetime publish -s maincloud -p server/spacetime memory-replay`. The free tier lasts about 2 hours of live use, so run locally on our own router if you can.
+**For the demo** (optional): `spacetime login`, then publish to Maincloud with `spacetime publish -s maincloud --module-path server/spacetime memory-replay`. The free tier lasts about 2 hours of live use, so run locally on our own router if you can.
 
 ---
 
-## Part 3 · P3 / P4: Quest 3S and phones
-
-> The full viewer (physics, VR controls, timeline replay) is on Nikko's branch (`origin/nikko`); see `git show origin/nikko:docs/P3_VIEWER.md`. The commands below work on both.
+## Part 3 · Quest 3S and phones
 
 **One-time Quest setup**
 
@@ -96,7 +109,7 @@ npm run stdb:generate        # refresh apps/web/src/module_bindings
 **Every session**
 
 ```bash
-npm run dev
+LOCAL_HTTP=1 npm run dev
 adb reverse tcp:5173 tcp:5173
 ```
 
@@ -109,46 +122,34 @@ In the Quest Browser, open **http://localhost:5173** and press **Enter VR**. Ove
 - **B or Y button:** cycle takes
 - **Debug the headset page:** open `chrome://inspect` in desktop Chrome
 
-**Phones and judges** need a public link:
+**Phones and judges** need a public HTTPS link:
 
 ```bash
 brew install cloudflared
-npm run tunnel               # prints https://<random>.trycloudflare.com
+npm run tunnel               # with plain `npm run dev` (HTTPS); prints https://<random>.trycloudflare.com
+# or, with LOCAL_HTTP=1 npm run dev:
+cloudflared tunnel --url http://127.0.0.1:5173
 ```
 
-The app and SpacetimeDB share that one link. The dev server forwards `/v1` to the local SpacetimeDB, so nothing else needs exposing.
+The app, SpacetimeDB (`/stdb`) and the upload service (`/api`) share that one link through the dev server's proxy, so nothing else needs exposing. On phones, a joystick walks you around, and touch-drag grabs and throws. Register library manifests from the tunnel URL, not `127.0.0.1`, or phones can't open them.
 
 ---
 
 ## Part 4 · Vision pipeline (GPU)
 
+> **Being rewritten by the pipeline owner.** The runbook below describes the current design. `pip install -e pipeline` currently fails on a packaging issue ([docs/INTEGRATION.md](docs/INTEGRATION.md) §4).
+
 > **Full runbook: [pipeline/README.md](pipeline/README.md).** Every step, the tool it uses, the exact commands, and how to set up and run everything on Runpod.
 
-**The plan.** One glasses clip in, one `memory.json` out, built by one person. ViPE runs first because everything depends on it: from the single video it gives the camera path, the lens, metric depth for every pixel and per-frame object masks. It gets a go/no-go about 3 hours in. The glasses have one camera (the second opening is the capture LED), so there is no stereo pair; depth comes from the wearer's head moving over time plus ViPE's metric depth model. Two environments: `world` (our code, ffmpeg, gsplat, open3d, Claude SDK) and `vipe` (ViPE's own). L0 (room points + ghosts + head path) comes first, then L1 (pause, grab and throw objects) by morning. **Gate at Sat 11:30 AM:** any failing step switches to its fallback. **L1 is frozen at Sat 12:00 PM (Checkpoint 2).**
-
-**Quick start on the pod** (from the repo root):
-
-```bash
-bash pipeline/runpod/setup.sh base world vipe warmup   # warmup pre-downloads ViPE's weights; one comes from Google Drive and can be rate-limited
-```
+**The plan.** One glasses clip in, one `memory.json` out, built by one person. ViPE runs first because everything depends on it: from the single video it gives the camera path, the lens, metric depth for every pixel and per-frame object masks. The glasses have one camera (the second opening is the capture LED), so there is no stereo pair; depth comes from the wearer's head moving over time plus ViPE's metric depth model. L0 (room points + ghosts + head path) comes first, then L1 (pause, grab and throw objects). **Gate at Sat 11:30 AM:** any failing step switches to its fallback. **L1 is frozen at Sat 12:00 PM (Checkpoint 2).**
 
 **Recording rules:**
 - **1080p at 30 fps, stabilization OFF.**
 - **Scripted take, under 30 s:** look at the floor for 3 s, then walk 2–3 m sideways while slowly panning, then the action. Shoot 3 takes. (Turning your head in place gives ViPE no parallax to triangulate from.)
-- **Props:** 2–3 symmetric, brightly coloured things (ball, can, bottle). Someone else moves or throws them. Symmetric means position-only tracking is enough.
+- **Props:** 2–3 symmetric, brightly coloured things (ball, can, bottle). Someone else moves or throws them.
 - **One person in frame.** The wearer turns their head slowly.
 - **Measure the wearer's eye height.** It checks ViPE's scale.
-- **Optional:** film a checkerboard on a laptop screen for 15 s. It is the fallback lens fix if the ultrawide footage comes out bent.
-- Export the clip through the Meta AI app (`.mov` on iPhone, `.mp4` on Android). Its audio plays in sync in the viewer.
-
-**On a laptop without a GPU** (editing code, testing `merge` on a work folder copied from the pod):
-
-```bash
-python3.12 -m venv .venv && source .venv/bin/activate   # needs Python >= 3.10; macOS's /usr/bin/python3 is 3.9 (brew install python@3.12)
-pip install -e pipeline          # add anthropic for Claude calls
-memreplay --help
-memreplay merge work/<id> --title "..."
-```
+- Export the clip through the Meta AI app (`.mov` on iPhone, `.mp4` on Android), then upload it from the app's upload panel or `/capture.html`.
 
 ---
 
@@ -156,32 +157,37 @@ memreplay merge work/<id> --title "..."
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Viewer at http://localhost:5173 (smoke test at `/smoke.html`) |
+| `LOCAL_HTTP=1 npm run dev` | App at http://127.0.0.1:5173 (plain http, loopback only). Without `LOCAL_HTTP`: HTTPS on all interfaces. Capture test page at `/capture.html`. |
 | `npm run build` | Production build into `apps/web/dist` |
-| `npm test` | P3 track, branch, ownership, and real Rapier regression tests |
+| `npm test` | vitest (`tests/`) + the viewer's node tests (`apps/web/tests/`) |
+| `npm run typecheck` | Type-check the module and the web app |
+| `npm run test:integration` | Live multiplayer test against a running SpacetimeDB (`STDB_DATABASE`, `STDB_WS_URL` or `STDB_PORT`) |
 | `npm run tunnel` | Public HTTPS link for phones and judges |
-| `npm run stdb:start` | Local SpacetimeDB on port 3055 |
-| `npm run stdb:publish:local` | Upload the server module to it |
+| `npm run stdb:start` | Local SpacetimeDB on port 3055 (`STDB_PORT` overrides) |
+| `npm run stdb:publish:local` | Publish the server module to it |
 | `npm run stdb:generate` | Regenerate the client bindings |
+| `npm run upload:local` | Upload service with local-disk storage on port 8788 |
 
 ---
 
 ## Repo layout
 
 ```
-apps/web/            Viewer: one web app for Quest, phones and laptops (three.js, Spark, Rapier)
-  src/main.ts        scene, timeline, VR controls
-  src/smoke.ts       two-player multiplayer test (/smoke.html)
+apps/web/            One web app for Quest, phones and laptops (three.js, Spark, Rapier)
+  src/main.ts        app shell: scene, camera rig, VR entry, controls
+  src/viewer.ts      engine: grab, throw, record and replay takes (+ timeline.ts, tracks.ts, physics.ts, loader.ts)
+  src/net/           SpacetimeDB client (index.ts) and viewer↔server adapter (adapter.ts)
+  src/session.ts     room panel: rooms, library, upload, players, avatars
   src/module_bindings/  generated from the server module; don't edit by hand
-server/spacetime/    SpacetimeDB module: rooms, players, clock, branches, grabbing
+  capture.html       upload and stored-video test page
+server/spacetime/    SpacetimeDB module: memories, rooms, players, clock, takes, grabbing
+server/upload/       upload signing (S3/R2) and local-disk upload service
 packages/shared/     memory.json format (TypeScript). Python copy: pipeline/memreplay/manifest.py
-pipeline/            Python pipeline: glasses clip → ViPE (cameras, depth, masks) → room, ghosts, objects → memory.json
-  README.md          the runbook; memreplay/handoff.py: file formats; runpod/: pod setup scripts
-docs/PLAN.md         The plan
-docs/INTEGRATION.md  How the unmerged branches fit together, and the merge plan
-CLAUDE.md            Starting point for AI agents working in this repo
+pipeline/            Python vision pipeline (being rewritten)
+tests/               vitest: module harness, upload, storage
+scripts/             live tests, splat test setup, worker status reporter
+docs/                plan, integration guide, per-area guides
 ```
-This is `main`'s layout. After integration, `apps/web/src/` follows the target layout in [docs/INTEGRATION.md](docs/INTEGRATION.md) §2 C.
 
 ---
 
@@ -196,9 +202,9 @@ This is `main`'s layout. After integration, `apps/web/src/` follows the target l
 
 ## Gotchas
 
-- **Ports 3000/3001** are often taken by Docker, which is why SpacetimeDB uses **3055**.
+- **SpacetimeDB is on port 3055**, because Docker often holds 3000/3001. `STDB_PORT` changes it everywhere.
 - **The `spacetime` CLI defaults to Maincloud.** For local work always pass `-s http://127.0.0.1:3055`; the npm scripts already do.
 - **Server module code must be deterministic.** No `Math.random()` or `Date.now()`; use `ctx.random` and `ctx.timestamp`.
 - **Names differ by side:** snake_case on the wire and in SQL (`create_room`), camelCase in TypeScript (`conn.reducers.createRoom({...})`).
-- **Object modes** in `objectState`: `held` (in a hand), `thrown` (the thrower's device still simulates it, and anyone can catch it), `rest`.
-- **Grabbing on the original recording automatically starts a new branch.** The original is never edited.
+- **Object modes** in `objectState`: `held` (in a hand), `physics` (thrown; the thrower's device simulates it, and nobody else can grab it until it rests), `rest`.
+- **Takes:** grabbing on the original recording starts a new take; re-grabbing an object that already rests on a take starts another. The original is never edited.
