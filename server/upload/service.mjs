@@ -28,8 +28,13 @@ export function readTicket(value, secret) {
     throw new Error("Upload receipt expired; request a new upload");
   return payload;
 }
+/**
+ * Validates a presign request. `pipeline: false` marks a test upload (capture simulation,
+ * test-video): its memory row is assigned to the uploader instead of the pipeline worker,
+ * and the worker only takes `uploaded` rows assigned to its own identity.
+ */
 export function metadata(body, owner, base) {
-  const { name, type, size, title, durationSec } = body;
+  const { name, type, size, title, durationSec, pipeline = true } = body;
   if (typeof name !== "string" || !/^.+\.(mp4|mov|webm)$/i.test(name))
     throw new Error("Select an MP4, MOV or WebM");
   if (!["video/mp4", "video/quicktime", "video/webm"].includes(type))
@@ -40,6 +45,8 @@ export function metadata(body, owner, base) {
     throw new Error("Title must be 1–120 characters");
   if (!Number.isFinite(durationSec) || durationSec <= 0 || durationSec > 3600)
     throw new Error("Video duration must be 0–3600 seconds");
+  if (typeof pipeline !== "boolean")
+    throw new Error("pipeline must be true or false");
   const requestId = randomUUID();
   const extension = name.toLowerCase().split(".").pop();
   const key = `videos/${owner}/${requestId}.${extension}`;
@@ -52,9 +59,13 @@ export function metadata(body, owner, base) {
     title: title.trim(),
     durationUs: Math.round(durationSec * 1e6),
     sourceUrl: `${base.replace(/\/$/, "")}/${key}`,
+    pipeline,
     expires: Date.now() + 3600_000,
   };
 }
+/** Node system errors (ENOENT, ECONNREFUSED…) can name absolute paths on this machine. */
+const systemError = (error) =>
+  typeof error?.code === "string" && /^E[A-Z0-9_]+$/.test(error.code);
 async function json(req) {
   let text = "";
   for await (const chunk of req) {
@@ -97,7 +108,7 @@ export function makeHandler({
       res.writeHead(204);
       return res.end();
     }
-    if (req.url === "/api/health") return send(200, { status: "ok" });
+    if (route.pathname === "/api/health") return send(200, { status: "ok" });
     if (
       req.method === "POST" &&
       route.pathname === "/api/identity" &&
@@ -116,7 +127,9 @@ export function makeHandler({
     if (
       !listing &&
       (req.method !== "POST" ||
-        !["/api/uploads/presign", "/api/uploads/complete"].includes(req.url))
+        !["/api/uploads/presign", "/api/uploads/complete"].includes(
+          route.pathname,
+        ))
     )
       return send(404, { error: "Not found" });
     const auth = req.headers.authorization;
@@ -132,19 +145,30 @@ export function makeHandler({
         return send(401, { error: "Identity/token mismatch" });
       if (listing)
         return send(200, { memories: await listMemories(body.identity, auth) });
-      if (req.url.endsWith("/presign")) {
+      if (route.pathname === "/api/uploads/presign") {
         const data = metadata(body, body.identity, assetBase);
+        // A test row is assigned to its uploader; for the worker itself that is its queue.
+        if (
+          !data.pipeline &&
+          data.owner.toLowerCase() === String(pipelineIdentity).toLowerCase()
+        )
+          throw new Error(
+            "The pipeline worker's identity cannot make test uploads",
+          );
         return send(200, {
           putUrl: await sign(data),
           receipt: ticket(data, secret),
           requestId: data.requestId,
           sourceUrl: data.sourceUrl,
           headers: { "Content-Type": data.type },
+          pipeline: data.pipeline,
           expiresIn: 900,
           receiptExpiresAt: data.expires,
         });
       }
       const data = readTicket(body.receipt, secret);
+      // Storage tickets (upload:local's PUT URLs) carry a kind; only receipts complete.
+      if (data.kind) throw new Error("Invalid upload receipt");
       if (data.owner !== body.identity)
         return send(403, { error: "Receipt belongs to another identity" });
       const stored = await head(data.key);
@@ -152,7 +176,10 @@ export function makeHandler({
         throw new Error(
           "Upload is incomplete or has incorrect content type/size",
         );
-      await createMemory(data, auth, pipelineIdentity);
+      // The flag is inside the signed receipt, so a retry assigns the same identity
+      // (create_memory rejects a repeated request ID with a different one).
+      const queued = data.pipeline !== false;
+      await createMemory(data, auth, queued ? pipelineIdentity : data.owner);
       const memory = listMemories
         ? (await listMemories(data.owner, auth)).find(
             (row) => row.requestId === data.requestId,
@@ -165,11 +192,16 @@ export function makeHandler({
       return send(200, {
         requestId: data.requestId,
         status: memory?.status || "uploaded",
+        pipeline: queued,
         memory,
       });
     } catch (error) {
+      if (systemError(error)) console.error("Upload request failed:", error);
       send(400, {
-        error: error instanceof Error ? error.message : "Upload failed",
+        error:
+          error instanceof Error && !systemError(error)
+            ? error.message
+            : "Upload failed; retry",
       });
     }
   };
@@ -220,13 +252,21 @@ export function productionConfig(env = process.env) {
           ContentType: d.type,
           ContentLength: d.size,
         }),
-        { expiresIn: 900 },
+        // The presigner leaves Content-Type unsigned by default. Signed, storage refuses a
+        // PUT of any other type to this key, which is later served at a public URL.
+        { expiresIn: 900, signableHeaders: new Set(["content-type"]) },
       ),
     head: async (key) => {
-      const result = await s3.send(
-        new HeadObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
-      );
-      return { size: result.ContentLength, type: result.ContentType };
+      try {
+        const result = await s3.send(
+          new HeadObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
+        );
+        return { size: result.ContentLength, type: result.ContentType };
+      } catch (error) {
+        if (error?.$metadata?.httpStatusCode === 404)
+          throw new Error("Upload not found; PUT the video first");
+        throw error;
+      }
     },
   };
 }
@@ -256,19 +296,33 @@ export function databaseConfig(env = process.env) {
       const response = await fetch(`${url}/sql`, {
         method: "POST",
         headers: { Authorization: auth },
-        body: `SELECT id, title, source_url, status, duration_us, request_id FROM memory WHERE owner = 0x${identity}`,
+        body: `SELECT id, title, source_url, status, duration_us, request_id, pipeline_identity FROM memory WHERE owner = 0x${identity}`,
         signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) throw new Error("Database lookup failed");
       const [result] = await response.json();
+      // SQL returns an identity as ["0x<64 hex>"]; report it like the API's identities.
+      const hex = (value) =>
+        String(Array.isArray(value) ? value[0] : value)
+          .replace(/^0x/, "")
+          .toLowerCase();
       return result.rows.map(
-        ([id, title, sourceUrl, status, durationUs, requestId]) => ({
+        ([
+          id,
+          title,
+          sourceUrl,
+          status,
+          durationUs,
+          requestId,
+          pipelineIdentity,
+        ]) => ({
           id: String(id),
           title,
           sourceUrl,
           status,
           durationUs: String(durationUs),
           requestId,
+          pipelineIdentity: hex(pipelineIdentity),
         }),
       );
     },

@@ -45,7 +45,8 @@
           <p class="sim-note">
             Press O, wait 3–5 seconds, then press F. You can click the buttons
             or use your keyboard outside text fields. F automatically saves,
-            uploads and verifies the clip.
+            uploads and verifies the clip. Simulated clips are test uploads: the
+            3D pipeline never processes them.
           </p>
           <p id="sim-status" role="status">
             Ready when the database is connected.
@@ -90,9 +91,10 @@
       <details class="card import-card">
         <summary>Test a real Wayfarer video instead</summary>
         <p>
-          This browser simulation does not connect to the glasses. Record on
-          the glasses (1080p, 30 fps, stabilization off), import through Meta
-          AI, then upload the exported video here.
+          This browser simulation does not connect to the glasses. Record on the
+          glasses (1080p, 30 fps, stabilization off), import through Meta AI,
+          then upload the exported video here. Unlike the simulation, a clip
+          uploaded here is queued for the 3D pipeline.
         </p>
         <section id="upload-panel"></section>
       </details>
