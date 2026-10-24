@@ -74,6 +74,90 @@ async function json(url: string): Promise<unknown> {
   return response.json();
 }
 
+async function binary(url: string): Promise<ArrayBuffer> {
+  // A ghost file is up to tens of megabytes (15k points per frame at 10 Hz); allow for venue Wi-Fi.
+  const response = await fetch(url, { signal: AbortSignal.timeout(120_000) });
+  if (!response.ok) throw new Error(`${response.status} loading ${url}`);
+  return response.arrayBuffer();
+}
+
+type PointsVisual = Extract<DynamicObject["visual"], { kind: "points-sequence" }>;
+export interface PointsFrame { count: number; positions: Uint16Array; colors: Uint8Array }
+export interface PointsSequenceData { version: number; sampleHz: number; frames: PointsFrame[]; maxCount: number }
+
+/**
+ * Parse an MRPS points-sequence (people ghosts). The layout is owned by pipeline/memreplay/handoff.py
+ * (POINTS_SEQUENCE_LAYOUT): little-endian; "MRPS", u32 version (1), u32 frameCount, f32 sampleHz,
+ * u32 counts[frameCount]; then for each frame float16 xyz[count·3] (world meters) and uint8 rgb[count·3], the frame's
+ * block zero-padded to a multiple of 4 bytes. The frames are views into `buffer`, not copies.
+ */
+export function parsePointsSequence(buffer: ArrayBuffer): PointsSequenceData {
+  const fail = (why: string): never => { throw new Error(`points-sequence: ${why}`); };
+  if (buffer.byteLength < 16) fail("file too short for the header");
+  const view = new DataView(buffer);
+  if (String.fromCharCode(...new Uint8Array(buffer, 0, 4)) !== "MRPS") fail("missing MRPS magic");
+  const version = view.getUint32(4, true), frameCount = view.getUint32(8, true), sampleHz = view.getFloat32(12, true);
+  if (version !== 1) fail(`unsupported version ${version}`);
+  if (frameCount < 1 || !positive(sampleHz)) fail("needs at least one frame and a positive sampleHz");
+  let offset = 16 + 4 * frameCount;
+  if (offset > buffer.byteLength) fail("truncated frame counts");
+  const frames: PointsFrame[] = [];
+  let maxCount = 0;
+  for (let k = 0; k < frameCount; k++) {
+    const count = view.getUint32(16 + 4 * k, true), bytes = count * 9, padded = bytes + (-bytes & 3);
+    if (offset + padded > buffer.byteLength) fail(`frame ${k} is truncated`);
+    frames.push({ count, positions: new Uint16Array(buffer, offset, count * 3), colors: new Uint8Array(buffer, offset + count * 6, count * 3) });
+    offset += padded;
+    maxCount = Math.max(maxCount, count);
+  }
+  if (offset !== buffer.byteLength) fail(`${buffer.byteLength - offset} unexpected trailing bytes`);
+  return { version, sampleHz, frames, maxCount };
+}
+
+/** sRGB video colours (0–255) to the linear values three.js expects in vertex colours. */
+const srgbToLinear = Float32Array.from({ length: 256 }, (_, i) => new THREE.Color().setRGB(i / 255, 0, 0, THREE.SRGBColorSpace).r);
+
+/** The ghost frame shown at time t: frame k covers [k / sampleHz, (k + 1) / sampleHz) from the clip start, clamped. */
+export function pointsFrameAt(time: number, sampleHz: number, frameCount: number): number {
+  return Math.max(0, Math.min(frameCount - 1, Math.floor(time * sampleHz + 1e-6)));
+}
+
+/**
+ * A ghost as one THREE.Points sized for its largest frame. Showing another frame rewrites only that frame's part of
+ * the attributes, so GPU memory stays at one frame however long the clip is. Positions are float16 (as in the file),
+ * colours linear float. Points are in world coordinates (the object's track is identity). The file's header is
+ * authoritative; a manifest that disagrees about frameCount or sampleHz gets a warning.
+ */
+export function createPointsSequence(visual: PointsVisual, buffer: ArrayBuffer, warn: (message: string) => void = () => {}) {
+  const data = parsePointsSequence(buffer);
+  if (data.frames.length !== visual.frameCount) warn(`points-sequence: the file has ${data.frames.length} frames, the manifest says ${visual.frameCount}; using the file`);
+  if (Math.abs(data.sampleHz - visual.sampleHz) > 1e-4 * visual.sampleHz) warn(`points-sequence: the file is ${data.sampleHz} Hz, the manifest says ${visual.sampleHz} Hz; using the file`);
+  const size = Math.max(1, data.maxCount) * 3;
+  const geometry = new THREE.BufferGeometry();
+  const position = new THREE.Float16BufferAttribute(size, 3).setUsage(THREE.DynamicDrawUsage);
+  const color = new THREE.BufferAttribute(new Float32Array(size), 3).setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute("position", position); geometry.setAttribute("color", color); geometry.setDrawRange(0, 0);
+  const points = new THREE.Points(geometry, new THREE.PointsMaterial({ size: 0.015, vertexColors: true, sizeAttenuation: true }));
+  points.name = "points-sequence";
+  points.frustumCulled = false; // the bounds change every frame
+  let current = -1;
+  const update = (time: number) => {
+    const index = pointsFrameAt(time, data.sampleHz, data.frames.length);
+    if (index === current) return;
+    current = index;
+    const frame = data.frames[index], n = frame.count * 3, colors = color.array as Float32Array;
+    geometry.setDrawRange(0, frame.count);
+    if (!n) return; // an empty frame (the person is out of view) draws nothing and uploads nothing
+    (position.array as Uint16Array).set(frame.positions);
+    for (let i = 0; i < n; i++) colors[i] = srgbToLinear[frame.colors[i]];
+    for (const attribute of [position, color]) { attribute.clearUpdateRanges(); attribute.addUpdateRange(0, n); attribute.needsUpdate = true; }
+  };
+  return { points, update, frameIndex: () => current, data };
+}
+
+const isIdentity = (track: Keyframe[]) => track.every(f => f.p.every(x => Math.abs(x) < 1e-6) &&
+  Math.abs(Math.abs(f.q[3]) - Math.hypot(...f.q)) < 1e-6 && Math.abs((f.s ?? 1) - 1) < 1e-6);
+
 async function track(value: Keyframe[] | { url: string }, base: string, label: string): Promise<Keyframe[]> {
   const data = Array.isArray(value) ? value : await json(new URL(value.url, base).href);
   validateTrack(data, label);
@@ -100,7 +184,7 @@ export function meshGeometry(root: THREE.Object3D): GeometryData[] {
 export function disposeObject(root: THREE.Object3D): void {
   root.traverse(node => {
     if (node instanceof SplatMesh) node.dispose();
-    else if (node instanceof THREE.Mesh) {
+    else if (node instanceof THREE.Mesh || node instanceof THREE.Points || node instanceof THREE.Line) {
       node.geometry.dispose();
       for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
         for (const value of Object.values(material)) if (value instanceof THREE.Texture) value.dispose();
@@ -211,10 +295,13 @@ export async function loadMemory(url: string, demo = false, onWarning: (message:
         group.add(new THREE.Mesh(primitiveGeometry(definition.visual),
           new THREE.MeshStandardMaterial({ color: new THREE.Color(definition.visual.color), roughness: 0.45, metalness: 0.05 })));
       } else if (definition.visual.kind === "points-sequence") {
-        // TODO(P3): render the MRPS point frames (layout: pipeline/memreplay/handoff.py). Proxy until then.
-        group.add(new THREE.Mesh(proxyGeometry(definition.collider),
-          new THREE.MeshStandardMaterial({ color: 0x9bd7ff, transparent: true, opacity: 0.35 })));
-        warn(`${definition.id}: points-sequence ghosts are not rendered yet; showing a placeholder`);
+        // A ghost that fails to load is a warning, like a missing sequence frame: the memory stays usable without it.
+        try {
+          const ghost = createPointsSequence(definition.visual, await binary(new URL(definition.visual.url, base).href),
+            message => warn(`${definition.id}: ${message}`));
+          group.add(ghost.points); loaded.updateVisual = ghost.update;
+          if (!isIdentity(loaded.track)) warn(`${definition.id}: a points-sequence track should be identity (its points are already in world coordinates)`);
+        } catch (error) { warn(`${definition.id}: ghost not shown: ${error instanceof Error ? error.message : String(error)}`); }
       } else {
         group.add((await gltf.loadAsync(new URL(definition.visual.url, base).href)).scene);
       }

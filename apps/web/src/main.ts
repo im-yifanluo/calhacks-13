@@ -19,6 +19,7 @@ const play = element<HTMLButtonElement>("play"), scrub = element<HTMLInputElemen
 const branches = element<HTMLSelectElement>("branches"), debug = element<HTMLInputElement>("debug");
 const eyes = element<HTMLInputElement>("eyes");
 let viewer: Viewer | undefined;
+const showWarning = (message: string) => { warning.hidden = false; warning.textContent = message; };
 
 async function main(): Promise<void> {
   const params = new URLSearchParams(location.search);
@@ -71,7 +72,7 @@ async function main(): Promise<void> {
     element("reload").hidden = false;
   });
   await initPhysics();
-  const memory = await loadMemory(manifestUrl, demo, message => { warning.hidden = false; warning.textContent = message; });
+  const memory = await loadMemory(manifestUrl, demo, showWarning);
   const firstPose = memory.cameraTrack[0];
   vrSpawn = { x: firstPose.p[0], y: memory.manifest.world.floorY, z: firstPose.p[2],
     yaw: new THREE.Euler().setFromQuaternion(new THREE.Quaternion(...firstPose.q).normalize(), "YXZ").y };
@@ -89,10 +90,12 @@ async function main(): Promise<void> {
   loading.hidden = true; element<HTMLFieldSetElement>("timeline-controls").disabled = false;
   const debugLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false }));
   debugLines.frustumCulled = false; debugLines.renderOrder = 100; scene.add(debugLines);
-  const debugBoxes = memory.objects.map(object => {
-    const proxy = viewer!.pickables.find(p => p.userData.objectId === object.definition.id)!;
+  // Ghosts have no pick proxy and no collider, so no outline either.
+  const debugBoxes = memory.objects.flatMap(object => {
+    const proxy = currentViewer.pickables.find(p => p.userData.objectId === object.definition.id);
+    if (!proxy) return [];
     const lines = new THREE.LineSegments(new THREE.EdgesGeometry(proxy.geometry), new THREE.LineBasicMaterial({ color: 0xa3f3ce, depthTest: false }));
-    object.root.add(lines); lines.visible = false; return lines;
+    object.root.add(lines); lines.visible = false; return [lines];
   });
   let branchCount = 0;
   play.onclick = () => currentViewer.togglePlay();

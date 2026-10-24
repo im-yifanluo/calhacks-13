@@ -23,6 +23,8 @@ server/spacetime/target/
 .claude
 # memories copied from the pod for local viewing (big files)
 apps/web/public/memories/
+# local test manifests and assets (generated, never committed)
+apps/web/public/local/
 # Nikko's private build journal (not shared with the team)
 NIKKO_BUILD_LOG.md
 apps/web/.test-dist/
