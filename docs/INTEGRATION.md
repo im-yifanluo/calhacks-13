@@ -172,6 +172,14 @@ A 16-agent survey checked every branch before the merge. Its findings below were
 - `Multiplayer.run()` clears `net.error` on any success, so one call can wipe another's error (the adapter tracks its own errors).
 - `Multiplayer.connect()` only works in a browser (`import.meta.env`, `location`, `sessionStorage`); scripts attach a connection by hand.
 
+**Room panel and adapter (found by the final checks; minor)**
+- The status line keeps an old message (for example "Could not change the shared clock…" or "Recording this throw…") after later actions succeed.
+- Reloading the page mid-throw loses that throw and leaves an empty take, which becomes the room's active take.
+- For the 4–7 s while a throw settles and its chunks upload, other players' copy of the new take has no frames yet, so a scrub there shows the parent take. They see the ball move live, and the take matches once the chunks arrive.
+- After a server restart, reconnecting can take up to about 25 s because of the SDK's backoff.
+- A duplicated browser tab copies `sessionStorage`, so both tabs share one identity and can release each other's objects. Open a fresh tab per player.
+- Seen once in a live check and not reproduced: a grab at t = 0 in a fresh room right after a server restart released the ball below the floor, and its take recorded it falling for seconds.
+
 **Upload (Jerry)**
 - Presigned PUTs don't sign `Content-Type`, and routes match on `req.url`, so a query string breaks routing.
 - Any client can register any `sourceUrl` for the worker. The worker must only download URLs under `ASSET_BASE_URL`.
