@@ -135,7 +135,8 @@ async function main(): Promise<void> {
   const grabbable = memory.objects.filter(o => o.definition.grabbable).length;
   element("asset-info").textContent = `${formatTime(duration)} · ${grabbable} ${grabbable === 1 ? "object" : "objects"} to throw`;
   document.title = `${title} · Memory Replay`;
-  status.textContent = touch ? "Pause, then drag an object to throw it." : "Pause (Space), then drag an object to throw it.";
+  status.textContent = touch ? "Pause, then drag an object where you want it. Play shows what happens."
+    : "Pause (Space), then drag an object where you want it. Play shows what happens.";
   loading.hidden = true; element<HTMLFieldSetElement>("timeline-controls").disabled = false;
   element("time-total").textContent = formatTime(duration);
   // Lost-tracking stretches on the scrubber.
