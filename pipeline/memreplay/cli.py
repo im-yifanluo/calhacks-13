@@ -246,6 +246,8 @@ def main(argv: list[str] | None = None) -> int:
     rn.add_argument("--force", action="store_true", help="rerun finished steps too")
     rn.add_argument("--redo", nargs="*", choices=list(STAGES), help="rerun just these finished steps")
     rn.add_argument("--skip", nargs="*", choices=list(STAGES), help="leave these steps out")
+    cl = sub.add_parser("clean", help="prune splat floaters and drop false ghosts in a published memory folder")
+    cl.add_argument("dir", type=Path)
     vf = sub.add_parser("verify", help="measure the result against the video; pictures in <work>/verify")
     vf.add_argument("work", type=Path)
     pb = sub.add_parser("publish", help="copy the viewer files to a folder, or upload them (--to s3)")
@@ -256,6 +258,10 @@ def main(argv: list[str] | None = None) -> int:
     wk.add_argument("--once", action="store_true")
     args = ap.parse_args(argv)
 
+    if args.cmd == "clean":
+        from . import cleanup
+        print(json.dumps(cleanup.clean_memory_dir(args.dir), indent=2))
+        return 0
     if args.cmd == "verify":
         from . import verify
         print(json.dumps(verify.run(args.work), indent=2))

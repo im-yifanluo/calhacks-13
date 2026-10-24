@@ -300,7 +300,9 @@ def run(work: Path) -> WorldInfo:
 
     # 3. re-level: measure the floor every 0.5 s and shift each frame so the floor stays at y = 0
     def level(ds):
-        fs = [(k, y) for k, y in floor_samples(v, inds, Cw, good, ds=ds) if abs(y) < 0.3]   # tables/seats are >= 0.4 m
+        # (an extra |y| < 0.3 m gate looked safe but dropped real floor samples on long, drifting walks; the
+        # camera-height test below already rejects seats and tables)
+        fs = floor_samples(v, inds, Cw, good, ds=ds)
         if len(fs) >= 3:
             # A hand-held camera stays at about the same height above the floor. A sample that would put the
             # camera > 0.2 m off its typical height saw a seat or table, not the floor (the floor was out of view).
