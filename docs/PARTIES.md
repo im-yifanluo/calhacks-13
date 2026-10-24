@@ -91,6 +91,27 @@ npm run test:video -- /absolute/path/to/clip.mp4 DURATION_SECONDS
 
 ## Phone/Quest access and boundaries
 
+### Mac leader + iPhone Safari, without Xcode
+
+For the synthetic party simulation, connect both devices to the same trusted Wi-Fi. Keep the existing SpacetimeDB server running, then start a separate LAN-facing web/upload pair from the repository root:
+
+```bash
+VITE_PORT=5180 UPLOAD_PORT=8790 npm run party:lan
+```
+
+The launcher prints this Mac's private network address, such as `http://10.0.25.4:5180`. Open **that exact address on both devices**. It selects `memory-replay-party` by default and proxies the database through the web port. If the Mac has multiple network interfaces, set `PUBLIC_ORIGIN=http://YOUR-WIFI-IP:5180` explicitly. The address can change when you change Wi-Fi networks.
+
+1. On the Mac, enter `Mac leader`, select **Synthetic demo · ready to play**, and press **Create party**. Keep this tab open.
+2. Send the displayed invite link to the iPhone, or open the same base address in Safari and enter the seven-character party code. Enter a different name such as `iPhone guest`. Do not create a separate party on the phone.
+3. Both participant names must appear in both party lists. Collapse the **PARTY** panel on the phone to see the scene. Drag to look around; the **WALK** pad moves through it.
+4. On the Mac, return to the start, play, pause and scrub to another time. The iPhone follows the shared time and take, while its playback controls stay disabled. While paused, either participant can drag and throw an object.
+
+Leave the launcher running and the Mac awake during the test. This local HTTP mode supports guest parties and 3D viewing; Google sign-in, browser camera access, stored-file hash verification and immersive WebXR require trusted HTTPS. The **WEBXR NEEDS HTTPS** label concerns headset VR, not the phone's 3D viewer. HTTP party registration uses cryptographic random request IDs even when the browser does not provide `crypto.randomUUID`.
+
+If Safari cannot open the address, first confirm both devices are on the same Wi-Fi and the Mac firewall allows Node's incoming connection. Some venue/guest networks isolate devices. A personal hotspot or a trusted HTTPS deployment can provide a shared route instead. Existing recordings whose URLs use `127.0.0.1` remain Mac-only; create the synthetic party from the LAN address for this test.
+
+### HTTPS for capture, Google, and headsets
+
 `127.0.0.1` on a physical phone points to that phone. Use a reachable HTTPS app origin and set `PUBLIC_ORIGIN` to that same origin before uploading or creating scenes. For a trusted LAN setup, `PARTY_HTTPS=1 PUBLIC_ORIGIN=https://YOUR-MAC.local:5173 npm run party:dev` exposes Vite with its existing development certificate; devices must trust that certificate. A trusted HTTPS reverse proxy is preferable for a shared demo. See [CAPTURE_TEST.md](CAPTURE_TEST.md) for native phone networking and [P3_VIEWER.md](P3_VIEWER.md) for headset controls. Google also needs that origin registered. This change was checked with two desktop browser tabs plus iPhone Simulator Safari in the same party. The native Party tab was built, installed and used to open the viewer. Physical iPhone/Quest/Wayfarer testing remains separate.
 
 Parties are public demo spaces. Codes/links help people join; they are **not private access controls**. The existing public memory/presence tables remain public to database subscribers. There is no private library, room password, moderation or retention policy in this implementation. Legacy `createRoom` callers retain collaborative controls; the new app uses `createParty`, whose leader policy is enforced server-side.

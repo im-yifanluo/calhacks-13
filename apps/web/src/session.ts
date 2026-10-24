@@ -23,6 +23,14 @@ const POSE_REFRESH_MS = 1000;
 /** How long an informational message stays up (ms). */
 export const NOTICE_MS = 6000;
 
+/** LAN HTTP pages have getRandomValues, but not the secure-context-only randomUUID API. */
+export function memoryRequestId(): string {
+  return crypto.randomUUID?.() ?? Array.from(
+    crypto.getRandomValues(new Uint8Array(16)),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 export interface NoticeOptions {
   /** What the message is about. A later success of the same kind (resolve) clears an error. */
   kind?: string;
@@ -583,7 +591,7 @@ export class Session {
     validateManifest(manifest);
     const existing = this.net.memories.find(m => m.manifestUrl === manifestUrl && m.status === "ready" && m.title === manifest.title);
     if (existing) return existing.id;
-    const requestId = crypto.randomUUID();
+    const requestId = memoryRequestId();
     await this.net.connection!.reducers.createMemory({ requestId, title: manifest.title,
       sourceUrl: "", manifestUrl, pipelineIdentity: this.net.identity!,
       durationUs: BigInt(Math.round(manifest.timeline.durationSec * 1e6)) });
@@ -804,9 +812,7 @@ export class Session {
       if (!response.ok) throw new Error(`Manifest returned ${response.status}`);
       const manifest = (await response.json()) as MemoryManifest;
       validateManifest(manifest);
-      const requestId =
-        crypto.randomUUID?.() ??
-        `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+      const requestId = memoryRequestId();
       const error = await this.net.attempt(
         () =>
           this.net.connection!.reducers.createMemory({

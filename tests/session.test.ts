@@ -8,6 +8,7 @@ import {
   handVisible,
   HIDE_NEAR_M,
   loadedManifest,
+  memoryRequestId,
   normalizeCode,
   Notice,
   NOTICE_MS,
@@ -85,6 +86,18 @@ describe("messages", () => {
 });
 
 const page = "http://127.0.0.1:5184/";
+
+test("party registration produces distinct request IDs on LAN HTTP without randomUUID", () => {
+  const getRandomValues = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
+  vi.stubGlobal("crypto", { getRandomValues });
+  try {
+    const ids = Array.from({ length: 100 }, () => memoryRequestId());
+    expect(new Set(ids).size).toBe(100);
+    expect(ids.every((id) => /^[a-f0-9]{32}$/.test(id))).toBe(true);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 describe("room URLs and manifests", () => {
   test("the loaded manifest is ?memory=, else the demo default, made absolute", () => {
