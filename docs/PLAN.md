@@ -132,7 +132,7 @@ Modules:
 | `player` | identity, roomId, name, device (quest/phone/desktop), color, head pose, hand poses, online | setPose at 10–15 Hz |
 | `timeline` | roomId, branchId, paused, speed, anchorMediaUs, anchorServerTs | play / pause / seek only |
 | `branch` | id, memoryId, parentId, forkMediaUs, name, creator | forkBranch |
-| `object_state` | (branchId, objectId), heldBy?, mode (track/physics/rest), pose, velocity, fromMediaUs | grab / move / release |
+| `object_state` | (branchId, objectId), heldBy?, mode (held/thrown/rest), pose, velocity, fromMediaUs | grab / move / release |
 | `branch_keyframe` | branchId, objectId, chunk of recorded `[t,p,q]` | owner, after its sim ends |
 
 **The shared clock costs nothing per frame.** Each client computes `t = anchorMediaUs + (now − anchorServerTs) × speed`, and the server only writes on play, pause or seek.

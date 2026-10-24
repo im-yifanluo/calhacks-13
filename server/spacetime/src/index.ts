@@ -58,7 +58,7 @@ const db = schema({
     branchId: t.u64().index("btree"),
     objectId: t.string(),
     heldBy: t.identity().optional(),
-    mode: t.string(), // physics | rest
+    mode: t.string(), // held (in a hand) | thrown (owner still simulating) | rest
     fromMediaUs: t.u64(),
     px: t.f32(), py: t.f32(), pz: t.f32(),
     qx: t.f32(), qy: t.f32(), qz: t.f32(), qw: t.f32(),
@@ -75,13 +75,15 @@ const db = schema({
 });
 export default db;
 
-function code(): string {
-  // short human-friendly join code; collisions are rare enough for a demo
-  const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s = "";
-  let n = Number(BigInt(Date.now()) % 1000000007n);
-  for (let i = 0; i < 4; i++) { s += a[n % a.length]; n = Math.floor(n / a.length) + 7919 * (i + 1); }
-  return s;
+// Modules must be deterministic: Math.random / Date.now are unavailable. Use ctx.random / ctx.timestamp.
+function newJoinCode(ctx: any): string {
+  const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
+  for (let attempt = 0; attempt < 20; attempt++) {
+    let s = "";
+    for (let i = 0; i < 4; i++) s += a[ctx.random.integerInRange(0, a.length - 1)];
+    if (!ctx.db.room.joinCode.find(s)) return s;
+  }
+  throw new Error("could not allocate a join code");
 }
 
 export const createMemory = db.reducer({ title: t.string(), manifestUrl: t.string() }, (ctx, { title, manifestUrl }) => {
@@ -96,7 +98,7 @@ export const setMemoryStatus = db.reducer({ memoryId: t.u64(), status: t.string(
   });
 
 export const createRoom = db.reducer({ memoryId: t.u64(), name: t.string(), device: t.string() }, (ctx, { memoryId, name, device }) => {
-  const room = ctx.db.room.insert({ id: 0n, memoryId, joinCode: code(), host: ctx.sender });
+  const room = ctx.db.room.insert({ id: 0n, memoryId, joinCode: newJoinCode(ctx), host: ctx.sender });
   ctx.db.timeline.insert({ roomId: room.id, branchId: 0n, paused: false, speed: 1, anchorMediaUs: 0n, anchorServerTs: ctx.timestamp });
   upsertPlayer(ctx, room.id, name, device);
 });
@@ -110,9 +112,29 @@ export const joinRoom = db.reducer({ joinCode: t.string(), name: t.string(), dev
 function upsertPlayer(ctx: any, roomId: bigint, name: string, device: string) {
   const zero = { hx: 0, hy: 1.6, hz: 0, hqx: 0, hqy: 0, hqz: 0, hqw: 1, lx: 0, ly: 0, lz: 0, rx: 0, ry: 0, rz: 0 };
   const existing = ctx.db.player.identity.find(ctx.sender);
-  const row = { identity: ctx.sender, roomId, name, device, color: Math.floor(Math.random() * 0xffffff), online: true, ...zero };
-  if (existing) ctx.db.player.identity.update({ ...existing, roomId, name, device, online: true });
-  else ctx.db.player.insert(row);
+  if (existing) {
+    // switching rooms: let go of anything held in the old room so it doesn't stay locked
+    if (existing.roomId !== roomId) dropHoldsBy(ctx, ctx.sender);
+    ctx.db.player.identity.update({ ...existing, roomId, name, device, online: true });
+  } else {
+    ctx.db.player.insert({ identity: ctx.sender, roomId, name, device, color: ctx.random.integerInRange(0, 0xffffff), online: true, ...zero });
+  }
+}
+
+/** Release every object this identity holds, in any room or branch. */
+function dropHoldsBy(ctx: any, who: any) {
+  for (const o of [...ctx.db.objectState.iter()]) {
+    if (o.heldBy && o.heldBy.isEqual(who)) ctx.db.objectState.id.update({ ...o, heldBy: undefined, mode: "rest" });
+  }
+}
+
+/** Release objects on `branchId` held by players of `roomId` (other rooms may be on the same branch). */
+function dropRoomHolds(ctx: any, branchId: bigint, roomId: bigint) {
+  for (const o of [...ctx.db.objectState.branchId.filter(branchId)]) {
+    if (!o.heldBy) continue;
+    const holder = ctx.db.player.identity.find(o.heldBy);
+    if (holder && holder.roomId === roomId) ctx.db.objectState.id.update({ ...o, heldBy: undefined, mode: "rest" });
+  }
 }
 
 export const setPose = db.reducer({
@@ -148,19 +170,41 @@ export const seek = db.reducer({ mediaUs: t.u64() }, (ctx, { mediaUs }) => {
   ctx.db.timeline.roomId.update({ ...tl, anchorMediaUs: mediaUs, anchorServerTs: ctx.timestamp });
 });
 
-/** Fork the current branch at the current (paused) playhead and switch the room to it. */
-export const forkBranch = db.reducer({ name: t.string() }, (ctx, { name }) => {
-  const tl = myTimeline(ctx);
+/**
+ * Fork the room's current branch at the current playhead, pause, and switch the room to the new branch.
+ * The child inherits the parent's what-ifs that happened at or before the fork point.
+ */
+function forkInto(ctx: any, tl: any, name: string) {
   const room = ctx.db.room.id.find(tl.roomId)!;
   const at = nowMediaUs(tl, ctx.timestamp.microsSinceUnixEpoch);
+  dropRoomHolds(ctx, tl.branchId, tl.roomId);
   const b = ctx.db.branch.insert({ id: 0n, memoryId: room.memoryId, parentId: tl.branchId, forkMediaUs: at, name, creator: ctx.sender });
-  ctx.db.timeline.roomId.update({ ...tl, branchId: b.id, paused: true, anchorMediaUs: at, anchorServerTs: ctx.timestamp });
+  if (tl.branchId !== 0n) {
+    const inherited = [...ctx.db.objectState.branchId.filter(tl.branchId)].filter((o: any) => o.fromMediaUs <= at);
+    const ids = new Set(inherited.map((o: any) => o.objectId));
+    for (const o of inherited) ctx.db.objectState.insert({ ...o, id: 0n, branchId: b.id, heldBy: undefined, mode: "rest" });
+    for (const k of [...ctx.db.branchKeyframes.branchId.filter(tl.branchId)]) {
+      if (ids.has(k.objectId)) ctx.db.branchKeyframes.insert({ ...k, id: 0n, branchId: b.id });
+    }
+  }
+  const next = { ...tl, branchId: b.id, paused: true, anchorMediaUs: at, anchorServerTs: ctx.timestamp };
+  ctx.db.timeline.roomId.update(next);
+  return next;
+}
+
+export const forkBranch = db.reducer({ name: t.string() }, (ctx, { name }) => {
+  forkInto(ctx, myTimeline(ctx), name);
 });
 
 export const setBranch = db.reducer({ branchId: t.u64() }, (ctx, { branchId }) => {
   const tl = myTimeline(ctx);
+  if (branchId === tl.branchId) return;
   const b = branchId === 0n ? null : ctx.db.branch.id.find(branchId);
-  if (branchId !== 0n && !b) throw new Error("no such branch");
+  if (branchId !== 0n) {
+    const room = ctx.db.room.id.find(tl.roomId);
+    if (!b || !room || b.memoryId !== room.memoryId) throw new Error("no such branch in this memory");
+  }
+  dropRoomHolds(ctx, tl.branchId, tl.roomId);
   ctx.db.timeline.roomId.update({ ...tl, branchId, anchorMediaUs: b ? b.forkMediaUs : 0n, anchorServerTs: ctx.timestamp });
 });
 
@@ -169,30 +213,39 @@ const poseArgs = {
   vx: t.f32(), vy: t.f32(), vz: t.f32(),
 };
 
-/** Take ownership of an object in the room's current branch. Fails if someone else holds it. */
+function findObject(ctx: any, branchId: bigint, objectId: string) {
+  return [...ctx.db.objectState.branchId.filter(branchId)].find((o: any) => o.objectId === objectId);
+}
+
+/**
+ * Take ownership of an object. Grabbing on the original recording (branch 0) forks a new branch
+ * first, so nobody can edit the original. A thrown object can be caught (taken over) by anyone.
+ */
 export const grab = db.reducer({ objectId: t.string(), ...poseArgs }, (ctx, { objectId, ...pose }) => {
-  const tl = myTimeline(ctx);
-  const existing = [...ctx.db.objectState.branchId.filter(tl.branchId)].find((o: any) => o.objectId === objectId);
-  if (existing?.heldBy && !existing.heldBy.isEqual(ctx.sender)) throw new Error("held by someone else");
+  let tl = myTimeline(ctx);
+  if (tl.branchId === 0n) tl = forkInto(ctx, tl, "what if");
+  const existing = findObject(ctx, tl.branchId, objectId);
+  if (existing?.heldBy && !existing.heldBy.isEqual(ctx.sender) && existing.mode !== "thrown") throw new Error("held by someone else");
   const fromMediaUs = nowMediaUs(tl, ctx.timestamp.microsSinceUnixEpoch);
-  if (existing) ctx.db.objectState.id.update({ ...existing, ...pose, heldBy: ctx.sender, mode: "physics", fromMediaUs });
-  else ctx.db.objectState.insert({ id: 0n, branchId: tl.branchId, objectId, heldBy: ctx.sender, mode: "physics", fromMediaUs, ...pose });
+  if (existing) ctx.db.objectState.id.update({ ...existing, ...pose, heldBy: ctx.sender, mode: "held", fromMediaUs });
+  else ctx.db.objectState.insert({ id: 0n, branchId: tl.branchId, objectId, heldBy: ctx.sender, mode: "held", fromMediaUs, ...pose });
 });
 
-/** Owner streams transforms (~15 Hz) while holding or while its throw is still simulating. */
+/** Owner streams transforms (~15 Hz) while holding, and while its throw is still simulating. */
 export const moveObject = db.reducer({ objectId: t.string(), ...poseArgs }, (ctx, { objectId, ...pose }) => {
-  const tl = myTimeline(ctx);
-  const o = [...ctx.db.objectState.branchId.filter(tl.branchId)].find((r: any) => r.objectId === objectId);
+  const o = findObject(ctx, myTimeline(ctx).branchId, objectId);
   if (!o || !o.heldBy || !o.heldBy.isEqual(ctx.sender)) throw new Error("not the owner");
   ctx.db.objectState.id.update({ ...o, ...pose });
 });
 
-/** Owner gives up the object. rest=true once the physics body sleeps. */
+/**
+ * Owner opens the hand. rest=false: it's flying and the owner keeps simulating + streaming (mode "thrown").
+ * rest=true: the body has gone to sleep; ownership ends.
+ */
 export const release = db.reducer({ objectId: t.string(), rest: t.bool(), ...poseArgs }, (ctx, { objectId, rest, ...pose }) => {
-  const tl = myTimeline(ctx);
-  const o = [...ctx.db.objectState.branchId.filter(tl.branchId)].find((r: any) => r.objectId === objectId);
+  const o = findObject(ctx, myTimeline(ctx).branchId, objectId);
   if (!o || !o.heldBy || !o.heldBy.isEqual(ctx.sender)) throw new Error("not the owner");
-  ctx.db.objectState.id.update({ ...o, ...pose, heldBy: undefined, mode: rest ? "rest" : "physics" });
+  ctx.db.objectState.id.update({ ...o, ...pose, heldBy: rest ? undefined : o.heldBy, mode: rest ? "rest" : "thrown" });
 });
 
 export const saveBranchKeyframes = db.reducer({ branchId: t.u64(), objectId: t.string(), startMediaUs: t.u64(), keyframesJson: t.string() },
@@ -207,8 +260,5 @@ export const onDisconnect = db.clientDisconnected((ctx) => {
   const p = ctx.db.player.identity.find(ctx.sender);
   if (!p) return;
   ctx.db.player.identity.update({ ...p, online: false });
-  // drop anything they were holding so others can grab it
-  for (const o of ctx.db.objectState.iter()) {
-    if (o.heldBy && o.heldBy.isEqual(ctx.sender)) ctx.db.objectState.id.update({ ...o, heldBy: undefined, mode: "rest" });
-  }
+  dropHoldsBy(ctx, ctx.sender); // so others can grab it
 });

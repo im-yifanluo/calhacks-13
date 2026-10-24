@@ -8,7 +8,6 @@ dependencies = [
   "opencv-python-headless",
   "pydantic>=2",
   "trimesh",
-  "modal",
 ]
 
 [project.scripts]

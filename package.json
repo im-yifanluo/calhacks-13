@@ -3,14 +3,20 @@
   "private": true,
   "version": "0.1.0",
   "description": "Relive memories: Meta glasses video -> 4D scene -> multiplayer WebXR on Quest 3S and phones",
-  "workspaces": ["apps/*", "packages/*", "server/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "server/*"
+  ],
   "scripts": {
     "dev": "npm run dev -w apps/web",
     "build": "npm run build -w apps/web",
-    "stdb:start": "spacetime start",
-    "stdb:publish:local": "cd server/spacetime && spacetime publish --server local memory-replay",
-    "stdb:generate": "cd server/spacetime && spacetime generate --lang typescript --out-dir ../../apps/web/src/module_bindings",
-    "tunnel": "cloudflared tunnel --url https://localhost:5173 --no-tls-verify"
+    "stdb:start": "spacetime start --listen-addr 127.0.0.1:3001",
+    "stdb:publish:local": "spacetime publish -s http://127.0.0.1:3001 -p server/spacetime memory-replay",
+    "stdb:generate": "spacetime generate --lang typescript --out-dir apps/web/src/module_bindings -p server/spacetime",
+    "tunnel": "cloudflared tunnel --url http://localhost:5173"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }

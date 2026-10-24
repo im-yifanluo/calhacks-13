@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host"
+    "preview": "vite preview --host",
+    "dev:lan": "HTTPS=1 vite --host"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",
