@@ -1,0 +1,10 @@
+{
+  "name": "@memreplay/spacetime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SpacetimeDB 2.x TypeScript module: rooms, players, shared clock, branches, grab ownership",
+  "dependencies": {
+    "spacetimedb": "^2.13.0"
+  }
+}

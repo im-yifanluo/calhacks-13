@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.DS_Store
+.env
+.env.*
+!.env.example
+# big assets live in object storage, not git
+data/
+*.ply
+*.spz
+*.splat
+*.mp4
+*.mov
+*.glb
+!apps/web/public/mock/**
+# python
+__pycache__/
+.venv/
+*.egg-info/
+# spacetime
+server/spacetime/target/

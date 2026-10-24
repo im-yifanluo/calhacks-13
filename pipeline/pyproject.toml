@@ -1,0 +1,15 @@
+[project]
+name = "memreplay"
+version = "0.1.0"
+description = "Glasses video -> layered 4D scene (background splat + dynamic objects + tracks) -> memory.json"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "opencv-python-headless",
+  "pydantic>=2",
+  "trimesh",
+  "modal",
+]
+
+[project.scripts]
+memreplay = "memreplay.cli:main"

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Memory Replay</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b0d10; color: #eee; font: 14px system-ui, sans-serif; overflow: hidden; }
+      #hud { position: fixed; left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; gap: 8px; align-items: center; }
+      #hud input[type=range] { flex: 1; }
+      button { background: #1f6feb; color: #fff; border: 0; border-radius: 8px; padding: 8px 12px; font: inherit; }
+    </style>
+  </head>
+  <body>
+    <div id="hud">
+      <button id="play">Pause</button>
+      <input id="scrub" type="range" min="0" max="1000" value="0" />
+      <span id="time">0.0s</span>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
