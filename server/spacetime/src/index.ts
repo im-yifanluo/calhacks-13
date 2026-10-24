@@ -238,9 +238,45 @@ function abandoned(ctx: Ctx, o: ObjectRow) {
       ABANDONED_AFTER_US
   );
 }
+/** True when any row passes `test` (every row by default). */
+function some<T>(rows: Iterable<T>, test: (row: T) => boolean = () => true) {
+  for (const row of rows) if (test(row)) return true;
+  return false;
+}
+/**
+ * Lets go of everything the sender holds or simulates: they left, switched rooms or dropped
+ * their last connection. A take their own grab just forked that still has nothing recorded is
+ * given up too (see `revertEmptyTake`).
+ */
 function clearOwnership(ctx: Ctx) {
+  const cleared: ObjectRow[] = [];
   for (const o of [...ctx.db.objectState.iter()])
-    if (o.simOwner?.isEqual(ctx.sender)) settle(ctx, o);
+    if (o.simOwner?.isEqual(ctx.sender)) cleared.push(settle(ctx, o));
+  for (const o of cleared) revertEmptyTake(ctx, o);
+}
+/**
+ * `o` was just taken from the sender. When the room's current take was forked by the sender's
+ * grab of `o` (creator, and the grab's time is the fork time) and holds no keyframe chunk of any
+ * object, put the room back on the parent take, paused at the fork time: a reload or leave
+ * mid-throw must not leave everyone on an empty take. The branch row stays, since clients never
+ * handle branch deletes. Nothing changes while anyone else still holds or simulates an object
+ * on that take.
+ */
+function revertEmptyTake(ctx: Ctx, o: ObjectRow) {
+  const b = ctx.db.branch.id.find(o.branchId);
+  const tl = b && ctx.db.timeline.roomId.find(b.roomId);
+  if (!b || !tl || tl.branchId !== b.id) return;
+  if (!b.creator.isEqual(ctx.sender) || b.forkMediaUs !== o.fromMediaUs) return;
+  if (some(ctx.db.branchKeyframes.branchId.filter(b.id))) return;
+  if (some(ctx.db.objectState.branchId.filter(b.id), (row) => !!row.simOwner))
+    return;
+  ctx.db.timeline.roomId.update({
+    ...tl,
+    branchId: b.parentId,
+    paused: true,
+    anchorMediaUs: b.forkMediaUs,
+    anchorServerTs: ctx.timestamp,
+  });
 }
 function enter(ctx: Ctx, roomId: bigint, name: string, device: string) {
   text(name, 40);

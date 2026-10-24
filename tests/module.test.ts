@@ -48,6 +48,7 @@ function memory(who = alice) {
   });
   return [...h.db.memory.iter()].find((m) => m.owner.isEqual(me(who)))!;
 }
+/** A new room hosted by Alice (she moves into it). */
 function room() {
   const m = memory();
   call(alice, mod.createRoom, {
@@ -55,7 +56,7 @@ function room() {
     name: "Alice",
     device: "phone",
   });
-  return [...h.db.room.iter()][0];
+  return h.db.room.id.find(h.db.player.identity.find(me(alice))!.roomId)!;
 }
 beforeEach(() => {
   h = createModuleTestHarness(db, mod, {
@@ -509,4 +510,239 @@ test("a dropped connection still resumes the room on reconnect", () => {
     roomId: r.id,
   });
   call(alice, mod.setPaused, { paused: true });
+});
+
+// A player who leaves or drops mid-grab, before any chunk is saved, must not leave the room on
+// the empty take their grab just forked.
+/** The room's clock as plain values. */
+function clock(r: { id: bigint }) {
+  const row = tl(r);
+  return {
+    branchId: row.branchId,
+    paused: row.paused,
+    anchorMediaUs: row.anchorMediaUs,
+    anchorServerUs: row.anchorServerTs.microsSinceUnixEpoch,
+  };
+}
+const now = () => h.clock.now().microsSinceUnixEpoch;
+const free = { mode: "rest", heldBy: undefined, simOwner: undefined };
+function saveCup(who: typeof alice, branchId: bigint) {
+  call(who, mod.saveBranchKeyframes, {
+    branchId,
+    objectId: "cup",
+    startMediaUs: 1_000_000n,
+    keyframesJson: JSON.stringify([{ t: 1, p: [0, 1, 0], q: [0, 0, 0, 1] }]),
+  });
+}
+/** Alice (connected) pauses her room at 1 s; Bob joins it. */
+function pausedAtOneSecond() {
+  const r = room();
+  call(bob, mod.joinRoom, {
+    joinCode: r.joinCode,
+    name: "Bob",
+    device: "phone",
+  });
+  call(alice, mod.onConnect);
+  h.clock.advance(seconds(1));
+  call(alice, mod.setPaused, { paused: true });
+  return r;
+}
+
+test("dropping mid-throw before any chunk is saved puts the room back on the parent take", () => {
+  const r = pausedAtOneSecond();
+  call(alice, mod.grab, { objectId: "ball", ...pose }); // forks "First edit" at 1 s
+  const take = tl(r).branchId;
+  call(alice, mod.grab, { objectId: "cup", ...pose }); // the other hand, same take
+  call(alice, mod.release, { objectId: "ball", rest: false, ...pose }); // thrown, nothing saved yet
+  call(bob, mod.setPaused, { paused: false }); // play is not blocked during a throw
+  h.clock.advance(seconds(1));
+  call(alice, mod.onDisconnect); // the connection dropped, or the tab was killed
+  expect(clock(r)).toEqual({
+    branchId: 0n,
+    paused: true,
+    anchorMediaUs: 1_000_000n,
+    anchorServerUs: now(),
+  });
+  // The take is kept (clients never handle branch deletes), with nothing held on it.
+  expect(h.db.branch.id.find(take)).toMatchObject({
+    parentId: 0n,
+    forkMediaUs: 1_000_000n,
+    name: "First edit",
+  });
+  expect(h.db.objectState.key.find(`${take}:ball`)).toMatchObject(free);
+  expect(h.db.objectState.key.find(`${take}:cup`)).toMatchObject(free);
+  // The room carries on from the Original: Bob's grab forks a fresh take there.
+  call(bob, mod.grab, { objectId: "ball", ...pose });
+  expect(tl(r).branchId).not.toBe(take);
+  expect(h.db.branch.id.find(tl(r).branchId)).toMatchObject({
+    parentId: 0n,
+    forkMediaUs: 1_000_000n,
+  });
+});
+
+test("an empty take forked from another take goes back to that take, not to the Original", () => {
+  const r = pausedAtOneSecond();
+  call(alice, mod.grab, { objectId: "ball", ...pose });
+  const first = tl(r).branchId;
+  call(alice, mod.release, { objectId: "ball", rest: false, ...pose });
+  save(alice, first, 1, 1.5);
+  call(alice, mod.release, { objectId: "ball", rest: true, ...pose });
+  call(alice, mod.seek, { mediaUs: 1_200_000n });
+  call(alice, mod.grab, { objectId: "ball", ...pose }); // re-edit: forks "Edit ball" at 1.2 s
+  const edit = tl(r).branchId;
+  expect(h.db.branch.id.find(edit)?.parentId).toBe(first);
+  call(alice, mod.onDisconnect);
+  expect(clock(r)).toEqual({
+    branchId: first,
+    paused: true,
+    anchorMediaUs: 1_200_000n,
+    anchorServerUs: now(),
+  });
+  expect(chunks(first)).toEqual([[1_000_000n, 1_500_000n, [1, 1.5]]]);
+});
+
+const departures: [
+  string,
+  (r: { joinCode: string; memoryId: bigint }, elsewhere: string) => void,
+][] = [
+  ["leaveRoom", () => call(alice, mod.leaveRoom)],
+  [
+    "joining another room",
+    (_r, elsewhere) =>
+      call(alice, mod.joinRoom, {
+        joinCode: elsewhere,
+        name: "Alice",
+        device: "phone",
+      }),
+  ],
+  [
+    "creating another room",
+    (r) =>
+      call(alice, mod.createRoom, {
+        memoryId: r.memoryId,
+        name: "Alice",
+        device: "phone",
+      }),
+  ],
+  [
+    // e.g. a phone killed the tab without unloading it, and the reopened page rejoins
+    "rejoining from a new connection while the old one lingers",
+    (r) => {
+      const reopened = auth("alice", 9n);
+      call(reopened, mod.onConnect);
+      call(reopened, mod.joinRoom, {
+        joinCode: r.joinCode,
+        name: "Alice",
+        device: "phone",
+      });
+      call(alice, mod.onDisconnect); // another connection is open: nothing more happens
+    },
+  ],
+  [
+    "the last of two connections closing",
+    () => {
+      const second = auth("alice", 3n);
+      call(second, mod.onConnect);
+      call(alice, mod.onDisconnect);
+      expect(h.db.player.identity.find(me(alice))?.online).toBe(true);
+      call(second, mod.onDisconnect);
+    },
+  ],
+];
+for (const [how, depart] of departures)
+  test(`${how} while holding gives up the empty take the grab forked`, () => {
+    call(bob, mod.createRoom, {
+      memoryId: memory(bob).id,
+      name: "Bob",
+      device: "quest",
+    });
+    const elsewhere = h.db.room.id.find(
+      h.db.player.identity.find(me(bob))!.roomId,
+    )!.joinCode;
+    const r = room();
+    call(alice, mod.onConnect);
+    h.clock.advance(seconds(1));
+    call(alice, mod.setPaused, { paused: true });
+    call(alice, mod.grab, { objectId: "ball", ...pose });
+    const take = tl(r).branchId;
+    depart(r, elsewhere);
+    expect(clock(r)).toEqual({
+      branchId: 0n,
+      paused: true,
+      anchorMediaUs: 1_000_000n,
+      anchorServerUs: now(),
+    });
+    expect(h.db.objectState.key.find(`${take}:ball`)).toMatchObject(free);
+  });
+
+for (const whose of ["Alice's own throw", "Bob's cup"])
+  test(`a take with any saved chunk (${whose}) stays the room's take`, () => {
+    const r = pausedAtOneSecond();
+    call(alice, mod.grab, { objectId: "ball", ...pose });
+    const take = tl(r).branchId;
+    if (whose === "Bob's cup") {
+      call(bob, mod.grab, { objectId: "cup", ...pose }); // edits Alice's take in place
+      call(bob, mod.release, { objectId: "cup", rest: false, ...pose });
+      saveCup(bob, take);
+      call(bob, mod.release, { objectId: "cup", rest: true, ...pose });
+    } else {
+      call(alice, mod.release, { objectId: "ball", rest: false, ...pose });
+      save(alice, take, 1, 1.5);
+    }
+    const before = clock(r);
+    call(alice, mod.onDisconnect);
+    expect(clock(r)).toEqual(before);
+    expect(h.db.objectState.key.find(`${take}:ball`)).toMatchObject(free);
+  });
+
+for (const thrown of [false, true])
+  test(`the take stays while another player still ${thrown ? "simulates" : "holds"} something on it`, () => {
+    const r = pausedAtOneSecond();
+    call(alice, mod.grab, { objectId: "ball", ...pose });
+    const take = tl(r).branchId;
+    call(bob, mod.grab, { objectId: "cup", ...pose });
+    if (thrown)
+      call(bob, mod.release, { objectId: "cup", rest: false, ...pose });
+    const before = clock(r);
+    call(alice, mod.onDisconnect);
+    expect(clock(r)).toEqual(before);
+    // Bob finishes his throw on the take as usual.
+    if (!thrown)
+      call(bob, mod.release, { objectId: "cup", rest: false, ...pose });
+    call(bob, mod.moveObject, { objectId: "cup", ...pose });
+    saveCup(bob, take);
+    call(bob, mod.release, { objectId: "cup", rest: true, ...pose });
+    expect(clock(r)).toEqual(before);
+  });
+
+test("a take someone else forked, or one forked before this grab, stays the room's take", () => {
+  // Bob forked the take and gave the cup back untouched; Alice only edits it.
+  const r = pausedAtOneSecond();
+  call(bob, mod.grab, { objectId: "cup", ...pose });
+  call(bob, mod.release, { objectId: "cup", rest: true, ...pose });
+  const bobs = tl(r).branchId;
+  call(alice, mod.grab, { objectId: "ball", ...pose }); // no ball row on the take: no fork
+  expect(tl(r).branchId).toBe(bobs);
+  let before = clock(r);
+  call(alice, mod.leaveRoom);
+  expect(clock(r)).toEqual(before);
+
+  // Alice forked this take at 1 s, but grabbed the ball she left with later, at 1.5 s.
+  call(alice, mod.joinRoom, {
+    joinCode: r.joinCode,
+    name: "Alice",
+    device: "phone",
+  });
+  call(alice, mod.setBranch, { branchId: 0n });
+  call(alice, mod.seek, { mediaUs: 1_000_000n });
+  call(alice, mod.grab, { objectId: "cup", ...pose });
+  const hers = tl(r).branchId;
+  expect(h.db.branch.id.find(hers)).toMatchObject({ forkMediaUs: 1_000_000n });
+  call(alice, mod.release, { objectId: "cup", rest: true, ...pose });
+  call(alice, mod.seek, { mediaUs: 1_500_000n });
+  call(alice, mod.grab, { objectId: "ball", ...pose });
+  expect(tl(r).branchId).toBe(hers);
+  before = clock(r);
+  call(alice, mod.leaveRoom);
+  expect(clock(r)).toEqual(before);
 });
