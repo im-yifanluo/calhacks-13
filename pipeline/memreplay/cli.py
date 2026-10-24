@@ -49,7 +49,7 @@ def run_vipe(work: Path) -> None:
 
 
 def run_stage(name: str, work: Path, args: argparse.Namespace | None = None) -> None:
-    work = Path(work)
+    work = Path(work).resolve()
     if name == "normalize":
         from . import normalize
         eye = getattr(args, "eye_height", None)
@@ -63,7 +63,8 @@ def run_stage(name: str, work: Path, args: argparse.Namespace | None = None) -> 
             try:
                 nouns = claude.propose_nouns(sheet)
             except Exception as e:
-                print(f"[nouns] Claude failed ({e}); using the default prompts")
+                nouns = nouns + ["ball", "bottle", "cup", "can", "box"]
+                print(f"[nouns] Claude failed ({e}); using generic prop prompts")
         else:
             nouns = nouns + ["ball", "bottle", "cup", "can", "box"]
             print("[nouns] no ANTHROPIC_API_KEY; using generic prop prompts")

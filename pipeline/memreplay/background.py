@@ -135,6 +135,7 @@ def convert(work: Path, ply: Path) -> int:
 
 
 def run(work: Path, steps_scaler: float = 0.25) -> None:
+    work = Path(work).resolve()                                # train_splat changes directory
     FramesInfo.model_validate_json((Path(work) / "input" / "frames.json").read_text())
     prepare(work)
     convert(work, train(work, steps_scaler))

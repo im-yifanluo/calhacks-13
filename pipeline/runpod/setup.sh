@@ -56,7 +56,7 @@ world() {  # everything except ViPE: our code, ffmpeg 6, gsplat (main branch), o
   clone https://github.com/nerfstudio-project/gsplat gsplat
   step gsplat pip install -e "$SRC/gsplat" --no-build-isolation
   step gsplat-examples pip install -r "$SRC/gsplat/examples/requirements.txt" --no-build-isolation
-  step geo pip install open3d pycolmap opencv-python-headless scipy OpenEXR trimesh anthropic
+  step geo pip install open3d pycolmap opencv-python-headless scipy OpenEXR trimesh anthropic boto3
   step memreplay pip install -e "$REPO/pipeline"
   step splat-transform npm install -g @playcanvas/splat-transform
   # quick health check, so a broken env shows up now instead of at S1/S3/S6

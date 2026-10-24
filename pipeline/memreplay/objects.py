@@ -83,13 +83,24 @@ def observe(work: Path, v: Vipe | None = None) -> dict:
 
 
 # --- group -------------------------------------------------------------------------------------------
+def _plausible(pa, pb, T: float, vmax: float = 12.0) -> bool:
+    """Could something get from pa to pb in T seconds? (small moves always; otherwise a projectile launched
+    under vmax m/s)."""
+    d = np.subtract(pb, pa)
+    if np.linalg.norm(d) < 0.4:
+        return True
+    T = max(T, 1e-3)
+    v0 = (d - 0.5 * G * T * T) / T
+    return bool(np.linalg.norm(v0) < vmax + 0.4 / T)
+
+
 def _segments(obs: list[dict], fps: float) -> list[list[dict]]:
     """Split one mask id's sightings wherever the position jumps further than anything could move
     (0.4 m + 4 m/s x time): ViPE's tracker sometimes hops onto a similar-looking object."""
     segs, cur = [], [obs[0]]
     for a, b in zip(obs[:-1], obs[1:]):
         dt = (b["idx"] - a["idx"]) / fps
-        if np.linalg.norm(np.subtract(b["pos"], a["pos"])) > 0.4 + 4.0 * dt:
+        if not _plausible(a["pos"], b["pos"], dt):
             segs.append(cur)
             cur = []
         cur.append(b)
@@ -127,8 +138,7 @@ def group(observations: dict, fps: float) -> list[dict]:
             last, first = o["obs"][-1], it["obs"][0]
             if not ok and last["idx"] < first["idx"]:
                 gap = (first["idx"] - last["idx"]) / fps
-                jump = float(np.linalg.norm(np.subtract(first["pos"], last["pos"])))
-                ok = gap < 1.5 and jump < 0.4 + 4.0 * gap
+                ok = gap < 1.5 and _plausible(last["pos"], first["pos"], gap)
             if ok and d < best_d:
                 best, best_d = o, d
         if best is None:
@@ -187,7 +197,11 @@ def track(samples: list[tuple[int, np.ndarray]], key_stride: int, fps: float) ->
         moved = np.linalg.norm(p1 - p0)
         v0 = (p1 - p0 - 0.5 * G * T * T) / T
         apex = p0[1] + max(0.0, v0[1]) ** 2 / (2 * 9.81)
-        if moved > 0.4 and T <= 1.2 and apex < 3.0:                # flew through the gap: projectile arc
+        j = a[max(0, len(a) - 3)]                                 # was it already moving that way before the gap?
+        v_before = (pos[i0] - pos[j]) / ((i0 - j) * dt) if i0 > j else None
+        throw = (v_before is not None and np.linalg.norm(v_before) > REST_SPEED
+                 and np.linalg.norm(v_before - v0) < max(1.5, 0.5 * np.linalg.norm(v0)))
+        if moved > 0.4 and T <= 1.2 and apex < 3.0 and throw:     # flew through the gap: projectile arc
             pos[i0 + 1:i1] = p0 + np.outer(ts, v0) + 0.5 * np.outer(ts ** 2, G)
             vel[i0 + 1:i1] = v0 + np.outer(ts, G)
             ballistic[i0 + 1:i1] = True
@@ -201,12 +215,12 @@ def track(samples: list[tuple[int, np.ndarray]], key_stride: int, fps: float) ->
         vel[:] = 0
     # at rest: freeze jitter so a paused object doesn't drift
     speed = np.linalg.norm(vel, axis=1)
-    still = speed < REST_SPEED
+    still = (speed < REST_SPEED) & known                       # gap-filled frames are guesses, not rests
     i = 0
     while i < len(K):
         if still[i]:
-            j = i
-            while j < len(K) and still[j]:
+            j = i + 1                                          # grow the rest only while it stays in place
+            while j < len(K) and still[j] and np.linalg.norm(pos[j] - np.median(pos[i:j], 0)) < 0.10:
                 j += 1
             if (j - i) * dt >= 0.5:
                 pos[i:j] = np.median(pos[i:j], 0)
@@ -298,7 +312,7 @@ class Support:
     def __call__(self, x: float, z: float) -> float:
         if self.H is None:
             return 0.0
-        i, j = int(round((x - self.x0) / self.cell)), int(round((z - self.z0) / self.cell))
+        i, j = int(np.floor((x - self.x0) / self.cell)), int(np.floor((z - self.z0) / self.cell))
         if not (0 <= i < self.H.shape[0] and 0 <= j < self.H.shape[1]):
             return 0.0
         h = float(self.H[i, j])
@@ -388,24 +402,33 @@ def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
         whole = [s for s in samples if s[2]]                    # views cut by the image edge bias a static centre
         S = np.array([s[1] for s in (whole if len(whole) >= 3 else samples)])
         centre = np.median(S, 0)
-        spread = float(np.percentile(np.linalg.norm(S - centre, axis=1), 80))
-        static = spread < max(0.2, 0.75 * max(spec.size_m))
+        dist = np.linalg.norm(S - centre, axis=1)
+        spread = float(np.percentile(dist, 80))
+        # a sustained excursion (3 of 5 sightings in a row) is real motion even if it is a small share of the clip
+        from scipy.ndimage import median_filter as _mf
+        excursion = float(_mf(dist, size=5, mode="nearest").max()) if len(dist) >= 5 else spread
+        thr = max(0.2, 0.75 * max(spec.size_m))
+        static = spread < thr and excursion < thr
         if static:
             # never moved: the scatter is depth noise and changing viewpoints, not motion
             t, P, V = np.array([samples[0][0], samples[-1][0]]) / frames.fps, np.array([centre, centre]), np.zeros((2, 3))
         else:
             t, P, V = track([(i, q) for i, q, _ in samples], frames.key_stride, frames.fps)
-        # the object exists for the whole memory: hold the first/last position outside the sighted stretch
+        # resting at the ends: the object exists for the whole memory (hold its first/last place). Moving or in the
+        # air at an end (thrown in or out of view): only show it while it was seen, rather than leave it floating.
         dur = frames.duration_sec
-        if t[0] > 0:
+        def airborne(k):
+            return (not static and (np.linalg.norm(V[k]) > REST_SPEED or
+                    (support.H is not None and P[k, 1] - half_h - support(P[k, 0], P[k, 2]) > 0.12)))
+        vis0 = float(t[0]) if airborne(0) else 0.0
+        vis1 = float(t[-1]) if airborne(-1) else float(dur)
+        if t[0] > 0 and vis0 == 0.0:
             t, P, V = np.r_[0.0, t], np.vstack([P[:1], P]), np.vstack([np.zeros((1, 3)), V])
-        if t[-1] < dur:
+        if t[-1] < dur and vis1 == float(dur):
             t, P, V = np.r_[t, dur], np.vstack([P, P[-1:]]), np.vstack([V, np.zeros((1, 3))])
         # never inside the floor or a table: lift the bottom onto the support below
-        floor = 0.0
         for k in range(len(P)):
-            if k % 5 == 0 or k == len(P) - 1:
-                floor = support(P[k, 0], P[k, 2])
+            floor = support(P[k, 0], P[k, 2])
             gap = P[k, 1] - half_h - floor
             resting = not V[k].any()
             if gap < 0 or (resting and gap < 0.12):           # inside the support, or hovering just above it at rest
@@ -417,7 +440,7 @@ def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
             id=oid, label=spec.label or g["label"],
             visual={"kind": "primitive", "shape": spec.shape, "size": spec.size_m, "color": spec.color},
             collider=collider(spec), mass=round(mass, 4), grabbable=spec.grabbable,
-            visibleFrom=0.0, visibleTo=float(dur),
+            visibleFrom=vis0, visibleTo=vis1,
             track=[Keyframe(t=round(float(tt), 4), p=tuple(np.round(p, 4)), q=(0, 0, 0, 1), v=tuple(np.round(vv, 4)))
                    for tt, p, vv in zip(t, P, V)]))
         speeds = np.linalg.norm(V, axis=1)

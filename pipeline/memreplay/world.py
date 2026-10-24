@@ -103,7 +103,9 @@ def up_prior(C: np.ndarray) -> tuple[np.ndarray, dict]:
     w, V = np.linalg.eigh(x.T @ x / len(x))                   # ascending eigenvalues
     u = V[:, 0] * np.sign(V[:, 0] @ up_avg)
     gap = float(w[1] / max(w[0], 1e-9))
-    use_right = gap > 4.0
+    # With little yaw but some roll, the right axes move toward up and never toward forward, so the smallest
+    # eigenvector is the forward axis. Real up is never far from the (pitch-biased) average camera up.
+    use_right = gap > 4.0 and float(u @ up_avg) > np.cos(np.radians(50))
     return (u if use_right else up_avg), {"up_from": "camera right axes" if use_right else "camera up average",
                                           "right_axis_eigen_gap": gap,
                                           "avg_up_vs_right_up_deg": float(np.degrees(np.arccos(np.clip(u @ up_avg, -1, 1))))}
@@ -298,7 +300,14 @@ def run(work: Path) -> WorldInfo:
 
     # 3. re-level: measure the floor every 0.5 s and shift each frame so the floor stays at y = 0
     def level(ds):
-        fs = floor_samples(v, inds, Cw, good, ds=ds)
+        fs = [(k, y) for k, y in floor_samples(v, inds, Cw, good, ds=ds) if abs(y) < 0.3]   # tables/seats are >= 0.4 m
+        if len(fs) >= 3:
+            # A hand-held camera stays at about the same height above the floor. A sample that would put the
+            # camera > 0.2 m off its typical height saw a seat or table, not the floor (the floor was out of view).
+            h = np.array([Cw[k, 1, 3] - y for k, y in fs])
+            keep = np.abs(h - np.median(h)) < 0.2
+            diag["level_rejected_samples"] = int((~keep).sum())
+            fs = [s for s, ok in zip(fs, keep) if ok]
         if len(fs) < 3:
             return fs, np.zeros(len(inds))
         ks = np.array([k for k, _ in fs])
@@ -324,7 +333,8 @@ def run(work: Path) -> WorldInfo:
     # 4. scale: trust ViPE's metric depth unless the camera height is far from the expected height
     med_h = float(np.median(Cw[good, 1, 3])) if good.any() else float(np.median(Cw[:, 1, 3]))
     scale = 1.0
-    if med_h > 0 and abs(expected_h / med_h - 1) > 0.25:
+    lo_r, hi_r = (0.75, 1.25) if cap else (0.6, 1.7)              # without a measured height, only fix outliers
+    if med_h > 0 and not (lo_r <= expected_h / med_h <= hi_r):
         scale = expected_h / med_h
         print(f"[world] camera height {med_h:.2f} m vs expected {expected_h:.2f} m: rescaling by {scale:.3f}")
     S = np.diag([scale, scale, scale, 1.0])

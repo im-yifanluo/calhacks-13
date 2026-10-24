@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import time
 import traceback
@@ -106,24 +107,28 @@ def process(job: dict, root: Path) -> str:
     from .cli import STAGES, merge, run_stage
 
     mid = int(job["id"])
-    work = root / f"memory-{mid}"
+    rid = re.sub(r"[^A-Za-z0-9_-]", "", str(job.get("requestId") or job.get("request_id") or ""))[:36]
+    key = f"{mid}-{rid}" if rid else str(mid)                   # ids restart after a database reset
+    work = root / f"memory-{key}"
     work.mkdir(parents=True, exist_ok=True)
     progress = 0.1
     set_status(mid, "processing", progress)
     src = job.get("sourceUrl") or job.get("source_url")
-    if not (work / "clip.mov").exists():
+    seen = (work / "source.txt").read_text().strip() if (work / "source.txt").exists() else None
+    if seen != src or not (work / "clip.mov").exists():          # new clip (or a different one under this key)
         urllib.request.urlretrieve(src, work / "clip.mov")
+        (work / "source.txt").write_text(src)
     for name in STAGES:
         run_stage(name, work)
         progress = max(progress, PROGRESS[name])
         set_status(mid, "processing", progress)
     merge(work, job.get("title") or f"Memory {mid}", str(mid), "uploaded-clip")
     if os.environ.get("S3_BUCKET"):
-        url = publish_s3(work, f"memories/{mid}")
+        url = publish_s3(work, f"memories/{key}")
     else:
-        dest = Path(os.environ["MEMREPLAY_PUBLISH_DIR"]) / str(mid)
+        dest = Path(os.environ["MEMREPLAY_PUBLISH_DIR"]) / key
         publish_dir(work, dest)
-        url = f"{os.environ['MEMREPLAY_PUBLIC_BASE_URL'].rstrip('/')}/{mid}/memory.json"
+        url = f"{os.environ['MEMREPLAY_PUBLIC_BASE_URL'].rstrip('/')}/{key}/memory.json"
     set_status(mid, "ready", 1.0, manifest_url=url)
     return url
 
@@ -131,13 +136,20 @@ def process(job: dict, root: Path) -> str:
 def loop(once: bool = False, poll_s: float = 15.0) -> None:
     root = Path(os.environ.get("MEMREPLAY_WORK") or os.environ.get("WORK") or "work")
     print(f"[worker] polling {os.environ['STDB_HTTP_URL']} / {os.environ['STDB_DATABASE']} every {poll_s:.0f} s")
+    if os.environ.get("S3_BUCKET"):
+        import boto3  # noqa: F401  fail now, not after a full GPU run
     while True:
-        for job in pending_jobs():
+        try:
+            jobs = pending_jobs()
+        except Exception as e:                                   # SpacetimeDB briefly unreachable: try again
+            print(f"[worker] poll failed: {e}")
+            jobs = []
+        for job in jobs:
             mid = int(job["id"])
             print(f"[worker] memory {mid}: {job.get('title')}")
             try:
                 print(f"[worker] memory {mid} ready: {process(job, root)}")
-            except Exception as e:
+            except (Exception, SystemExit) as e:               # stages exit with SystemExit on bad input
                 traceback.print_exc()
                 try:
                     set_status(mid, "failed", 0.1, error=f"{type(e).__name__}: {e}")

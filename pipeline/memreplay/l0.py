@@ -61,10 +61,15 @@ def room_points(work: Path, v: Vipe, wp: WorldPoses, frames: FramesInfo, vox: fl
         k = _keys(pw, vox)
         kk, s_xyz, s_rgb, c = _voxel_reduce(k, pw, rgb, np.ones(len(k), np.int64))
         batch.append((kk, s_xyz / c[:, None], s_rgb / c[:, None], np.ones(len(kk), np.int64)))  # one vote per frame
-        if batch and (len(batch) >= 40 or n == len(ids) - 1):
+        if len(batch) >= 40:
             parts = ([acc] if acc is not None else []) + batch
             acc = _voxel_reduce(*(np.concatenate([b[i] for b in parts]) for i in range(4)))
             batch = []
+    if batch:                                                  # flush the last partial batch
+        parts = ([acc] if acc is not None else []) + batch
+        acc = _voxel_reduce(*(np.concatenate([b[i] for b in parts]) for i in range(4)))
+    if acc is None:
+        raise RuntimeError("l0: no usable frames for room points (all bad poses or empty depth)")
     keys, s_xyz, s_rgb, cnt = acc
     # s_xyz/s_rgb are sums of per-frame means (one vote per frame), so divide by the frame count
     keep = cnt >= 2
@@ -128,9 +133,10 @@ def heightfield(xyz: np.ndarray, lo: np.ndarray, hi: np.ndarray, cell: float = 0
     tc = np.bincount(flat[tall], minlength=nx * nz)
     span = np.zeros(nx * nz, np.float32)
     np.maximum.at(span, flat[tall], xyz[tall, 1])
-    H[(tc >= 6) & (span > 1.6)] = 2.2
-    H = H.reshape(nx, nz)
-    H = cv2.medianBlur(H, 3)                                    # remove single-cell spikes
+    walls = ((tc >= 6) & (span > 1.6)).reshape(nx, nz)
+    H = cv2.medianBlur(H.reshape(nx, nz), 3)                    # de-speckle the floor/table layer only
+    nb = cv2.filter2D(walls.astype(np.float32), -1, np.ones((3, 3), np.float32), borderType=cv2.BORDER_CONSTANT) - walls
+    H[walls & (nb >= 1)] = 2.2                                  # wall columns with at least one wall neighbour
     return H, (x0, z0, cell)
 
 
@@ -140,7 +146,7 @@ def heightfield_mesh(H: np.ndarray, origin: tuple[float, float, float]):
     x0, z0, cell = origin
     nx, nz = H.shape
     gx, gz = np.meshgrid(np.arange(nx), np.arange(nz), indexing="ij")
-    verts = np.stack([x0 + gx * cell, H, z0 + gz * cell], -1).reshape(-1, 3)
+    verts = np.stack([x0 + (gx + 0.5) * cell, H, z0 + (gz + 0.5) * cell], -1).reshape(-1, 3)   # cell centres
     a = (gx[:-1, :-1] * nz + gz[:-1, :-1]).reshape(-1)
     b, c, d = a + nz, a + 1, a + nz + 1
     faces = np.concatenate([np.stack([a, c, b], 1), np.stack([b, c, d], 1)])   # counter-clockwise seen from +Y

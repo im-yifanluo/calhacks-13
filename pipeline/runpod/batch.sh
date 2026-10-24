@@ -52,6 +52,7 @@ queue2() {
 }
 
 echo "$(stamp) batch: ${DIRS[*]}"
+for w in "${DIRS[@]}"; do rm -f "$w/vipe.failed"; done        # a failure only counts for this run
 queue1 & q1=$!
 queue2 & q2=$!
 wait $q1 $q2
