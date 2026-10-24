@@ -38,27 +38,38 @@
       <div class="help"><span>Drag to orbit · scroll to zoom · <kbd>Space</kbd> to pause · drag a paused object to throw</span><details><summary>Quest controls</summary><p>Enter VR, point at the floating panel and trigger to pause. Squeeze or pinch an object, move your hand, then release. Left stick moves; right stick snap-turns. A/X toggles playback; B/Y cycles takes. Hand tracking also needs browser/device permission.</p></details></div>
       <button id="reload" hidden>Reload viewer</button>
     </section>
-    <section id="room-panel" aria-label="Shared room">
+    <section id="room-panel" aria-label="Party">
       <div class="room-head">
-        <button id="room-toggle" aria-expanded="true" aria-controls="room-body"><span class="room-eyebrow">ROOM</span><span id="room-summary">Solo</span></button>
+        <button id="room-toggle" aria-expanded="true" aria-controls="room-body"><span class="room-eyebrow">PARTY</span><span id="room-summary">Solo</span></button>
         <span id="room-connection" role="status">Connecting…</span>
       </div>
       <div id="room-body">
+        <section id="auth-bar" aria-label="Account">
+          <div class="account-row"><span id="auth-status" role="status">Guest · ready to join</span><button id="auth-signout" hidden>Sign out</button></div>
+          <div id="google-signin" aria-label="Sign in with Google">Loading Google sign-in…</div>
+          <p id="auth-note"></p>
+        </section>
         <details open>
-          <summary>Your room</summary>
+          <summary>Play together</summary>
           <label>Your name<input id="player-name" maxlength="40" autocomplete="nickname" /></label>
-          <label>Memories<select id="room-memories" aria-label="Memory library"></select></label>
-          <div class="row"><button id="room-create" class="primary" disabled>Create room</button><button id="upload-toggle" aria-expanded="false" aria-controls="upload-panel">Upload</button></div>
-          <div class="row"><input id="room-code" aria-label="Room code" placeholder="ROOM CODE" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false" /><button id="room-join" class="primary" disabled>Join</button></div>
-          <strong id="room-label">Explore solo or join a room</strong>
-          <ul id="room-people" aria-label="People in this room"></ul>
-          <div class="row"><button id="room-copy-link" disabled>Copy room link</button><button id="room-leave" disabled>Leave</button></div>
+          <label>Scene or video<select id="room-memories" aria-label="Memory library"></select></label>
+          <div class="row"><button id="room-create" class="primary" disabled>Create party</button><button id="upload-toggle" aria-expanded="false" aria-controls="upload-panel">Upload</button></div>
+          <div class="row"><input id="room-code" aria-label="Party code" placeholder="PARTY CODE" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false" /><button id="room-join" class="primary" disabled>Join</button></div>
+          <div id="party-scene-actions" hidden><button id="party-attach">Use selected scene / video</button><button id="party-cancel" hidden>Cancel pending scene</button></div>
+          <strong id="room-label">Explore solo or join a party</strong>
+          <p id="party-role" role="status"></p>
+          <label id="party-speed-label" hidden>Playback speed<select id="party-speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+          <p id="party-scene-status" role="status">Synthetic demo available. Your video can be attached when a reconstruction worker is connected.</p>
+          <progress id="party-progress" max="1" value="0" hidden aria-label="Scene reconstruction progress"></progress>
+          <ul id="room-people" aria-label="People in this party"></ul>
+          <div class="row"><button id="room-copy-link" disabled>Copy invite link</button><button id="room-leave" disabled>Leave</button></div>
+          <label id="party-invite-label" hidden>Anyone with this link can join<input id="party-invite" readonly aria-label="Party invite link" /></label>
         </details>
         <details>
           <summary>Load a finished memory</summary>
-          <label>memory.json URL<input id="library-url" type="url" placeholder="Blank = mock memory" /></label>
+          <label>memory.json URL<input id="library-url" type="url" placeholder="Blank = synthetic demo" /></label>
           <button id="library-add" class="primary" disabled>Add to library</button>
-          <p>Local demo: add the mock memory, create a room, then share the code.</p>
+          <p>Finished pipeline scenes use the same memory.json contract. Add one here, then select it for your party.</p>
         </details>
         <div id="upload-panel" hidden></div>
         <p><a href="/capture.html">Capture test · upload and play video</a></p>

@@ -1,3 +1,4 @@
+import { googleCredential, credentialExpired } from "../auth";
 import { DbConnection, tables } from "../module_bindings";
 import type { Identity } from "spacetimedb";
 import type {
@@ -176,6 +177,11 @@ export class Multiplayer extends EventTarget {
   connect() {
     if (this.disposed) return;
     const key = (this.key = `memreplay-token:${import.meta.env.VITE_STDB_DATABASE || "memory-replay"}`);
+    const google = googleCredential();
+    if (google) {
+      if (credentialExpired(google)) { this.ready = false; this.status = "Google session expired — sign in again"; this.changed(); return; }
+      return this.open(key, google);
+    }
     const storage = sessionStorage;
     const stored = storage.getItem(key) || undefined;
     if (!stored || this.held?.token === stored) return this.open(key, stored);
@@ -220,12 +226,13 @@ export class Multiplayer extends EventTarget {
         this.identity = identity;
         this.token = token;
         // Lock before storing: a tab duplicated from now on copies the token and must find it taken.
-        this.hold(token);
-        sessionStorage.setItem(key, token);
+        if (!googleCredential()) { this.hold(token); sessionStorage.setItem(key, token); }
         const changed = this.changed;
         for (const table of [
           conn.db.memory,
           conn.db.room,
+          conn.db.party,
+          conn.db.profile,
           conn.db.player,
           conn.db.timeline,
           conn.db.branch,
@@ -254,6 +261,8 @@ export class Multiplayer extends EventTarget {
           .subscribe([
             tables.memory,
             tables.room,
+            tables.party,
+            tables.profile,
             tables.player,
             tables.timeline,
             tables.branch,
@@ -267,8 +276,7 @@ export class Multiplayer extends EventTarget {
         this.token = token;
         this.bestRtt = Infinity;
         this.status = "Resynchronizing…";
-        this.hold(token);
-        sessionStorage.setItem(key, token);
+        if (!googleCredential()) { this.hold(token); sessionStorage.setItem(key, token); }
         this.changed();
       })
       // The SDK passes the next attempt number only when it will retry (automatic reconnect
@@ -290,6 +298,8 @@ export class Multiplayer extends EventTarget {
           this.status = `Reconnecting… (attempt ${nextAttempt}, next in ${seconds(nextDelayMs ?? 0)} s)`;
         } else if (connected) {
           this.status = "Connection failed — reload to retry";
+        } else if (googleCredential() && storedToken && tokenRejected(error)) {
+          this.status = "Google sign-in rejected — sign in again";
         } else if (storedToken && tokenRejected(error)) {
           // The server rejects this tab's saved identity: forget it and join as a new guest.
           sessionStorage.removeItem(key);
@@ -314,6 +324,14 @@ export class Multiplayer extends EventTarget {
     this.connection = connection;
   }
   private syncClock() {
+    const credential = googleCredential();
+    if (credential && credentialExpired(credential)) {
+      this.ready = false;
+      this.status = "Google session expired — sign in again";
+      this.connection?.disconnect();
+      this.changed();
+      return;
+    }
     if (this.ready)
       void this.attempt(
         () =>
@@ -384,6 +402,16 @@ export class Multiplayer extends EventTarget {
     const p = this.self;
     return p?.online ? this.connection?.db.room.id.find(p.roomId) : undefined;
   }
+  get party() {
+    const r = this.room;
+    return r ? this.connection?.db.party.roomId.find(r.id) : undefined;
+  }
+  get isLeader() { return !!this.room?.host.isEqual(this.identity!); }
+  get canControlTime() { return !this.party || (this.ready && this.isLeader); }
+  get pendingMemory() {
+    const id = this.party?.pendingMemoryId;
+    return id ? this.connection?.db.memory.id.find(id) : undefined;
+  }
   get timeline() {
     const r = this.room;
     return r ? this.connection?.db.timeline.roomId.find(r.id) : undefined;
@@ -411,7 +439,7 @@ export class Multiplayer extends EventTarget {
   get branches() {
     const r = this.room;
     return r
-      ? [...this.connection!.db.branch.iter()].filter((b) => b.roomId === r.id)
+      ? [...this.connection!.db.branch.iter()].filter((b) => b.roomId === r.id && b.memoryId === r.memoryId)
       : [];
   }
   get objects() {

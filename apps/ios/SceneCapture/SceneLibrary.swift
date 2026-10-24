@@ -72,6 +72,11 @@ final class SceneLibrary: ObservableObject {
     @Published var proof = ""
     let directory: URL
     private var savedEndpoint = UserDefaults.standard.string(forKey: "memreplay.endpoint") ?? ""
+    var partyURL: URL? {
+        guard let url = URL(string: savedEndpoint), ["http", "https"].contains(url.scheme ?? ""),
+              url.host != nil, url.user == nil, url.password == nil else { return nil }
+        return url
+    }
     private var queueURL: URL { directory.appendingPathComponent("queue.json") }
     private var catalogURL: URL { directory.appendingPathComponent("captures.json") }
     init() {

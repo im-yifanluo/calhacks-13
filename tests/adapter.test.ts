@@ -80,6 +80,28 @@ async function settle(...players: Player[]): Promise<void> {
   expect(players.some(p => p.viewer.recording)).toBe(false);
 }
 
+test("party guests cannot change time through keyboard/XR events, but can grab after the leader pauses", async () => {
+  const room = new RoomServer(), host = room.client("Leader");
+  await openRoom(room, host);
+  await host.reducers.createParty({ memoryId: host.net.room!.memoryId, name: "Leader", device: "desktop" });
+  const guest = await joined(room, "Guest", host.net.room!.joinCode);
+  const player = attach(guest);
+  await until(() => player.viewer.timeline.playing, "initial party clock");
+  const before = room.calls(guest).length;
+  player.viewer.togglePlay();
+  await until(() => player.viewer.timeline.playing, "restore authoritative clock");
+  expect(room.calls(guest).slice(before).some(c => ["seek", "setPaused", "setBranch"].includes(c.reducer))).toBe(false);
+  expect(await player.viewer.grab("ball-1")).toBe(false);
+  await host.reducers.setPaused({ paused: true });
+  await host.reducers.seek({ mediaUs: 2_000_000n });
+  await until(() => !player.viewer.timeline.playing && Math.abs(player.viewer.timeline.time - 2) < .001, "leader pause and seek");
+  expect(await player.viewer.grab("ball-1")).toBe(true);
+  expect(guest.net.timeline!.anchorMediaUs).toBe(2_000_000n);
+  player.viewer.release();
+  await host.reducers.transferLeadership({ identity: guest.net.identity });
+  expect(guest.net.canControlTime).toBe(true);
+});
+
 test("branch ids, units and parent-first branch import", () => {
   expect(viewerBranchId(0n)).toBe("original");
   expect(viewerBranchId(12n)).toBe("12");

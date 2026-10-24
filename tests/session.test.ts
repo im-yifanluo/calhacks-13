@@ -88,7 +88,7 @@ const page = "http://127.0.0.1:5184/";
 
 describe("room URLs and manifests", () => {
   test("the loaded manifest is ?memory=, else the demo default, made absolute", () => {
-    expect(loadedManifest(page)).toBe(`${page}mock/memory.json`);
+    expect(loadedManifest(page)).toBe(`${page}demo/memory.json`);
     expect(loadedManifest(`${page}?memory=/local/a/memory.json&room=X`)).toBe(
       `${page}local/a/memory.json`,
     );

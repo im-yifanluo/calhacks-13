@@ -290,9 +290,10 @@ export class NetAdapter implements InteractionAuthority {
     const row = this.row;
     if (!this.net.ready || !row) return fail("not connected to the room");
     if (serverBranchId(request.branchId) !== row.branchId) return fail("the room switched takes, try again");
+    if (!this.net.canControlTime && !row.paused) return fail("Ask the party leader to pause before grabbing");
     if (!row.paused) { const error = await this.call(r => r.setPaused({ paused: true })); if (error) return fail(error); }
     const target = this.clampUs(request.time), at = this.mediaUs();
-    if (at !== target) {
+    if (at !== target && this.net.canControlTime) {
       // The catch case: a throw preview caught mid-flight is edited at the preview's time, not where the room paused.
       // Under 1 ms this only aligns the recording's start with the grab, so a refusal there does not matter.
       const error = await this.call(r => r.seek({ mediaUs: target }));
@@ -348,6 +349,11 @@ export class NetAdapter implements InteractionAuthority {
   }
 
   private onClock(event: ClockEvent): void {
+    if (!this.net.canControlTime) {
+      this.say("The party leader controls time. You can look around and interact while paused.", "clock", false);
+      this.later(() => this.reconcile(), 0);
+      return;
+    }
     const branchId = serverBranchId(event.branchId);
     if (branchId === undefined) {
       this.say("That take exists only on this device. Showing the room's take.", "take", false);

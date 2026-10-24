@@ -6,7 +6,9 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AttachPartyMemoryReducer from "../attach_party_memory_reducer";
 import CreateMemoryReducer from "../create_memory_reducer";
+import CreatePartyReducer from "../create_party_reducer";
 import CreateRoomReducer from "../create_room_reducer";
 import ForkBranchReducer from "../fork_branch_reducer";
 import GrabReducer from "../grab_reducer";
@@ -20,9 +22,13 @@ import SeekReducer from "../seek_reducer";
 import SetBranchReducer from "../set_branch_reducer";
 import SetMemoryStatusReducer from "../set_memory_status_reducer";
 import SetPausedReducer from "../set_paused_reducer";
+import SetPlaybackSpeedReducer from "../set_playback_speed_reducer";
 import SetPoseReducer from "../set_pose_reducer";
+import TransferLeadershipReducer from "../transfer_leadership_reducer";
 
+export type AttachPartyMemoryParams = __Infer<typeof AttachPartyMemoryReducer>;
 export type CreateMemoryParams = __Infer<typeof CreateMemoryReducer>;
+export type CreatePartyParams = __Infer<typeof CreatePartyReducer>;
 export type CreateRoomParams = __Infer<typeof CreateRoomReducer>;
 export type ForkBranchParams = __Infer<typeof ForkBranchReducer>;
 export type GrabParams = __Infer<typeof GrabReducer>;
@@ -36,5 +42,7 @@ export type SeekParams = __Infer<typeof SeekReducer>;
 export type SetBranchParams = __Infer<typeof SetBranchReducer>;
 export type SetMemoryStatusParams = __Infer<typeof SetMemoryStatusReducer>;
 export type SetPausedParams = __Infer<typeof SetPausedReducer>;
+export type SetPlaybackSpeedParams = __Infer<typeof SetPlaybackSpeedReducer>;
 export type SetPoseParams = __Infer<typeof SetPoseReducer>;
+export type TransferLeadershipParams = __Infer<typeof TransferLeadershipReducer>;
 

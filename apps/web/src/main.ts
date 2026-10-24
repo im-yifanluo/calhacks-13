@@ -9,6 +9,7 @@ import { XRInput } from "./input-xr.js";
 import { desktopInput } from "./input-desktop.js";
 import { sampleTrack } from "./tracks.js";
 import { mountAudio } from "./audio.js";
+import { mountAuth } from "./auth.js";
 import { Session } from "./session.js";
 import { PhoneJoystick, isTouchDevice } from "./phone-joystick.js";
 import "./style.css";
@@ -24,8 +25,9 @@ const showWarning = (message: string) => { warning.hidden = false; warning.textC
 
 async function main(): Promise<void> {
   const params = new URLSearchParams(location.search);
-  const manifestUrl = params.get("memory") ?? "/mock/memory.json";
-  const demo = !params.has("memory");
+  const manifestUrl = params.get("memory") ?? "/demo/memory.json";
+  const sceneUrl = new URL(manifestUrl, location.href);
+  const demo = !params.has("memory") || (sceneUrl.origin === location.origin && sceneUrl.pathname === "/demo/memory.json");
   element("mode").textContent = demo ? "LOCAL DEMO" : "MEMORY VIEWER";
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
   renderer.setPixelRatio(1); renderer.setSize(innerWidth, innerHeight);
@@ -46,6 +48,7 @@ async function main(): Promise<void> {
   scene.add(spark);
   // Shared rooms (session.ts) connect while the memory loads. Without a room the viewer stays local.
   const session = new Session({ renderer, scene, camera, manifestUrl, showStatus: message => { status.textContent = message; } });
+  mountAuth(session.net);
   addEventListener("pagehide", () => session.dispose(), { once: true });
   const joystick = new PhoneJoystick(element("joystick"), camera, controls);
   document.body.classList.toggle("touch", isTouchDevice());
@@ -85,7 +88,7 @@ async function main(): Promise<void> {
   const xr = new XRInput(renderer, rig, camera, viewer);
   desktopInput(renderer.domElement, camera, controls, viewer);
   element("title").textContent = demo ? "A moment. Another possibility." : memory.manifest.title;
-  element("subtitle").textContent = demo ? "Pause the memory. Change the throw. Replay your take." : "Explore this recording, then create an alternate take.";
+  element("subtitle").textContent = demo ? "Create a party. Invite friends. Lead the replay." : "Explore this recording, then create an alternate take.";
   element("asset-info").textContent = `${memory.objects.length} objects · ${memory.manifest.timeline.durationSec.toFixed(1)} seconds · ${demo ? "synthetic scene" : "pipeline assets"}`;
   status.textContent = "Playing the original. Pause, then drag the ball to make a new take.";
   loading.hidden = true; element<HTMLFieldSetElement>("timeline-controls").disabled = false;
@@ -150,6 +153,10 @@ async function main(): Promise<void> {
         }
       }
       branches.value = tl.activeId;
+      const canControl = session.canControlTime;
+      for (const id of ["play", "restart", "scrub", "branches", "original"])
+        element<HTMLButtonElement>(id).disabled = !canControl;
+      document.querySelectorAll<HTMLButtonElement>(".fork-marker").forEach(marker => { marker.disabled = !canControl; });
       document.body.classList.toggle("wearer-view", eyes.checked);
     }
     debugLines.visible = debug.checked && currentViewer.physics.bodies.size > 0;

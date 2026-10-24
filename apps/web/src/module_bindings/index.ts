@@ -34,7 +34,9 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AttachPartyMemoryReducer from "./attach_party_memory_reducer";
 import CreateMemoryReducer from "./create_memory_reducer";
+import CreatePartyReducer from "./create_party_reducer";
 import CreateRoomReducer from "./create_room_reducer";
 import ForkBranchReducer from "./fork_branch_reducer";
 import GrabReducer from "./grab_reducer";
@@ -48,7 +50,9 @@ import SeekReducer from "./seek_reducer";
 import SetBranchReducer from "./set_branch_reducer";
 import SetMemoryStatusReducer from "./set_memory_status_reducer";
 import SetPausedReducer from "./set_paused_reducer";
+import SetPlaybackSpeedReducer from "./set_playback_speed_reducer";
 import SetPoseReducer from "./set_pose_reducer";
+import TransferLeadershipReducer from "./transfer_leadership_reducer";
 
 // Import all procedure arg schemas
 
@@ -58,7 +62,9 @@ import BranchKeyframesRow from "./branch_keyframes_table";
 import ClockSampleRow from "./clock_sample_table";
 import MemoryRow from "./memory_table";
 import ObjectStateRow from "./object_state_table";
+import PartyRow from "./party_table";
 import PlayerRow from "./player_table";
+import ProfileRow from "./profile_table";
 import RoomRow from "./room_table";
 import TimelineRow from "./timeline_table";
 
@@ -134,6 +140,17 @@ const tablesSchema = __schema({
       { name: 'object_state_key_key', constraint: 'unique', columns: ['key'] },
     ],
   }, ObjectStateRow),
+  party: __table({
+    name: 'party',
+    indexes: [
+      { accessor: 'roomId', name: 'party_room_id_idx_btree', algorithm: 'btree', columns: [
+        'roomId',
+      ] },
+    ],
+    constraints: [
+      { name: 'party_room_id_key', constraint: 'unique', columns: ['roomId'] },
+    ],
+  }, PartyRow),
   player: __table({
     name: 'player',
     indexes: [
@@ -148,6 +165,17 @@ const tablesSchema = __schema({
       { name: 'player_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, PlayerRow),
+  profile: __table({
+    name: 'profile',
+    indexes: [
+      { accessor: 'identity', name: 'profile_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'profile_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, ProfileRow),
   room: __table({
     name: 'room',
     indexes: [
@@ -178,7 +206,9 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("attach_party_memory", AttachPartyMemoryReducer),
   __reducerSchema("create_memory", CreateMemoryReducer),
+  __reducerSchema("create_party", CreatePartyReducer),
   __reducerSchema("create_room", CreateRoomReducer),
   __reducerSchema("fork_branch", ForkBranchReducer),
   __reducerSchema("grab", GrabReducer),
@@ -192,7 +222,9 @@ const reducersSchema = __reducers(
   __reducerSchema("set_branch", SetBranchReducer),
   __reducerSchema("set_memory_status", SetMemoryStatusReducer),
   __reducerSchema("set_paused", SetPausedReducer),
+  __reducerSchema("set_playback_speed", SetPlaybackSpeedReducer),
   __reducerSchema("set_pose", SetPoseReducer),
+  __reducerSchema("transfer_leadership", TransferLeadershipReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

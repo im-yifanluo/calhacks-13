@@ -23,6 +23,7 @@ struct SceneCaptureApp: App {
             TabView {
                 CaptureView(capture: capture, library: library).tabItem { Label("Capture", systemImage: "record.circle") }
                 LibraryView(library: library).tabItem { Label("Saved videos", systemImage: "film.stack") }
+                PartyView(library: library).tabItem { Label("Party", systemImage: "person.3") }
                 SettingsView(library: library).tabItem { Label("Settings", systemImage: "gearshape") }
             }
             .tint(.mint).preferredColorScheme(.dark)
@@ -183,6 +184,41 @@ struct LibraryView: View {
                     case .failure(let error): library.message = error.localizedDescription
                     }
                 }
+        }
+    }
+}
+struct PartyView: View {
+    @ObservedObject var library: SceneLibrary
+    @State private var code = ""
+    private var invite: URL? {
+        let clean = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard clean.range(of: "^[A-Z0-9]{7}$", options: .regularExpression) != nil,
+              let origin = library.partyURL,
+              var parts = URLComponents(url: origin, resolvingAgainstBaseURL: false) else { return nil }
+        parts.queryItems = [URLQueryItem(name: "room", value: clean)]
+        return parts.url
+    }
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Enter a shared space") {
+                    Text("Create a party in your browser, or join with a friend's code. Everyone sees the same scene; the leader controls time.")
+                    if let origin = library.partyURL {
+                        Link("Open party lobby", destination: origin)
+                        TextField("7-character party code", text: $code)
+                            .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                            .accessibilityLabel("Party code")
+                        if let invite { Link("Join party", destination: invite) }
+                    } else {
+                        Text("Save your server address in Settings first.").foregroundStyle(.secondary)
+                    }
+                }
+                Section("From a recording to a scene") {
+                    Text("Finish recording with Off and wait for upload verification. In the party lobby, choose your video and create a party. The synthetic demo stays available while the video awaits reconstruction.")
+                    Text("The party opens in your browser for Google sign-in, invite links and the interactive viewer. Guest mode also works. Sign-in does not change this app's capture identity.")
+                    Text("A reconstruction worker is still required to turn video into a 3D scene.").foregroundStyle(.secondary)
+                }
+            }.navigationTitle("Party")
         }
     }
 }

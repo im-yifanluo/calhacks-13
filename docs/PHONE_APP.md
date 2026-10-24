@@ -11,6 +11,8 @@ There are two native iPhone projects, with shared recording, upload, library and
 
 The demo's `[SIMULATION]` clips presign with `pipeline: false` and verify that the returned database row belongs to the uploader's test queue. They never request reconstruction. An imported real MP4 is a normal upload, even from the demo app. Neither app implements reconstruction; uploads remain `uploaded` until a separate worker processes them.
 
+The **Party** tab opens the shared viewer using the saved server address. Create a party or enter a seven-character invite code; Google sign-in and leader-controlled playback run in the system browser. See [PARTIES.md](PARTIES.md) for setup and testing. Finish recording/upload before switching to the browser.
+
 ## Fast demo on your Mac
 
 1. Start the three services using [CAPTURE_TEST.md §1](CAPTURE_TEST.md#1-start-the-local-services): SpacetimeDB on **3055**, upload service on **8788**, and the HTTP web app on **5173**. Publish `memory-replay` once. Keep an existing database and reuse existing services. If using port 3000 instead, set `STDB_PORT=3000` for **all** service commands, publication and Vite.

@@ -1,0 +1,196 @@
+{
+  "version": 1,
+  "id": "party-demo",
+  "title": "Party demo \u00b7 synthetic scene",
+  "createdAt": "2026-10-23T19:00:00-07:00",
+  "source": {
+    "device": "synthetic-demo",
+    "durationSec": 6,
+    "fps": 30,
+    "width": 1440,
+    "height": 1920
+  },
+  "world": {
+    "up": "+y",
+    "units": "meters",
+    "floorY": 0
+  },
+  "timeline": {
+    "durationSec": 6,
+    "sampleHz": 10
+  },
+  "background": {
+    "kind": "splat",
+    "url": "",
+    "format": "spz",
+    "splatCount": 0
+  },
+  "camera": {
+    "track": [
+      {
+        "t": 0,
+        "p": [
+          0,
+          1.6,
+          2
+        ],
+        "q": [
+          0,
+          0,
+          0,
+          1
+        ]
+      },
+      {
+        "t": 6,
+        "p": [
+          0.5,
+          1.6,
+          2
+        ],
+        "q": [
+          0,
+          0,
+          0,
+          1
+        ]
+      }
+    ],
+    "fovYDeg": 70
+  },
+  "objects": [
+    {
+      "id": "ball-1",
+      "label": "ball",
+      "visual": {
+        "kind": "primitive",
+        "shape": "sphere",
+        "size": [
+          0.36,
+          0.36,
+          0.36
+        ],
+        "color": "#ffb975"
+      },
+      "collider": {
+        "kind": "sphere",
+        "radius": 0.18
+      },
+      "mass": 0.4,
+      "grabbable": true,
+      "visibleFrom": 0,
+      "visibleTo": 6,
+      "track": [
+        {
+          "t": 0,
+          "p": [
+            -1,
+            0.18,
+            -1.5
+          ],
+          "q": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "t": 2,
+          "p": [
+            0,
+            1.2,
+            -1.5
+          ],
+          "q": [
+            0,
+            0.38,
+            0,
+            0.92
+          ]
+        },
+        {
+          "t": 4,
+          "p": [
+            1,
+            0.18,
+            -1.5
+          ],
+          "q": [
+            0,
+            0.71,
+            0,
+            0.71
+          ]
+        },
+        {
+          "t": 6,
+          "p": [
+            -1,
+            0.18,
+            -1.5
+          ],
+          "q": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "can-1",
+      "label": "can",
+      "visual": {
+        "kind": "primitive",
+        "shape": "cylinder",
+        "size": [
+          0.13,
+          0.24,
+          0.13
+        ],
+        "color": "#7edbd1"
+      },
+      "collider": {
+        "kind": "cylinder",
+        "halfHeight": 0.12,
+        "radius": 0.065
+      },
+      "mass": 0.8,
+      "grabbable": true,
+      "visibleFrom": 0,
+      "visibleTo": 6,
+      "track": [
+        {
+          "t": 0,
+          "p": [
+            0.7,
+            0.12,
+            -0.7
+          ],
+          "q": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "t": 6,
+          "p": [
+            0.7,
+            0.12,
+            -0.7
+          ],
+          "q": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      ]
+    }
+  ]
+}

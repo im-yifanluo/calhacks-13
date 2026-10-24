@@ -15,6 +15,8 @@ type Op = { table: string; kind: "insert" | "update" | "delete"; row: Row; old?:
 const TABLES: Record<string, { key: string; indexes: string[] }> = {
   memory: { key: "id", indexes: ["id", "requestId"] },
   room: { key: "id", indexes: ["id", "joinCode"] },
+  party: { key: "roomId", indexes: ["roomId"] },
+  profile: { key: "identity", indexes: ["identity"] },
   player: { key: "identity", indexes: ["identity"] },
   timeline: { key: "roomId", indexes: ["roomId"] },
   branch: { key: "id", indexes: ["id"] },

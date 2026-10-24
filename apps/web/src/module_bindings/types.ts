@@ -83,6 +83,13 @@ export const ObjectState = __t.object("ObjectState", {
 });
 export type ObjectState = __Infer<typeof ObjectState>;
 
+export const Party = __t.object("Party", {
+  roomId: __t.u64(),
+  pendingMemoryId: __t.u64(),
+  sceneRevision: __t.u32(),
+});
+export type Party = __Infer<typeof Party>;
+
 export const Player = __t.object("Player", {
   identity: __t.identity(),
   roomId: __t.u64(),
@@ -105,6 +112,13 @@ export const Player = __t.object("Player", {
   rz: __t.f32(),
 });
 export type Player = __Infer<typeof Player>;
+
+export const Profile = __t.object("Profile", {
+  identity: __t.identity(),
+  provider: __t.string(),
+  displayName: __t.string(),
+});
+export type Profile = __Infer<typeof Profile>;
 
 export const Room = __t.object("Room", {
   id: __t.u64(),

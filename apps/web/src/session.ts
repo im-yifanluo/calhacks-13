@@ -12,7 +12,7 @@ import { uploadPanel } from "./upload.js";
 import type { Viewer } from "./viewer.js";
 
 /** main.ts loads this manifest when the URL has no ?memory= (its built-in demo). */
-export const DEFAULT_MANIFEST = "/mock/memory.json";
+export const DEFAULT_MANIFEST = "/demo/memory.json";
 /** sessionStorage: the room URL this tab last reloaded into to open the room's memory. */
 export const RELOAD_GUARD_KEY = "memreplay-room-reload";
 const NAME_KEY = "memreplay-name";
@@ -88,7 +88,7 @@ export class Notice {
 
 /** The status line's resting text while this page is in a room. */
 const roomHint = (code: string) =>
-  `In room ${code}. Pause to grab and throw; everyone sees the same take.`;
+  `In party ${code}. The leader controls time; everyone sees the same take.`;
 
 export type Device = "quest" | "phone" | "desktop";
 
@@ -373,8 +373,9 @@ export class Session {
   private readonly status: Notice;
   /** The last connection failure shown, to notice a new one or its end. */
   private failureSeen?: Failure;
-  private memoryKey = "";
+  private memoryKey = "initial";
   private peopleKey = "";
+  private sceneRevision?: number;
   private poseSentAt = -Infinity;
   private lastPose: number[] = [];
   private handedness: (string | undefined)[] = [];
@@ -391,6 +392,16 @@ export class Session {
     memories: $<HTMLSelectElement>("room-memories"),
     create: $<HTMLButtonElement>("room-create"),
     uploadToggle: $<HTMLButtonElement>("upload-toggle"),
+    sceneActions: $("party-scene-actions"),
+    attach: $<HTMLButtonElement>("party-attach"),
+    cancel: $<HTMLButtonElement>("party-cancel"),
+    role: $("party-role"),
+    sceneStatus: $("party-scene-status"),
+    progress: $<HTMLProgressElement>("party-progress"),
+    speedLabel: $("party-speed-label"),
+    speed: $<HTMLSelectElement>("party-speed"),
+    inviteLabel: $("party-invite-label"),
+    invite: $<HTMLInputElement>("party-invite"),
     code: $<HTMLInputElement>("room-code"),
     join: $<HTMLButtonElement>("room-join"),
     label: $("room-label"),
@@ -420,8 +431,8 @@ export class Session {
       new URL(location.href).searchParams.get("room"),
     );
     const { ui } = this;
-    ui.name.value = localStorage.getItem(NAME_KEY) || "Guest";
-    ui.name.addEventListener("change", () => {
+    ui.name.value = sessionStorage.getItem(NAME_KEY) || localStorage.getItem(NAME_KEY) || "Guest";
+    ui.name.addEventListener("input", () => {
       this.saveName();
       this.profileDirty = true;
     });
@@ -429,6 +440,10 @@ export class Session {
       this.expand(ui.panel.classList.contains("collapsed"));
     this.expand(innerWidth > 650);
     ui.create.onclick = () => void this.create();
+    ui.attach.onclick = () => void this.attachScene();
+    ui.cancel.onclick = () => void this.act("scene", "Could not cancel", () => this.net.connection!.reducers.attachPartyMemory({ memoryId: 0n }));
+    ui.speed.onchange = () => void this.act("clock", "Could not change speed", () => this.net.connection!.reducers.setPlaybackSpeed({ speed: Number(ui.speed.value) }));
+    ui.invite.onclick = () => ui.invite.select();
     ui.join.onclick = () => void this.join(ui.code.value, false);
     ui.code.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !ui.join.disabled)
@@ -464,6 +479,10 @@ export class Session {
     this.net.addEventListener("change", () => this.onChange());
     this.net.connect();
     this.render();
+  }
+
+  get canControlTime(): boolean {
+    return !this.room || (this.net.ready && this.net.canControlTime);
   }
 
   /** Called by main.ts once the viewer exists. */
@@ -511,6 +530,10 @@ export class Session {
         // Back online but no longer in the room (the server dropped us): rejoin once per connection.
         this.rejoinCycle = this.readyCycle;
         void this.rejoin();
+      } else if (net.room && net.memory && this.sceneRevision !== undefined && net.party?.sceneRevision !== this.sceneRevision) {
+        this.navigate(roomUrl(location.href, this.room, net.memory.manifestUrl), `Opening “${net.memory.title}” for everyone…`);
+      } else if (net.room && net.memory && !sameManifest(net.memory.manifestUrl, this.host.manifestUrl, location.href)) {
+        this.entered(true);
       } else if (net.room && !this.adapter) this.startAdapter();
     }
   }
@@ -529,6 +552,7 @@ export class Session {
   private saveName(): string {
     const name = this.ui.name.value.trim().slice(0, 40) || "Guest";
     try {
+      sessionStorage.setItem(NAME_KEY, name);
       localStorage.setItem(NAME_KEY, name);
     } catch {
       /* private mode: the name is still used for this page */
@@ -551,19 +575,50 @@ export class Session {
     return !error;
   }
 
+  private async demoMemory(): Promise<bigint> {
+    const manifestUrl = new URL(DEFAULT_MANIFEST, location.href).href;
+    const response = await fetch(manifestUrl);
+    if (!response.ok) throw new Error(`Demo manifest returned ${response.status}`);
+    const manifest = await response.json() as MemoryManifest;
+    validateManifest(manifest);
+    const existing = this.net.memories.find(m => m.manifestUrl === manifestUrl && m.status === "ready" && m.title === manifest.title);
+    if (existing) return existing.id;
+    const requestId = crypto.randomUUID();
+    await this.net.connection!.reducers.createMemory({ requestId, title: manifest.title,
+      sourceUrl: "", manifestUrl, pipelineIdentity: this.net.identity!,
+      durationUs: BigInt(Math.round(manifest.timeline.durationSec * 1e6)) });
+    const row = this.net.memories.find(m => m.requestId === requestId);
+    if (!row) throw new Error("Demo registration did not arrive; try again");
+    return row.id;
+  }
+
   private async create(): Promise<void> {
-    const value = this.ui.memories.value;
-    if (!value || this.busy) return;
+    if (this.busy) return;
+    const selected = this.net.memories.find(m => String(m.id) === this.ui.memories.value);
     this.busy = true;
     this.render();
-    const ok = await this.act("room", "Could not create a room", () =>
-      this.net.connection!.reducers.createRoom({
-        memoryId: BigInt(value),
-        ...this.who(),
-      }),
-    );
+    const ok = await this.act("room", "Could not create a party", async () => {
+      const memoryId = selected?.status === "ready" ? selected.id : await this.demoMemory();
+      await this.net.connection!.reducers.createParty({ memoryId, ...this.who() });
+      if (selected && selected.status !== "ready")
+        await this.net.connection!.reducers.attachPartyMemory({ memoryId: selected.id });
+    });
     this.busy = false;
     if (ok) this.entered(false);
+    this.render();
+  }
+
+  private async attachScene(): Promise<void> {
+    if (this.busy || !this.net.isLeader) return;
+    const selected = this.ui.memories.value;
+    this.busy = true;
+    this.render();
+    const ok = await this.act("scene", "Could not attach scene", async () => {
+      const memoryId = selected === "demo" ? await this.demoMemory() : BigInt(selected);
+      await this.net.connection!.reducers.attachPartyMemory({ memoryId });
+    });
+    this.busy = false;
+    if (ok) { this.panel.show("Scene selected. Everyone follows when it is ready."); this.onChange(); }
     this.render();
   }
 
@@ -647,6 +702,7 @@ export class Session {
       this.navigate(roomUrl(location.href, code), `Switching to room ${code}…`);
       return;
     }
+    this.sceneRevision = this.net.party?.sceneRevision;
     if (this.adapter) return;
     this.room = this.urlRoom = code;
     // Keep ?room= in the address bar, so a reload rejoins and the link can be shared.
@@ -720,7 +776,7 @@ export class Session {
     const url = roomUrl(location.href, this.room);
     try {
       await navigator.clipboard.writeText(url);
-      this.panel.show("Room link copied.");
+      this.panel.show("Party invite link copied.");
     } catch {
       // Shown until replaced, so it can be copied by hand.
       this.panel.show(url, { persist: true });
@@ -881,11 +937,11 @@ export class Session {
     const people = `${players.length} ${players.length === 1 ? "person" : "people"}`;
     const label = this.room
       ? room
-        ? `Room ${this.room} · ${people}`
-        : `Room ${this.room} · reconnecting…`
+        ? `Party ${this.room} · ${people}`
+        : `Party ${this.room} · reconnecting…`
       : this.urlRoom
         ? `Joining room ${this.urlRoom}…`
-        : "Explore solo or join a room";
+        : "Explore solo or join a party";
     setText(ui.label, label);
     setText(
       ui.summary,
@@ -898,12 +954,12 @@ export class Session {
     if (ui.hudLabel) {
       setText(
         ui.hudLabel,
-        this.room ? `Shared room ${this.room} · ${people}` : "Local session",
+        this.room ? `Party ${this.room} · ${people}` : "Local session",
       );
       ui.hudLabel.classList.toggle("shared", !!this.room);
     }
     const me = net.identity;
-    const peopleKey = players
+    const peopleKey = `${room?.host.toHexString()}|${net.isLeader}|` + players
       .map(
         (p) => `${p.identity.toHexString()}:${p.name}:${p.device}:${p.color}`,
       )
@@ -920,12 +976,41 @@ export class Session {
             dot,
             `${p.name} (${p.device})${me && p.identity.isEqual(me) ? " · you" : ""}`,
           );
+          if (net.party && p.identity.isEqual(room!.host)) item.append(" · leader");
+          else if (net.party && net.isLeader) {
+            const transfer = document.createElement("button");
+            transfer.textContent = "Make leader";
+            transfer.setAttribute("aria-label", `Make ${p.name} leader`);
+            transfer.onclick = () => void this.act("leader", "Could not transfer leadership", () => net.connection!.reducers.transferLeadership({ identity: p.identity }));
+            item.append(transfer);
+          }
+          const profile = net.connection?.db.profile.identity.find(p.identity);
+          if (profile?.provider === "google") item.append(" · Google");
           return item;
         }),
       );
     }
     const idle = net.ready && !this.busy && !this.navigating;
-    ui.create.disabled = !idle || !ui.memories.value;
+    ui.create.disabled = !idle;
+    ui.create.textContent = this.busy ? "Working…" : "Create party";
+    ui.sceneActions.hidden = !net.party || !net.isLeader;
+    ui.attach.disabled = !idle;
+    ui.cancel.hidden = !net.pendingMemory;
+    ui.cancel.disabled = !idle;
+    ui.speedLabel.hidden = !net.party;
+    ui.speed.disabled = !idle || !net.isLeader;
+    ui.speed.value = String(net.timeline?.speed ?? 1);
+    ui.inviteLabel.hidden = !this.room;
+    ui.invite.value = this.room ? roomUrl(location.href, this.room) : "";
+    const leader = players.find(p => p.identity.isEqual(room!.host));
+    setText(ui.role, net.party ? net.isLeader ? "You are the leader · control playback below." : `${leader?.name || "The leader"} controls time. Look around and grab objects while paused.` : "");
+    const pending = net.pendingMemory;
+    ui.progress.hidden = !pending;
+    ui.progress.value = pending?.progress ?? 0;
+    setText(ui.sceneStatus, pending
+      ? `${pending.title} · ${pending.status} ${Math.round(pending.progress * 100)}%. ${pending.status === "uploaded" ? "Waiting for a reconstruction worker. " : ""}${pending.error || "The current scene stays available until the new one is ready."}`
+      : net.party ? `Viewing ${net.memory?.title}. ${net.memory?.manifestUrl.includes("/demo/memory.json") ? "Synthetic demo; not reconstructed from video." : ""}`
+      : "Synthetic demo available. Create a party and share its link. No reconstruction worker is required to test multiplayer.");
     ui.join.disabled = !idle;
     ui.libraryAdd.disabled = !net.ready || this.adding;
     ui.libraryAdd.textContent = this.adding ? "Adding…" : "Add to library";
@@ -949,21 +1034,21 @@ export class Session {
     if (key === this.memoryKey) return;
     this.memoryKey = key;
     const previous = select.value;
-    select.replaceChildren();
+    select.replaceChildren(new Option("Synthetic demo · ready to play", "demo"));
     for (const m of memories) {
       const option = new Option(
         `#${m.id} ${m.title} · ${m.status} ${Math.round(m.progress * 100)}%`,
         m.id.toString(),
       );
       option.title = m.manifestUrl || m.sourceUrl;
-      option.disabled = m.status !== "ready";
+      option.disabled = false;
       select.add(option);
     }
-    const ready = memories.filter((m) => m.status === "ready");
+    const ready = memories;
     const requested = ready.find((m) => m.requestId === this.selectRequest);
     if (requested) this.selectRequest = "";
     const keep = ready.find((m) => m.id.toString() === previous);
-    const choice = requested ?? keep ?? ready.at(-1);
-    select.value = choice ? choice.id.toString() : "";
+    const choice = requested ?? keep;
+    select.value = choice ? choice.id.toString() : "demo";
   }
 }
