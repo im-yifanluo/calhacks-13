@@ -85,7 +85,7 @@ test("a quick tap on a paused object does nothing: no grab, no take, the camera 
   } finally { viewer.dispose(); }
 });
 
-test("a drag past the threshold grabs, follows the pointer and throws on release", async () => {
+test("a drag past the threshold grabs and follows the pointer; let go, it stays put until Play throws it", async () => {
   const { viewer, canvas, ball } = setup();
   try {
     canvas.dispatchEvent(pointer("pointerdown", 400, 300));
@@ -98,7 +98,15 @@ test("a drag past the threshold grabs, follows the pointer and throws on release
     canvas.dispatchEvent(pointer("pointermove", 480, 300));
     assert.ok(ball.position.x > 0.2, `the ball follows the pointer (x = ${ball.position.x})`);
     canvas.dispatchEvent(pointer("pointerup", 480, 300));
-    assert.equal(viewer.held, null); assert.equal(viewer.recording, true);
+    // Time is paused: the ball stays where it was let go.
+    assert.equal(viewer.isPlaced, true); assert.equal(viewer.recording, false);
+    const at = ball.position.clone();
+    for (let i = 0; i < 30; i++) viewer.update(1 / 60);
+    assert.ok(ball.position.distanceTo(at) < 1e-9, "placed, not dropped");
+    viewer.togglePlay();
+    assert.equal(viewer.timeline.playing, true); assert.equal(viewer.held, null);
+    const take = viewer.timeline.active.tracks.get("ball");
+    assert.ok(take.length > 2 && Math.hypot(take[0].p[0] - at.x, take[0].p[1] - at.y, take[0].p[2] - at.z) < 1e-6, "the take starts where it was placed");
   } finally { viewer.dispose(); }
 });
 
@@ -109,7 +117,7 @@ test("holding the press still for 150 ms grabs without moving", async () => {
     await sleep(HOLD_START_MS + 30);
     assert.equal(viewer.held?.definition.id, "ball");
     canvas.dispatchEvent(pointer("pointerup", 400, 300));
-    assert.equal(viewer.held, null);
+    assert.equal(viewer.isPlaced, true, "let go while paused: placed");
   } finally { viewer.dispose(); }
 });
 
@@ -124,7 +132,7 @@ test("dragging to the bottom of the screen keeps the ball on the floor, never un
     for (let y = 340; y <= 600; y += 20) { canvas.dispatchEvent(pointer("pointermove", 400, y)); await sleep(2); }
     close(ball.position.y, manifest.objects[0].collider.radius);
     canvas.dispatchEvent(pointer("pointerup", 400, 600));
-    for (let i = 0; i < 1200 && viewer.recording; i++) viewer.update(1 / 60);
+    viewer.togglePlay(); // releases the placed ball and records its fall at once
     const take = viewer.timeline.active.tracks.get("ball");
     assert.ok(take.every(f => f.p[1] > 0.17), `lowest recorded y ${Math.min(...take.map(f => f.p[1]))}`);
   } finally { viewer.dispose(); }

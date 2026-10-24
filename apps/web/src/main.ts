@@ -222,7 +222,7 @@ async function main(): Promise<void> {
       scrub.style.setProperty("--progress", `${percentAt(tl.time, tl.duration)}%`);
       scrub.setAttribute("aria-valuetext", `${formatTime(tl.time)} of ${formatTime(tl.duration)}`);
       element("time-now").textContent = formatTime(tl.time);
-      element("state").textContent = currentViewer.held ? "HOLDING" : currentViewer.recording ? "RECORDING THROW" : tl.playing ? "PLAYING" : "PAUSED";
+      element("state").textContent = currentViewer.held ? (currentViewer.isPlaced ? "PLACED" : "HOLDING") : currentViewer.recording ? "RECORDING THROW" : tl.playing ? "PLAYING" : "PAUSED";
       if (branchCount !== tl.branches.length) {
         branchCount = tl.branches.length; branches.replaceChildren();
         for (const branch of tl.branches) {

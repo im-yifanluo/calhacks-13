@@ -100,7 +100,10 @@ test("a grip on the panel grabs nothing behind it; once hidden, the object behin
     assert.equal(app.viewer.held?.definition.id, "ball");
     assert.equal(app.viewer.timeline.branches.length, 2);
     app.press("selectend"); assert.ok(app.viewer.held, "letting go of the trigger must not drop an object held by the grip");
-    app.press("squeezeend"); assert.equal(app.viewer.held, null); assert.equal(app.viewer.recording, true);
+    app.press("squeezeend");
+    assert.equal(app.viewer.isPlaced, true, "let go while paused: it stays where it was put");
+    app.right.buttons[4].pressed = true; app.step(); app.right.buttons[4].pressed = false;
+    assert.equal(app.viewer.timeline.playing, true, "A/X plays"); assert.equal(app.viewer.held, null, "and Play releases it");
   } finally { app.dispose(); }
 });
 
@@ -281,5 +284,27 @@ test("grabbing while the memory plays freezes time first", async () => {
     assert.equal(app.viewer.timeline.playing, false);
     assert.equal(app.viewer.held?.definition.id, "ball");
     assert.equal(app.viewer.timeline.branches.length, 2);
+  } finally { app.dispose(); }
+});
+
+test("placed objects can be picked up again without a new take, and walking is free while one waits for Play", async () => {
+  const app = setup();
+  try {
+    app.click(region("hide")); app.step();
+    app.aim(app.ball); app.press("squeezestart"); await flush();
+    app.xr.grips[0].position.x += 0.3; app.step();
+    app.press("squeezeend"); app.step();
+    assert.equal(app.viewer.isPlaced, true);
+    const at = app.viewer.held.root.position.clone();
+    for (let i = 0; i < 20; i++) app.step();
+    assert.ok(app.viewer.held.root.position.distanceTo(at) < 1e-9, "stays put while paused");
+    // Pick it up again (it is under the ray where it was left): same take.
+    app.aim(at); app.step();
+    assert.equal(app.input.pointingKeys[0], "object:ball");
+    app.press("squeezestart"); await flush();
+    assert.equal(app.viewer.isPlaced, false); assert.equal(app.viewer.timeline.branches.length, 2, "no new take");
+    app.press("squeezeend"); app.step();
+    app.left.axes[3] = -1; const rig = app.rig.position.clone(); app.step();
+    assert.ok(app.rig.position.distanceTo(rig) > 0.001, "the stick walks while the object waits for Play");
   } finally { app.dispose(); }
 });

@@ -55,7 +55,7 @@ export function desktopInput(canvas: HTMLCanvasElement, camera: THREE.Camera, co
     clearTimeout(pending.timer); press = null;
     const request = ++version;
     if (!await viewer.grab(pending.objectId)) { if (version === request) end(); return; }
-    if (version !== request || activePointer === null) { viewer.release(); return; }
+    if (version !== request || activePointer === null) { viewer.place(); return; }
     camera.getWorldDirection(normal);
     plane.setFromNormalAndCoplanarPoint(normal, grabPoint);
     offset.copy(viewer.held!.root.position).sub(grabPoint); lastMove = performance.now();
@@ -78,7 +78,8 @@ export function desktopInput(canvas: HTMLCanvasElement, camera: THREE.Camera, co
     ++version;
     if (press) { clearTimeout(press.timer); press = null; } // a tap: nothing was grabbed
     const pointerId = activePointer; activePointer = null;
-    viewer.release(); controls.enabled = true;
+    // Time is paused: the object stays where it was let go until Play, keeping the throw the drag gave it.
+    viewer.place(); controls.enabled = true;
     if (pointerId !== null && canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
   }
   for (const name of ["pointerup", "pointercancel", "lostpointercapture"] as const) {

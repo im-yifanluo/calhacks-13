@@ -290,7 +290,7 @@ export class XRInput {
   private aim(index: number): Pointing {
     this.ray(index);
     const timeline = this.viewer.timeline;
-    const offered = !this.viewer.held && timeline.time < timeline.duration;
+    const offered = this.owner === null && timeline.time < timeline.duration;
     const touched = offered ? this.touching(index) : null;
     if (touched) return { kind: "object", id: touched.id, distance: 0, point: touched.point, near: true };
     const ui = this.panel.hit(this.raycaster);
@@ -364,7 +364,9 @@ export class XRInput {
     if (this.scrubbing === index) { this.scrub(index); this.scrubbing = null; }
     if (this.panel.pressed && this.pressed.size === 0) this.panel.pressed = null;
     if (this.owner === index) {
-      this.viewer.release(); this.owner = null; this.lastReleased = index; pulse(this.sources.get(index), HAPTIC.release);
+      // Time is paused: it stays where you let go until Play, keeping the throw you gave it.
+      this.viewer.place(); this.owner = null; this.lastReleased = index; pulse(this.sources.get(index), HAPTIC.release);
+      vrlog("placed", { index, id: this.viewer.held?.definition.id ?? null });
     } else if (this.pending === index) { ++this.requestVersion; this.pending = null; this.viewer.cancelPendingGrab(); }
   }
 
@@ -428,8 +430,10 @@ export class XRInput {
     if (status && now - this.statusSince < MESSAGE_MS) return status;
     const viewer = this.viewer;
     if (this.dragging !== null) return "Move the panel; the stick pushes it away or pulls it closer.";
-    if (viewer.held) return `Holding ${viewer.held.definition.label}. Move, then let go to throw.`;
-    if (viewer.recording) return "Recording the throw…";
+    if (viewer.held && this.owner !== null) return `Holding the ${viewer.held.definition.label}. Move it, then let go.`;
+    const handsNow = [...this.sources.values()].some(source => !!source.hand);
+    if (viewer.held && viewer.isPlaced)
+      return `${handsNow ? "Pinch Play" : "Press A or X"} to see what happens, or grab the ${viewer.held.definition.label} again to adjust it.`;
     const hands = [...this.sources.values()].some(source => !!source.hand);
     if (target) return hands ? `${target}: pinch to grab it, move, then let go.` : `${target}: hold grip to grab it, move, then let go.`;
     if (viewer.timeline.time >= viewer.timeline.duration) return hands ? "That's the end. Pinch Play to watch again." : "That's the end. Press A or X to watch again.";
@@ -524,7 +528,7 @@ export class XRInput {
       this.panel.updateSummon(this.head.copy(this.camera.position), localForward(this.camera, this.forward), this.gaze, dt);
       if (this.panel.summon.visible !== this.summonShown) { this.summonShown = this.panel.summon.visible; vrlog(this.summonShown ? "summon-shown" : "summon-hidden"); }
     }
-    this.panel.setDimmed(!!viewer.held || viewer.recording);
+    this.panel.setDimmed(this.owner !== null);
     this.drawPanel(target);
   }
 
