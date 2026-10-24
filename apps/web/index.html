@@ -2,20 +2,91 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
     <title>Memory Replay</title>
-    <style>
-      html, body { margin: 0; height: 100%; background: #0b0d10; color: #eee; font: 14px system-ui, sans-serif; overflow: hidden; }
-      #hud { position: fixed; left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; gap: 8px; align-items: center; }
-      #hud input[type=range] { flex: 1; }
-      button { background: #1f6feb; color: #fff; border: 0; border-radius: 8px; padding: 8px 12px; font: inherit; }
-    </style>
   </head>
   <body>
+    <section id="panel" aria-label="Memory and room controls">
+      <header>
+        <span class="eyebrow">MEMORY REPLAY</span
+        ><span id="connection" role="status">Connecting…</span>
+      </header>
+      <h1 id="scene-title">Return to a moment.</h1>
+      <p id="scene-status">Loading memory…</p>
+      <details open>
+        <summary>Your room</summary>
+        <label
+          >Your name<input
+            id="player-name"
+            maxlength="40"
+            autocomplete="nickname"
+        /></label>
+        <label
+          >Memories<select id="memories" aria-label="Memory library"></select
+        ></label>
+        <div class="row">
+          <button id="create-room" disabled>Create room</button
+          ><button id="toggle-upload">Upload</button>
+        </div>
+        <div class="row">
+          <input
+            id="join-code"
+            aria-label="Room code"
+            placeholder="ROOM CODE"
+            maxlength="7"
+          /><button id="join-room" disabled>Join</button>
+        </div>
+        <strong id="room-label">Explore solo or join a room</strong>
+        <p id="people"></p>
+        <div class="row">
+          <button id="copy-link" class="secondary">Copy room link</button
+          ><button id="leave-room" class="secondary">Leave</button>
+        </div>
+      </details>
+      <details>
+        <summary>Load a finished memory</summary>
+        <label
+          >memory.json URL<input
+            id="manifest-url"
+            type="url"
+            placeholder="Blank = mock memory" /></label
+        ><button id="register-memory" disabled>Add to library</button>
+        <p>
+          Local demo: add the mock memory, create a room, then share the code.
+        </p>
+      </details>
+      <div id="upload-panel" hidden></div>
+      <p id="pipeline-errors" role="status"></p>
+      <p id="error" role="alert"></p>
+    </section>
+    <div
+      id="joystick"
+      role="group"
+      aria-label="Drag to walk"
+      title="Drag to walk"
+    >
+      <span>WALK</span>
+    </div>
+    <div id="instructions">
+      Drag to look · Pinch to zoom · Pause, then drag an object to grab and
+      flick to throw
+    </div>
     <div id="hud">
-      <button id="play">Pause</button>
-      <input id="scrub" type="range" min="0" max="1000" value="0" />
-      <span id="time">0.0s</span>
+      <button id="play">Pause</button
+      ><input
+        id="scrub"
+        aria-label="Shared playhead"
+        type="range"
+        min="0"
+        max="1000"
+        value="0"
+      /><span id="time">0s</span
+      ><select id="branches" aria-label="Timeline branch">
+        <option value="0">Original</option></select
+      ><button id="fork" disabled>Fork</button>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

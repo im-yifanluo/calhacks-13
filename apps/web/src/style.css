@@ -1,0 +1,243 @@
+:root {
+  font:
+    14px/1.45 system-ui,
+    sans-serif;
+  color: #e7f2f1;
+  background: #101720;
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  overflow: hidden;
+}
+canvas {
+  display: block;
+  touch-action: none;
+}
+#panel {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  width: 330px;
+  max-height: calc(100dvh - 170px);
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid #52697466;
+  border-radius: 18px;
+  background: #121e2aeb;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 12px 50px #0004;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 10px;
+  align-items: center;
+}
+.eyebrow {
+  letter-spacing: 0.16em;
+  color: #6ee7c4;
+}
+#connection {
+  color: #a8bbc6;
+}
+h1 {
+  font-size: 24px;
+  line-height: 1.15;
+  margin: 16px 0 10px;
+}
+h2 {
+  font-size: 18px;
+}
+p {
+  font-size: 12px;
+  color: #a9bec6;
+}
+details {
+  border-top: 1px solid #52697466;
+  padding: 12px 0;
+}
+summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: #b4c5cc;
+  margin: 10px 0;
+}
+input,
+select,
+button {
+  font: inherit;
+  min-height: 42px;
+  border-radius: 8px;
+  border: 1px solid #617a8555;
+}
+input,
+select {
+  background: #0b141e;
+  color: #e7f2f1;
+  padding: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+button {
+  background: #6ee7c4;
+  color: #0e2525;
+  border: 0;
+  padding: 9px 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+button.secondary {
+  background: #253744;
+  color: #e7f2f1;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0;
+}
+.row > * {
+  flex: 1;
+  min-width: 0;
+}
+#hud {
+  position: fixed;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  left: 16px;
+  right: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  background: #121e2aee;
+  border: 1px solid #52697466;
+  border-radius: 14px;
+}
+#scrub {
+  flex: 1;
+  min-width: 70px;
+  accent-color: #6ee7c4;
+  border: 0;
+  background: transparent;
+}
+#branches {
+  width: 145px;
+  margin: 0;
+}
+#time {
+  font-size: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+#instructions {
+  position: fixed;
+  bottom: 100px;
+  left: 140px;
+  right: 16px;
+  font-size: 12px;
+  text-shadow: 0 1px 4px black;
+  color: #bacbd0;
+}
+#joystick {
+  position: fixed;
+  bottom: 100px;
+  left: 24px;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  border: 1px solid #6ee7c477;
+  background: radial-gradient(circle, #6ee7c433 20%, #162834aa 23%);
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  user-select: none;
+}
+#joystick span {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  pointer-events: none;
+}
+#error,
+#pipeline-errors {
+  color: #ffad9e;
+  white-space: pre-wrap;
+}
+progress {
+  width: 100%;
+  accent-color: #6ee7c4;
+  margin-top: 12px;
+}
+:focus-visible {
+  outline: 2px solid #6ee7c4;
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  #panel {
+    top: 8px;
+    left: 8px;
+    width: min(300px, calc(100vw - 16px));
+    padding: 14px;
+    max-height: 46dvh;
+  }
+  h1 {
+    font-size: 20px;
+  }
+  #hud {
+    left: 8px;
+    right: 8px;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 8px;
+  }
+  #scrub {
+    flex-basis: 35%;
+  }
+  #branches {
+    width: 125px;
+  }
+  #instructions {
+    font-size: 10px;
+    bottom: 135px;
+    left: 120px;
+  }
+  #joystick {
+    bottom: 130px;
+  }
+  #time {
+    font-size: 10px;
+  }
+}
+/* Keep WebXR entry separate from the shared timeline controls. */
+#VRButton {
+  left: auto !important;
+  right: 16px !important;
+  bottom: 100px !important;
+  transform: none !important;
+  max-width: 160px;
+}
+@media (max-width: 600px) {
+  #VRButton {
+    bottom: 200px !important;
+    right: 12px !important;
+    font-size: 11px !important;
+    max-width: 145px;
+  }
+  #instructions {
+    right: 12px;
+  }
+}

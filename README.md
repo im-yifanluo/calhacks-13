@@ -16,20 +16,35 @@ docs/                Plan, architecture, demo script
 data/                Local scratch (git-ignored). Big assets go to object storage, not git.
 ```
 
+## P4 branch status
+
+Jerry's multiplayer/phone lane is implemented: SpacetimeDB tables/reducers and generated SDK bindings, rooms and presence, shared timeline/branches, phone grab/throw, trajectory replay, authenticated upload service and worker status handoff. The local demo uses clearly labeled debug geometry. GPU reconstruction and production Quest object rendering/hand input remain P1–P3 work.
+
+Setup, cloud configuration and the Wayfarer → phone → Quest test: **[docs/P4.md](docs/P4.md)**. Rehearsal and honest Devpost draft: **[docs/DEMO.md](docs/DEMO.md)**.
+
 ## Quick start
 
+Use Node 22.12+ and SpacetimeDB CLI 2.13.0.
+
 ```bash
-npm install
-npm run dev                 # https://<laptop-ip>:5173 (self-signed; accept the warning on Quest)
-npm run tunnel              # public https URL for phones/judges (needs cloudflared)
+npm ci
+npm run typecheck
+npm test
+npm run build
 ```
 
-SpacetimeDB (local):
+Start `spacetime start --listen-addr 127.0.0.1:3000` in another terminal, then:
 
 ```bash
-spacetime start                         # terminal 1
-npm run stdb:publish:local              # terminal 2: build + publish the module
-npm run stdb:generate                   # regenerate client bindings into apps/web/src/module_bindings
+npm run stdb:publish:local
+LOCAL_HTTP=1 npm run dev
+```
+
+Open **http://127.0.0.1:5173/?demo=1**, register the mock manifest, create a room and open its link in a second tab. The [runbook](docs/P4.md) includes anonymous local publication, credentials, real uploads and device acceptance steps. No cloud credentials are needed for the local tests.
+
+```bash
+npm run test:integration     # against the running local database
+npm run stdb:generate       # after changing the module schema
 ```
 
 ## How we work
