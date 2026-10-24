@@ -3,9 +3,10 @@ import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { Group, Quaternion, Vector3 } from "three";
 import type { Keyframe } from "@memreplay/shared";
 import * as mod from "../server/spacetime/src/index";
-import { importBranches, NetAdapter, parseChunk, recordingChunks, serverBranchId, viewerBranchId } from "../apps/web/src/net/adapter";
+import { importBranches, NetAdapter, parseChunk, recordingChunks, type ReportOptions, serverBranchId, viewerBranchId } from "../apps/web/src/net/adapter";
 import { initPhysics, STEP } from "../apps/web/src/physics";
 import { Viewer } from "../apps/web/src/viewer";
+import { Notice } from "../apps/web/src/session";
 import { type FakeClient, RoomServer } from "./room-harness";
 
 const manifest = JSON.parse(readFileSync(new URL("../apps/web/public/mock/memory.json", import.meta.url), "utf8"));
@@ -20,7 +21,11 @@ async function until(predicate: () => unknown, what = "condition", ms = 3000): P
   }
 }
 
-interface Player { client: FakeClient; viewer: Viewer; adapter: NetAdapter; reports: string[] }
+interface Player {
+  client: FakeClient; viewer: Viewer; adapter: NetAdapter; reports: string[];
+  /** Every adapter message with its kind, and every kind it said succeeded. */
+  notices: Array<{ message: string } & Partial<ReportOptions>>; resolved: string[];
+}
 const cleanup: Array<() => void> = [];
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); for (const dispose of cleanup.splice(0)) dispose(); });
 beforeAll(() => initPhysics());
@@ -35,15 +40,17 @@ function makeViewer(reports: string[]): Viewer {
   return viewer;
 }
 
-/** A player with a viewer and an adapter, as session.ts wires them. */
-function attach(client: FakeClient): Player {
-  const reports: string[] = [];
+/** A player with a viewer and an adapter, as session.ts wires them (optionally into a status line). */
+function attach(client: FakeClient, status?: Notice): Player {
+  const reports: string[] = [], notices: Player["notices"] = [], resolved: string[] = [];
   const viewer = makeViewer(reports);
-  const adapter = new NetAdapter(client.net, viewer, message => reports.push(message));
+  const adapter = new NetAdapter(client.net, viewer,
+    (message, options) => { reports.push(message); notices.push({ message, ...options }); status?.show(message, options); },
+    kind => { resolved.push(kind); status?.resolve(kind); });
   viewer.setAuthority(adapter);
   adapter.start();
   cleanup.push(() => adapter.dispose());
-  return { client, viewer, adapter, reports };
+  return { client, viewer, adapter, reports, notices, resolved };
 }
 
 /** A room for a 6 s memory, created by `host`, paused at 0 unless told otherwise. */
@@ -366,6 +373,38 @@ test("clock: a refused change is reported and the viewer returns to the room's c
   expect(drift()).toBeGreaterThan(0.3);
   await until(() => { tick(); return Math.abs(drift()) < 0.05; }, "the drift correction", 2500);
   expect(bob.viewer.timeline.playing).toBe(true);
+});
+
+test("a refused clock change stays up until a later one succeeds, and never lands in the room panel's error", async () => {
+  const room = new RoomServer();
+  const hostClient = room.client("alice");
+  const { code, roomId } = await openRoom(room, hostClient);
+  const alice = attach(hostClient);
+  // Bob's status line, wired as session.ts does: the viewer and the adapter share it.
+  const hint = "In room. Pause to grab and throw; everyone sees the same take.";
+  let line = hint;
+  const status = new Notice(text => (line = text), text => line === text, () => hint);
+  const bob = attach(await joined(room, "bob", code), status);
+  alice.viewer.seek(1);
+  await until(() => Math.abs(bob.viewer.timeline.time - 1) < 1e-6, "the shared seek");
+  expect(alice.resolved).toContain("clock");
+  expect(bob.resolved).toEqual([]); // applying alice's seek is not a change of bob's
+  expect(await alice.viewer.grab("ball-1")).toBe(true);
+  await until(() => bob.viewer.timeline.activeId === alice.viewer.timeline.activeId, "bob on the take");
+  bob.viewer.seek(3); // refused while alice holds the ball
+  await until(() => line.includes("Wait for objects to settle"), "the refusal");
+  expect(bob.notices.at(-1)).toMatchObject({ kind: "clock", error: true });
+  expect(bob.client.net.error).toBe(""); // the adapter shows its own errors
+  expect(bob.resolved).toEqual([]);
+  alice.viewer.release();
+  await settle(alice);
+  await until(() => !serverRow(room, serverTimeline(room, roomId).branchId, "ball-1")?.simOwner, "the rest");
+  expect(line).toMatch(/Wait for objects to settle/); // still the newest message
+  bob.viewer.seek(2); // goes through now
+  await until(() => serverTimeline(room, roomId).anchorMediaUs === 2_000_000n, "bob's seek");
+  await until(() => bob.resolved.includes("clock"), "the success");
+  expect(line).toBe(hint);
+  expect(alice.notices.filter(n => n.error)).toEqual([]);
 });
 
 test("a play pressed while a grab is still waiting runs after the unused grant is given back", async () => {

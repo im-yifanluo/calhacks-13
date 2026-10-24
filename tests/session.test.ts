@@ -9,12 +9,80 @@ import {
   HIDE_NEAR_M,
   loadedManifest,
   normalizeCode,
+  Notice,
+  NOTICE_MS,
   playerColor,
   RELOAD_GUARD_KEY,
   roomUrl,
   sameManifest,
 } from "../apps/web/src/session";
 import type { Player } from "../apps/web/src/net";
+
+describe("messages", () => {
+  afterEach(() => vi.useRealTimers());
+
+  test("information expires after about 6 s; a newer message replaces an older one", () => {
+    vi.useFakeTimers();
+    const shown: string[] = [];
+    const panel = new Notice((text, error) => shown.push(`${error ? "error" : "info"}: ${text}`));
+    panel.show("Added “Kitchen” to the library.");
+    expect(NOTICE_MS).toBeGreaterThanOrEqual(5000);
+    expect(NOTICE_MS).toBeLessThanOrEqual(7000);
+    vi.advanceTimersByTime(NOTICE_MS - 100);
+    expect(panel.text).toBe("Added “Kitchen” to the library.");
+    // The later error replaces it, instead of sitting next to it.
+    panel.show("Could not add it to the library: Expected an HTTP(S) asset URL", { kind: "library", error: true });
+    expect(shown.at(-1)).toBe("error: Could not add it to the library: Expected an HTTP(S) asset URL");
+    vi.advanceTimersByTime(60_000); // errors do not expire, and the replaced message's timer does nothing
+    expect([panel.text, panel.error]).toEqual(["Could not add it to the library: Expected an HTTP(S) asset URL", true]);
+    panel.show("Room link copied.");
+    expect(panel.error).toBe(false);
+    vi.advanceTimersByTime(NOTICE_MS);
+    expect(panel.text).toBe("");
+    expect(shown.at(-1)).toBe("info: ");
+    panel.show("https://example.test/?room=ABC1234", { persist: true }); // a link to copy by hand
+    vi.advanceTimersByTime(60_000);
+    expect(panel.text).toBe("https://example.test/?room=ABC1234");
+  });
+
+  test("an error clears once an action of the same kind succeeds, and not before", () => {
+    const panel = new Notice(() => {});
+    panel.show("Could not join room ZZZ9999: Room not found", { kind: "room", error: true });
+    panel.resolve("library");
+    expect(panel.text).toBe("Could not join room ZZZ9999: Room not found");
+    panel.resolve("room");
+    expect(panel.text).toBe("");
+    panel.show("Added “Kitchen” to the library.", { kind: "library" });
+    panel.resolve("library"); // a success never clears information early
+    expect(panel.text).toBe("Added “Kitchen” to the library.");
+  });
+
+  test("the shared status line returns to the room hint, but never wipes the viewer's own message", () => {
+    vi.useFakeTimers();
+    const hint = "In room ABC1234. Pause to grab and throw; everyone sees the same take.";
+    let line = "";
+    const status = new Notice((text) => (line = text), (text) => line === text, () => hint);
+    status.show(hint, { persist: true });
+    vi.advanceTimersByTime(NOTICE_MS * 3);
+    expect(line).toBe(hint);
+    status.show("You no longer hold the ball: the room released it.", { kind: "hold" });
+    vi.advanceTimersByTime(NOTICE_MS);
+    expect(line).toBe(hint);
+    status.show("Could not change the shared clock: Wait for objects to settle or release them first", { kind: "clock", error: true });
+    vi.advanceTimersByTime(60_000);
+    expect(line).toMatch(/^Could not change the shared clock/);
+    status.resolve("clock"); // the next play, pause or seek went through
+    expect(line).toBe(hint);
+    status.show("Could not grab the ball: Object is owned by another player", { kind: "grab", error: true });
+    line = "Holding ball. Move and release to throw."; // the viewer wrote over it
+    status.resolve("grab");
+    expect(line).toBe("Holding ball. Move and release to throw.");
+    status.show("Ignored an unreadable part of a recorded throw of the ball.", { kind: "data" });
+    line = "Recording this throw. Play the take to replay it, or switch to Original.";
+    vi.advanceTimersByTime(NOTICE_MS);
+    expect(line).toBe("Recording this throw. Play the take to replay it, or switch to Original.");
+  });
+});
 
 const page = "http://127.0.0.1:5184/";
 
