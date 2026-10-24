@@ -23,8 +23,10 @@ from pathlib import Path
 
 import numpy as np
 
-NEAR_PATH = 0.35
-MAX_SCALE = 3.0
+NEAR_PATH = 0.5
+MAX_SCALE = 1.5
+NEAR_BIG_RADIUS = 1.5   # m from the path
+NEAR_BIG = 0.35         # m: a Gaussian this long, this close, is a floater (close surfaces are finely resolved)
 
 
 def prune(data: np.ndarray, path_xyz: np.ndarray) -> np.ndarray:
@@ -38,7 +40,9 @@ def prune(data: np.ndarray, path_xyz: np.ndarray) -> np.ndarray:
     srt = np.sort(s, axis=1)                                   # small, mid, big
     big, mid = srt[:, 2], np.maximum(srt[:, 1], 1e-6)
     keep = np.isfinite(xyz).all(1) & (d > NEAR_PATH) & (d < 80) & (big < MAX_SCALE) & (op > 0.002)
-    keep &= ~((big > 0.3) & (big / mid > 15))                  # needles: one long axis (flat discs build floors)
+    keep &= ~((big > 0.12) & (big / mid > 8))                  # needles: one long axis (flat discs build floors)
+    keep &= ~((big > 0.6) & (op < 0.3))                        # big, faint blobs: haze and light blooms
+    keep &= ~((d < NEAR_BIG_RADIUS) & (big > NEAR_BIG))        # big blobs right in front of the camera: floaters
     return keep
 
 
@@ -65,6 +69,8 @@ def track_positions(memory: dict) -> np.ndarray:
     return np.array([k["p"] for k in tr], float) if isinstance(tr, list) else np.zeros((0, 3))
 
 
+# splat-transform's -t/-r act in its own frame (Y and Z flipped relative to the 3DGS PLY frame), so a PLY
+# translation of +y must be passed as -t 0,-y,0. Translate in numpy instead wherever possible.
 def _convert(src: Path, dst: Path) -> None:
     exe = shutil.which("splat-transform")
     cmd = [exe] if exe else ["npx", "-y", "@playcanvas/splat-transform"]
@@ -97,20 +103,26 @@ def prune_file(splat: Path, path_xyz: np.ndarray, cams: list | None = None, min_
 
 
 def keep_ghost(frames: list, hz: float) -> tuple[bool, str]:
-    """frames: [(xyz, rgb)] per keyframe from read_points_sequence."""
+    """frames: [(xyz, rgb)] per keyframe from read_points_sequence. A real person is 0.7-2.8 m tall (depth noise included) and either
+    stays in view for >= 1 s or clearly moves (>= 0.5 m); a patterned wall mistaken for a person is static and
+    brief. Floating "people" (lowest point > 0.6 m up) are ceiling fixtures or signs."""
     vis = [i for i, (p, _) in enumerate(frames) if len(p) >= 50]
-    if len(vis) / hz < 1.0:
-        return False, f"seen {len(vis) / hz:.1f} s"
-    lows, heights = [], []
+    if not vis:
+        return False, "never seen"
+    lows, heights, centres = [], [], []
     for i in vis:
-        y = np.asarray(frames[i][0], float)[:, 1]
-        lows.append(np.percentile(y, 3))
-        heights.append(np.percentile(y, 97) - np.percentile(y, 3))
+        q = np.asarray(frames[i][0], float)
+        lows.append(np.percentile(q[:, 1], 3))
+        heights.append(np.percentile(q[:, 1], 97) - np.percentile(q[:, 1], 3))
+        centres.append(np.median(q, 0))
+    h = float(np.percentile(heights, 75))
+    if not 0.7 <= h <= 2.8:      # ViPE's depth stretches a person seen across a lobby; keep them
+        return False, f"{h:.2f} m tall"
     if np.median(lows) > 0.6:
         return False, f"floats {np.median(lows):.2f} m above the floor"
-    h = float(np.percentile(heights, 75))
-    if not 0.8 <= h <= 2.3:
-        return False, f"{h:.2f} m tall"
+    moved = float(np.linalg.norm(centres[-1] - centres[0])) if len(centres) > 1 else 0.0
+    if len(vis) / hz < 1.0 and moved < 0.5:
+        return False, f"seen {len(vis) / hz:.1f} s and static"
     return True, "ok"
 
 

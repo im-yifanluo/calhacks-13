@@ -28,3 +28,4 @@ apps/web/public/local/
 # Nikko's private build journal (not shared with the team)
 NIKKO_BUILD_LOG.md
 apps/web/.test-dist/
+pipeline/tools/shots/

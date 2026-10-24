@@ -99,6 +99,20 @@ ratios, and both versions made reprojection worse (see the report). `world.ALIGN
 
 ---
 
+## 3b. Does the scene match the video? (`memreplay compare`)
+
+The honest test is to look at the scene from the recorded camera, at the video's field of view, and put it next to
+the frame. `memreplay compare <memory dir> --video <clip.mp4> --shot <seconds>=<render.png> ...` does the scoring:
+PSNR, SSIM and a colour-histogram match over the whole frame and the centre third, written to `compare.json`, plus
+`compare.jpg` (rows = moments; columns = original | render | amplified difference). Renders are taken with the
+viewer in **wearer's view** (the `Wearer's view` toggle, or `?mode=...` plus the checkbox), paused, HUD hidden, at
+the clip's portrait aspect; `pipeline/tools/capture.js` does that headless with Chrome (`npm i -g puppeteer-core`) and
+`pipeline/tools/evalclip.py` chains capture and scoring. `tools/judge.js` is the Claude Code workflow that has an
+independent judge and a skeptic score every grid (`judge_args.py` builds its input); `tools/results_table.py` prints
+the per-clip table for the report. Rows inside `timeline.gaps` (tracking lost) render black on purpose and are scored apart.
+Reference numbers: the hotel room corner scores PSNR 19 / SSIM 0.88 from the recorded camera; gsplat's own held-out
+PSNR is not comparable (it uses un-refined cameras and a mid-training checkpoint).
+
 ## 4. Files
 
 `handoff.py` has the full list. The ones that matter outside the pod: `memory.json`, `input/audio.m4a`, `world/bg.spz`

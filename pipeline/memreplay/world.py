@@ -2,6 +2,8 @@
 looking down -Z (three.js forward). Writes world/world.json and world/cameras.json (keyframes)."""
 from __future__ import annotations
 
+import os
+
 import json
 from pathlib import Path
 
@@ -77,21 +79,37 @@ def horizontal_planes(P: np.ndarray, up: np.ndarray, max_tilt_deg: float = 30.0,
     return planes
 
 
-def choose_floor(planes: list[dict], cam_pos: np.ndarray) -> dict | None:
-    """Horizontal surfaces (floor, tables, seats) share one normal. Take the best-supported plane's normal as
-    'up', keep the planes parallel to it, and return the lowest one with real support that leaves the cameras
-    0.4-2.6 m above it."""
+def choose_floor(planes: list[dict], cam_pos: np.ndarray, P: np.ndarray | None = None,
+                 up_prior: np.ndarray | None = None) -> dict | None:
+    """Horizontal surfaces (floor, tables, seats) share one normal. Group the planes by normal (8 deg) and try the
+    groups by total support; in a group take the lowest plane with real support that leaves the cameras 0.4-2.6 m
+    above it and has almost nothing below it: at most 10 % of all points more than 0.1 m below (depth noise, the
+    road below a kerb), or up to 25 % if the plane agrees with the camera-based up to 12 deg. A bed or desk top has
+    a quarter of the room below it and, in our hotel room, sat 18 deg off the camera up; it must not win.
+    None when no plane qualifies: the caller then assumes the camera was held at the expected height."""
     if not planes:
         return None
-    dom = max(planes, key=lambda p: p["count"])
-    par = [p for p in planes if p["n"] @ dom["n"] > np.cos(np.radians(8))]
-    top = max(p["count"] for p in par)
-    ok = []
-    for p in par:
-        h = np.median(cam_pos @ p["n"] - p["d"])
-        if p["count"] >= max(800, 0.08 * top) and 0.4 < h < 2.6:
-            ok.append((p["d"], p))
-    return min(ok, key=lambda x: x[0])[1] if ok else None
+    groups: list[list[dict]] = []
+    for p in sorted(planes, key=lambda p: -p["count"]):
+        for g in groups:
+            if p["n"] @ g[0]["n"] > np.cos(np.radians(8)):
+                g.append(p)
+                break
+        else:
+            groups.append([p])
+    for g in sorted(groups, key=lambda g: -sum(p["count"] for p in g)):
+        top = max(p["count"] for p in g)
+        ok = []
+        for p in g:
+            h = np.median(cam_pos @ p["n"] - p["d"])
+            p["below_frac"] = float(np.mean(P @ p["n"] - p["d"] < -0.10)) if P is not None else 0.0
+            tilt = float(np.degrees(np.arccos(np.clip(p["n"] @ up_prior, -1, 1)))) if up_prior is not None else 0.0
+            floor_like = p["below_frac"] <= 0.10 or (p["below_frac"] <= 0.25 and tilt <= 12.0)
+            if p["count"] >= max(800, 0.08 * top) and 0.4 < h < 2.6 and floor_like:
+                ok.append((p["d"], p))
+        if ok:
+            return min(ok, key=lambda x: x[0])[1]
+    return None
 
 
 def up_prior(C: np.ndarray) -> tuple[np.ndarray, dict]:
@@ -125,6 +143,12 @@ def rotation_to(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 # Per-frame depth-scale alignment: off. On our clips ViPE's pose errors leak into the depth ratios, and both
 # a map-based and a pairwise version made reprojection worse (room clip 11 -> 17-20, see the write-up).
 ALIGN_DEPTH = False
+# Per-frame re-levelling against the floor seen below: fixes the stacked floors ViPE's drift leaves on long walks
+# (the corridor path dipped 2 m). In a hotel room it once took the bed for the floor and moved frames by 0.78 m,
+# because the floor fit itself had picked the bed (choose_floor now rejects planes with a third of the room below
+# them) and the gate compared samples with their own median; both are fixed. gsplat's pose refinement then
+# corrects what is left, and refine_poses exports the result for playback.
+LEVEL_FRAMES = os.environ.get("MEMREPLAY_LEVEL_FRAMES", "1") == "1"   # export MEMREPLAY_LEVEL_FRAMES=0 to turn off
 POSE_JUMP_M = 0.15       # a pose this far off the smoothed path is a tracking glitch
 POSE_TURN_DEG = 20.0     # or a frame-to-frame turn this sharp (at 30 fps)
 
@@ -263,9 +287,9 @@ def run(work: Path) -> WorldInfo:
     rng = np.random.default_rng(0)
     if len(P) > 300_000:
         P = P[rng.choice(len(P), 300_000, replace=False)]
-    planes = horizontal_planes(P, up_cam, max_tilt_deg=40.0, n_planes=6)
-    floor = choose_floor(planes, cam_pos)
-    diag["planes"] = [{"height": p["d"], "count": p["count"], "rms": p["rms"],
+    planes = horizontal_planes(P, up_cam, max_tilt_deg=40.0, n_planes=10)
+    floor = choose_floor(planes, cam_pos, P, up_cam)
+    diag["planes"] = [{"height": p["d"], "count": p["count"], "rms": p["rms"], "below_frac": p.get("below_frac"),
                        "tilt_from_prior_deg": float(np.degrees(np.arccos(np.clip(p["n"] @ up_cam, -1, 1))))}
                       for p in planes]
     if floor is not None:
@@ -307,7 +331,11 @@ def run(work: Path) -> WorldInfo:
             # A hand-held camera stays at about the same height above the floor. A sample that would put the
             # camera > 0.2 m off its typical height saw a seat or table, not the floor (the floor was out of view).
             h = np.array([Cw[k, 1, 3] - y for k, y in fs])
-            keep = np.abs(h - np.median(h)) < 0.2
+            # ...measured against the camera height the floor fit gave (or, with no floor, the expected height):
+            # the median of the samples themselves would follow a bed seen more often than the floor
+            ref = float(np.median(Cw[good, 1, 3])) if good.any() else float(np.median(Cw[:, 1, 3]))
+            keep = np.abs(h - ref) < 0.3
+            diag["level_gate_ref_m"] = ref
             diag["level_rejected_samples"] = int((~keep).sum())
             fs = [s for s, ok in zip(fs, keep) if ok]
         if len(fs) < 3:
@@ -319,14 +347,14 @@ def run(work: Path) -> WorldInfo:
         Ps[:, 1] += dy
         return fs, dy
 
-    fs, dy = level(None)
+    fs, dy = (level(None) if LEVEL_FRAMES else ([], np.zeros(len(inds))))
     # 3b. per-frame depth scale: ViPE's dense depth wobbles by ~10 % from frame to frame on some clips;
     #     scale each frame's depth to agree with a map built from all frames (twice), then re-level
     ds = np.ones(len(inds))
     if ALIGN_DEPTH:
         for _ in range(2):
             ds = align_depth_scales(v, inds, Cw, good, ds)
-    fs2, dy2 = level(ds)
+    fs2, dy2 = (level(ds) if LEVEL_FRAMES else ([], np.zeros(len(inds))))
     dy = dy + dy2
     diag.update(level_samples=len(fs), level_offset_range_m=[float(dy.min()), float(dy.max())] if len(fs) >= 3 else None,
                 level_offset_std_m=float(dy.std()), depth_scale_range=[float(ds.min()), float(ds.max())],

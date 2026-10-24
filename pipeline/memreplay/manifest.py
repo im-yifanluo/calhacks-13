@@ -16,6 +16,7 @@ class Keyframe(BaseModel):
     q: Quat
     s: float | None = None
     v: Vec3 | None = None  # linear velocity m/s (objects), handed to physics on pause
+    e: list[float] | None = None  # camera keyframes: exposure [gr, gg, gb, br, bg, bb] (sRGB gain and bias) that maps the room splat's colours onto this frame
 
 
 class UrlRef(BaseModel):

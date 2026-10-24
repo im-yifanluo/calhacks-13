@@ -12,9 +12,10 @@ import { mountAudio } from "./audio.js";
 import { Session } from "./session.js";
 import { PhoneJoystick, isTouchDevice } from "./phone-joystick.js";
 import { PathGuide } from "./guided.js";
+import { applyExposure, clearExposure } from "./exposure.js";
 import "./style.css";
 
-declare global { interface Window { memoryReplay?: Viewer; __memreplay?: unknown } }
+declare global { interface Window { memoryReplay?: Viewer; __memreplay?: unknown; __memreplayScene?: unknown } }
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const status = element("status"), loading = element("loading"), warning = element("warning");
 const play = element<HTMLButtonElement>("play"), scrub = element<HTMLInputElement>("scrub");
@@ -43,7 +44,9 @@ async function main(): Promise<void> {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, innerWidth < 650 ? 0.2 : 0.8, -1); controls.enableDamping = true; controls.maxDistance = 20; controls.minDistance = 0.4;
   controls.maxPolarAngle = Math.PI * 0.49;
-  const spark = new SparkRenderer({ renderer, preUpdate: false, maxStdDev: Math.sqrt(5), lodSplatCount: 500_000 });
+  // ?lod=0 turns Spark's level-of-detail off (renders every splat; for quality checks against the video)
+  const spark = new SparkRenderer({ renderer, preUpdate: false, maxStdDev: Math.sqrt(5), lodSplatCount: 500_000,
+    enableLod: params.get("lod") !== "0" });
   scene.add(spark);
   // Shared rooms (session.ts) connect while the memory loads. Without a room the viewer stays local.
   const session = new Session({ renderer, scene, camera, manifestUrl, showStatus: message => { status.textContent = message; } });
@@ -102,7 +105,7 @@ async function main(): Promise<void> {
   const gaps = memory.manifest.timeline.gaps ?? [];
   const inGap = (t: number) => gaps.some(([a, b]) => t >= a && t <= b);
   const grid = new THREE.GridHelper(10, 40, 0x437979, 0x243642); grid.position.y = memory.manifest.world.floorY; scene.add(grid);
-  window.__memreplay = { scene, grid, guide, camera, renderer };   // for scripted screenshots and debugging
+  window.__memreplayScene = { scene, grid, guide, camera, renderer };   // for scripted screenshots and debugging
   viewer = new Viewer(memory, message => { status.textContent = message; }); window.memoryReplay = viewer;
   const currentViewer = viewer;
   const xr = new XRInput(renderer, rig, camera, viewer);
@@ -149,7 +152,8 @@ async function main(): Promise<void> {
     if (eyes.checked && !renderer.xr.isPresenting) {
       sampleTrack(memory.cameraTrack, currentViewer.timeline.time, camera);
       camera.fov = memory.manifest.camera.fovYDeg; camera.updateProjectionMatrix();
-    } else if (!renderer.xr.isPresenting) { joystick.update(dt); if (controls.enabled) controls.update(); }
+      applyExposure(renderer.domElement, memory.cameraTrack, currentViewer.timeline.time);   // the recording's auto-exposure
+    } else if (!renderer.xr.isPresenting) { clearExposure(renderer.domElement); joystick.update(dt); if (controls.enabled) controls.update(); }
     // Lost-tracking stretches: the room there was never reconstructed, so guided mode and the wearer's view fade out.
     const lost = inGap(currentViewer.timeline.time) && (guide.guided || eyes.checked);
     if (guide.guided && !eyes.checked) {

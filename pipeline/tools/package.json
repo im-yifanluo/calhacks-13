@@ -1,0 +1,8 @@
+{
+  "name": "memreplay-tools",
+  "private": true,
+  "description": "Headless render capture for render-vs-video scoring (capture.js); see pipeline/README.md",
+  "dependencies": {
+    "puppeteer-core": "24.15.0"
+  }
+}

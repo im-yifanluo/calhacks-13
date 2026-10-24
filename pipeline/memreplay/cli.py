@@ -27,10 +27,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 STAGES = {"normalize": "S1", "nouns": "S1", "vipe": "S2", "world": "S3", "l0": "S4", "objects": "S5", "background": "S6",
-          "layers": "S6b"}
+          "refine": "S6a", "bake": "S6c", "layers": "S6b"}
 DONE_MARKER = {"normalize": "input/frames.json", "nouns": "nouns.json", "vipe": "vipe/pose/clip.npz",
                "world": "world/cameras.json", "l0": "world/ghosts.json", "objects": "objects/objects.json",
-               "background": "world/bg_static.spz", "layers": "world/bg_room.spz"}
+               "background": "world/bg_static.spz", "refine": "world/pose_refine.json", "bake": "gsplat_static/baked.ply",
+               "layers": "world/bg_room.spz"}
 KF_GAP_SEC = 0.5   # ViPE re-runs detection every 0.5 s (default 2 s leaves new things unmasked too long)
 
 
@@ -86,6 +87,14 @@ def run_stage(name: str, work: Path, args: argparse.Namespace | None = None) -> 
         if not (work / "objects" / "observations.json").exists():
             objects.observe(work)
         objects.run(work)
+    elif name == "refine":
+        from . import refine_poses
+        refine_poses.run(work)
+    elif name == "bake":
+        from . import background, bake
+        ply = bake.run(work)
+        if ply is not None:
+            background.convert(work, ply, static=True)
     elif name == "layers":
         from . import layers
         layers.run(work)
@@ -211,7 +220,18 @@ def merge(work: Path, title: str, memory_id: str, device: str, static: bool = Fa
         else:
             gaps.append((c.t, c.t))
     gaps = [(round(max(0.0, a - 0.3), 2), round(b + 0.3, 2)) for a, b in gaps if b - a >= 0.5]
-    track = [Keyframe(t=c.t, p=(c.c2w[3], c.c2w[7], c.c2w[11]), q=quat_from_c2w_opencv(c.c2w)) for c in cam_frames]
+    exp_file = work / "world" / "exposure.json"                 # S6c bake: per-frame gain/bias vs the exported room
+    exposure = {int(k): v for k, v in json.loads(exp_file.read_text()).items()} if exp_file.exists() else {}
+    exp_idx = sorted(exposure)
+
+    def exposure_at(idx: int):
+        if not exp_idx:
+            return None
+        k = min(exp_idx, key=lambda i: abs(i - idx))
+        return [round(float(x), 4) for x in exposure[k]] if abs(k - idx) <= 3 * frames.key_stride else None
+
+    track = [Keyframe(t=c.t, p=(c.c2w[3], c.c2w[7], c.c2w[11]), q=quat_from_c2w_opencv(c.c2w), e=exposure_at(c.idx))
+             for c in cam_frames]
     audio = "input/audio.m4a" if (work / "input" / "audio.m4a").exists() else None
     if static and not memory_id.endswith("-static"):
         memory_id += "-static"

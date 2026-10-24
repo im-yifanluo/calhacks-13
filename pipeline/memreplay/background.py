@@ -21,6 +21,10 @@ from .vipe_io import Frames, Vipe, dilate
 
 MAX_IMAGES = 300
 INIT_POINTS = 150_000
+# Depth supervision from ViPE (gsplat --depth_loss on points sampled from each frame's depth): without it the
+# Gaussians of a forward walk (corridor) stretch along the walking direction. MEMREPLAY_DEPTH_LOSS=0 turns it off.
+DEPTH_LOSS = os.environ.get("MEMREPLAY_DEPTH_LOSS", "1") == "1"
+DEPTH_LAMBDA = 1e-2
 CAP = 300_000
 # static mode: the walk-through room. Only people/hands are masked (props stay in the room), more frames and
 # Gaussians (Spark's default budget on Quest is 500k), longer training, camera poses refined, PSNR on held-out frames.
@@ -86,6 +90,14 @@ def prepare(work: Path, static: bool = False) -> Path:
     # ViPE puts pixel centres at integer coordinates; COLMAP/gsplat at +0.5
     (col / "sparse/0/cameras.txt").write_text(
         f"1 PINHOLE {c0.w} {c0.h} {K[0, 0]:.6f} {K[1, 1]:.6f} {K[0, 2] + 0.5:.6f} {K[1, 2] + 0.5:.6f}\n")
+    obs = {}                                                   # image id -> [(u, v, point3D id)], for POINTS2D
+    tracks = None
+    if DEPTH_LOSS:
+        # seed points sampled from ViPE's depth, one track per point, so gsplat's --depth_loss can supervise the
+        # rendered depth at those pixels (the fix for Gaussians stretched along the walking direction)
+        seed_xyz, seed_rgb, tracks, uv = depth_points(work, v, chosen, reader)
+        for j, (img, (u, vv)) in enumerate(zip(tracks, uv), start=1):
+            obs.setdefault(int(img), []).append((float(u), float(vv), j))
     lines = []
     for i, c in enumerate(chosen, start=1):
         name = f"{c.idx:05d}"
@@ -99,17 +111,56 @@ def prepare(work: Path, static: bool = False) -> Path:
         w2c = np.linalg.inv(c2w)
         q = _quat_wxyz(w2c[:3, :3])
         t = w2c[:3, 3]
-        lines.append(f"{i} {q[0]:.9f} {q[1]:.9f} {q[2]:.9f} {q[3]:.9f} {t[0]:.9f} {t[1]:.9f} {t[2]:.9f} 1 {name}.jpg\n\n")
+        pts2d = " ".join(f"{u:.2f} {vv:.2f} {pid}" for u, vv, pid in obs.get(i, []))
+        lines.append(f"{i} {q[0]:.9f} {q[1]:.9f} {q[2]:.9f} {q[3]:.9f} {t[0]:.9f} {t[1]:.9f} {t[2]:.9f} 1 {name}.jpg\n{pts2d}\n")
     (col / "sparse/0/images.txt").write_text("".join(lines))
-    xyz, rgb = read_splat_ply_xyz_rgb(work / "world" / "bg_points.ply")
-    if len(xyz) > INIT_POINTS:
-        sel = np.random.default_rng(0).choice(len(xyz), INIT_POINTS, replace=False)
-        xyz, rgb = xyz[sel], rgb[sel]
+    if not DEPTH_LOSS:
+        seed_xyz, seed_rgb = read_splat_ply_xyz_rgb(work / "world" / "bg_points.ply")
+        if len(seed_xyz) > INIT_POINTS:
+            sel = np.random.default_rng(0).choice(len(seed_xyz), INIT_POINTS, replace=False)
+            seed_xyz, seed_rgb = seed_xyz[sel], seed_rgb[sel]
+    pos_in_image = {}                                          # point id -> its index in that image's POINTS2D
+    for img, lst in obs.items():
+        for k, (_, _, pid) in enumerate(lst):
+            pos_in_image[pid] = k
     with open(col / "sparse/0/points3D.txt", "w") as f:
-        for i, (p, c) in enumerate(zip(xyz, rgb), start=1):
-            f.write(f"{i} {p[0]:.5f} {p[1]:.5f} {p[2]:.5f} {c[0]} {c[1]} {c[2]} 0\n")
-    print(f"[background] colmap dir: {len(chosen)} images, {len(xyz)} seed points")
+        for i, (p, c) in enumerate(zip(seed_xyz, seed_rgb), start=1):   # (the image loop above reuses `rgb`)
+            track = f" {tracks[i - 1]} {pos_in_image[i]}" if tracks is not None else ""
+            f.write(f"{i} {p[0]:.5f} {p[1]:.5f} {p[2]:.5f} {c[0]} {c[1]} {c[2]} 0{track}\n")
+    print(f"[background] colmap dir: {len(chosen)} images, {len(seed_xyz)} seed points" + (" (from ViPE depth, with tracks)" if tracks is not None else ""))
     return col
+
+
+def depth_points(work: Path, v, chosen: list, reader) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """~INIT_POINTS world-frame points sampled on a grid from ViPE's depth of the chosen frames (static pixels,
+    not on depth edges, closer than MAX_DEPTH), with the 1-based COLMAP image id that saw each. Every image gets
+    at least one point (gsplat's depth loader indexes by image). Also returns each point's pixel (u, v)."""
+    from .vipe_io import backproject, depth_edges, transform
+    from .world import MAX_DEPTH, WorldPoses
+
+    wp = WorldPoses(work)
+    per = int(np.clip(INIT_POINTS // max(1, len(chosen)), 300, 1500))
+    pts, cols, ids, uvs = [], [], [], []
+    for i, c in enumerate(chosen, start=1):
+        d = v.depth(c.idx) * wp.depth_scale(c.idx)
+        rgb = reader.get(c.idx)
+        if rgb.shape[:2] != d.shape:
+            rgb = cv2.resize(rgb, (d.shape[1], d.shape[0]), interpolation=cv2.INTER_AREA)
+        stride = max(2, int(np.ceil(np.sqrt(d.shape[0] * d.shape[1] / per))))
+        sel = (d < MAX_DEPTH) & ~depth_edges(d)
+        st = v.static_mask(c.idx, d, margin_px=4)
+        if st is not None:
+            sel &= st
+        p, vv, uu = backproject(d, v.K(c.idx), sel, stride=stride)
+        if len(p) == 0:
+            p, vv, uu = backproject(d, v.K(c.idx), np.isfinite(d) & (d > 0), stride=stride)
+        if len(p) == 0:
+            continue
+        pts.append(transform(wp.c2w(c.idx), p))
+        cols.append(rgb[vv, uu])
+        ids.append(np.full(len(p), i, np.int32))
+        uvs.append(np.stack([uu, vv], 1))
+    return np.concatenate(pts), np.concatenate(cols), np.concatenate(ids), np.concatenate(uvs)
 
 
 def train(work: Path, steps_scaler: float = 0.25, static: bool = False) -> Path:
@@ -120,10 +171,18 @@ def train(work: Path, steps_scaler: float = 0.25, static: bool = False) -> Path:
     cmd = [sys.executable, "-m", "memreplay.train_splat", "mcmc", "--data_dir", str(work / "colmap"),
            "--data_factor", "1", "--result_dir", str(out), "--strategy.cap-max", str(cap),
            "--steps_scaler", str(steps_scaler), "--save_ply", "--disable_viewer",
-           "--no-normalize-world-space"]   # no --app_opt: its per-image colour correction is lost at export
+           "--no-normalize-world-space", "--app_opt"]
+    # --app_opt (per-image appearance embedding) is lost at export, so colours come out a little averaged, but without
+    # it the MCMC training diverges on these auto-exposed phone clips: the loss climbs after ~20 % of the steps and
+    # 85 % of the Gaussians end with opacity < 0.002 (room corner: 390k usable Gaussians with it, 13k without)
     if static:   # refine ViPE's poses; evaluate on held-out frames at the end
         steps = int(30_000 * steps_scaler)
-        cmd += ["--pose_opt", "--test_every", str(STATIC["test_every"]), "--eval_steps", str(steps)]
+        # gsplat's default pose_opt_lr (1e-5) moves cameras only ~2 mm; 1e-3 let the whole splat drift away from the
+        # held-out cameras (room corner PSNR 19 -> 8), so path drift is left to S3's levelling instead
+        # gsplat multiplies eval_steps by steps_scaler itself, so pass the unscaled count to evaluate at the end
+        cmd += ["--pose_opt", "--test_every", str(STATIC["test_every"]), "--eval_steps", "30000"]
+        if DEPTH_LOSS:
+            cmd += ["--depth_loss", "--depth_lambda", str(DEPTH_LAMBDA)]
     else:
         cmd += ["--eval_steps", "-1", "--test_every", "100000"]
     subprocess.run(cmd, check=True, env=env)
@@ -158,4 +217,8 @@ def run(work: Path, steps_scaler: float | None = None, static: bool = False) -> 
     if steps_scaler is None:
         steps_scaler = STATIC["steps_scaler"] if static else 0.25
     prepare(work, static)
-    convert(work, train(work, steps_scaler, static), static)
+    ply = train(work, steps_scaler, static)
+    if static:
+        from . import bake
+        ply = bake.run(work) or ply                            # colours at the mean appearance, not the zero one
+    convert(work, ply, static)

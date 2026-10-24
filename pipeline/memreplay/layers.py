@@ -21,6 +21,7 @@ from .vipe_io import Vipe, dilate
 from .world import WorldPoses
 
 MIN_GAUSSIANS = 50
+SNAP_FLOOR = False
 MAX_VIEWS = 30
 
 
@@ -69,10 +70,11 @@ def to_spz(ply: Path, spz: Path) -> None:
 
 def run(work: Path) -> dict:
     work = Path(work).resolve()
-    plys = sorted((work / "gsplat_static" / "ply").glob("point_cloud_*.ply"), key=lambda p: int(p.stem.split("_")[-1]))
-    if not plys:
+    from .bake import static_ply
+    ply = static_ply(work)                                     # baked colours when available (S6c)
+    if ply is None:
         raise SystemExit("no static splat yet: run `memreplay stage background --static` first")
-    data = read_ply(plys[-1])
+    data = read_ply(ply)
     xyz = np.stack([data["x"], data["y"], data["z"]], 1).astype(np.float64)
     ok = np.isfinite(xyz).all(1)
     data, xyz = data[ok], xyz[ok]
@@ -85,7 +87,9 @@ def run(work: Path) -> dict:
     # 1. put the splat's floor exactly at y = 0, and rewrite the static room with it
     cam_xz = np.array([[c.c2w[3], c.c2w[11]] for c in cams.values()])
     opacity = 1 / (1 + np.exp(-data["opacity"].astype(np.float64)))
-    shift = floor_offset(xyz, opacity, cam_xz)
+    # The splat is trained on the S3 cameras, so it already sits in the world frame; snapping its densest low
+    # layer to y = 0 picked a couch seat or bed in two clips and pushed the room 0.35 m off the props. Off by default.
+    shift = floor_offset(xyz, opacity, cam_xz) if SNAP_FLOOR else 0.0
     data["y"] = (data["y"] - shift).astype(np.float32)
     xyz[:, 1] -= shift
     # 2. prune floaters in front of the camera path, giants and needles (cleanup.py)

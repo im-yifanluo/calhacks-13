@@ -1,0 +1,348 @@
+# Judge panel, run2 depth bake exposure
+
+# Judging report: video to 3D scenes
+
+Scores are out of 5, and passing needs layout 3.5 and colour 3. Where the judges disagreed, the second judge's scores are used.
+
+- **Hotel room (img8013):** layout 3.0, colour 2.5, moving things 4. Fails.
+- **Hotel room corner (img8014):** layout 4.0, colour 3.0, moving things 4. Passes, just.
+- **Hotel corridor (img8015):** layout 3.3, colour 2.75, moving things 4. Fails.
+- **Hotel lobby (img8016):** layout 3.7, colour 2.7, moving things 4. 3 of 6 rows lost tracking (score 1). Fails.
+- **Night walk downtown (img8017):** layout 2.9, colour 2.75, moving things 3. Its 129.7 s row looks nothing like the video and was not faded. Fails.
+
+## Main defects
+
+**Fixable in the pipeline**
+1. **Warm colour cast.** In every clip, white walls, ceilings and floors come out peach, salmon or orange. Exposure replay also burns lamp-lit walls and the bathroom to white. A per-channel white-balance fix is the biggest single win.
+2. **Floaters and stretched splats.** Blobs sit on walls and pictures, and carpet turns into needles or smooth sheets. Translucent slabs lie on floors and discs float in the night sky. Pruning, a cap on splat size and denser floors would fix most of this.
+3. **Tracking and fades.** The lobby loses its last ~15 s despite sharp footage. Its fades vary in colour and let the scene show through. The night walk's pavement stretch should have been faded. Cars are not treated as moving objects.
+
+**Inherent to the footage**
+4. **Blur and low texture near the camera:** carpet streaks, overexposed shower tile, night pavement, the brief vacuum close-up.
+5. **Light that changes with the view:** window reflections, lamp glow, TV screens, night flare.
+
+## Verdict
+
+Mostly no. Only 1 of 5 clips largely matches, and only at the bar. From the recorded camera the geometry usually holds: the poses line up and every indoor room is recognisable. The scenes fall short mainly on colour and splat noise, both pipeline problems rather than footage limits. Fixing the colour would likely flip the lobby, and floater pruning could flip the corridor.
+
+
+## Per-clip verdicts
+
+
+### Hotel room (`img8013`)
+
+Judge: layout 3.2, colour 2.7, moving things 4, largely matches: False.
+
+Per-row scores (layout/colour): 3.5 s 4/3, 10.4 s 3/2, 17.4 s 3.5/3.5, 24.3 s 3.5/3, 31.3 s 2.5/2, 38.3 s 2.5/2.5. Averages: layout ≈3.2, colour ≈2.7. That fails both thresholds (3.5 and 3), although no row drops below 2 on layout, so largely_matches is false. The bedroom rows (3.5 s, 17.4 s, 24.3 s) are clearly the same room: desk corner, bed, window, sofa and towel are in the right places, with smeared, streaky carpet and scattered floaters. At 10.4 s the upper half (accent wall, ceiling, right wall) is a brown smear. The bathroom rows (31.3 s, 38.3 s) are weak: the toilet and the shower tiles nearly vanish and a large blob covers the picture. Colour is the weaker axis: a warm/peach cast on white walls, an orange window, a grey shower where the video is white, and the 10.4 s histogram match at 0.28. Moving things: no people are in the clip and no false ghosts appear. Small props (pouch on bed, towel, headphones) are present. The shower curtain does not occlude the dispensers as it does in the video. No rows were flagged tracking lost and none needs a fade: poses look aligned in every row and the bathroom errors come from reconstruction and exposure. fade_justified is true only because nothing was faded, and lost_rows_score 0 means there were no lost rows to score. Fixable in the pipeline: floater pruning ('R' blob, green blob on the picture, stringy floaters, magenta smear), white balance / colour correction, and hot exposure in the bed and bathroom rows. Mostly inherent: motion-blur carpet streaks, the window reflection glow, and textureless overexposed tile.
+
+Defects:
+
+- 3.5 s: The floor lamp at the left edge (pole and shade) is missing. Only a faint base survives, and the wall is drawn straight through where the lamp should be. (partly: a thin object with low coverage. Check whether the near-camera or needle pruning removed it.)
+- 3.5 s: A dark 'R'-shaped floater and thin dark stringy floaters hang on the white wall above the desk. (yes: floater pruning (small, isolated, opaque splats in front of the wall))
+- 3.5 s: A saturated magenta/purple smear sits on the carpet beside the desk leg. (yes: prune high-saturation outlier splats)
+- 3.5 s: The wall has a warm peach/orange cast where the video's wall is neutral white-grey. The desk edge is a glossy smeared streak and the carpet is streaky. (cast: yes (white balance / per-frame colour). Streaks: partly inherent (motion blur, view-dependent sheen).)
+- 10.4 s: The dark charcoal accent wall above the headboard is a brown and white mottled smear, the ceiling corner has brown blobs, and the right wall with its framed picture is smeared. The colour histogram match is only 0.28. (partly: floater pruning and more optimisation. Coverage of the upper wall looks thin.)
+- 10.4 s: Dark teal and black streak floaters run down the left edge, near the camera. (yes: near-camera-path pruning)
+- 10.4 s: The bed sheets clip to flat white and lose their wrinkles and the pillow shapes. The upper half is too bright and too brown. (partly: exposure replay is too hot here)
+- 17.4 s: A large bright glow blob covers the centre of the window above the desk: the lamp's reflection is smeared into a halo. The window glass is orange-brown instead of grey, and the desk-top items are smeared into white blobs. (partly: the reflection is view-dependent (inherent). The tint is fixable with colour correction.)
+- 17.4 s: The foreground carpet has orange smudges and radial streaks, and the chair at the left edge is dark smeared streaks. (partly: pruning of elongated needles. Some is motion blur in the footage.)
+- 24.3 s: The TV at the top left is blown to a white/green blob and the lamp shade has dissolved into white. The background desk area is a cloud of grey-white stringy floaters. (exposure clipping is expected. The floaters can be pruned.)
+- 24.3 s: The carpet is heavily streaked and radially smeared, and the sofa edges are soft. The sofa and towel are in the right places. (partly: needle pruning. Motion blur is inherent.)
+- 31.3 s: The toilet nearly vanishes into a white-on-white smear with no bowl or lid outline, and the lower right is washed out. (partly: overexposure and low coverage (inherent), plus exposure replay that is too hot)
+- 31.3 s: A large green-grey blob floater covers the right half of the framed picture, and the picture's contents are smeared. (yes: floater pruning)
+- 31.3 s: The grey textured wall renders near-white with peach smudges. There are dark streak floaters at mid-left and a red stripe along the bottom. (colour: yes. Floaters: yes (pruning).)
+- 38.3 s: The shower tile wall and its grout lines are gone, replaced by a flat grey smear, and the tub rim is missing. The whole frame is grey where the video is bright white (PSNR 9.8). (exposure and colour: fixable. Tile detail: mostly inherent (close range, overexposed, low texture).)
+- 38.3 s: The render shows three soap dispensers where the video shows one, because the shower curtain does not occlude them. The curtain edge sits further right than in the video, so the curtain moved or did not reconstruct as opaque. (partly: the curtain is effectively a moving object. It could be carved as a prop or masked.)
+
+
+Skeptic (agrees: True):
+
+I agree with the verdict: largely_matches is false. I split the grid into full-resolution rows (1350x800 each) and checked every one. The first judge's per-row scores are within about 0.5 of mine, and the averages fail both thresholds either way.
+
+My per-row scores (layout/colour):
+- 3.5 s: 3.5/3. The first judge gave 4, which is slightly generous, because the floor lamp, a prominent object in frame, is gone.
+- 10.4 s: 2.5-3/2. The bed, headboard block and pouch are placed correctly, but the upper ~45% (accent wall, ceiling, right wall) is a brown/white smear and the pillow shapes are gone.
+- 17.4 s: 3.5/3. The first judge's colour 3.5 is a little generous: the window is orange-brown where the video is grey, and there are orange carpet smudges, even though the whole-frame histogram match is 0.948.
+- 24.3 s: 3/3. The first judge gave layout 3.5, a bit high: the TV and the left wall are blown to white and the desk area is a cloud of floaters, so only the sofa, towel, lamp pole and carpet hold up.
+- 31.3 s: 2.5/2.
+- 38.3 s: 2.5/2.
+
+My averages are layout ≈3.0 and colour ≈2.5. Either set fails the 3.5 and 3 thresholds, and no row falls below 2 on layout.
+
+Every defect the first judge listed is real and placed correctly:
+- the missing lamp with only its base left
+- the 'R' floater and the magenta smear at 3.5 s
+- the teal/black streaks on the left edge at 10.4 s
+- the lamp glow halo and orange window at 17.4 s
+- the green-grey blob over the picture and the vanished toilet at 31.3 s
+- the three dispensers at 38.3 s
+
+On the dispensers, the render's leftmost dispenser sits exactly where the video's single visible one is. The other two, including a teal one, are real dispensers that the curtain hides in the video, so the curtain fails to occlude them. They are not pose ghosts.
+
+Small defects the first judge missed:
+- 17.4 s: the bed's dark base/side panel is missing. The white duvet smear runs about 60 px further down, over where the dark base should be.
+- 24.3 s: the radiator under the desk is replaced by horizontal carpet-like streaks.
+- 31.3 s: the towel bar is gone and the hand towel is a smear.
+
+None of these changes the outcome. No rows are flagged as tracking lost (gap_rows is empty) and poses look aligned in every row. So fade_justified=true holds only in the trivial sense that nothing was faded, and lost_rows_score=0 just means there were no lost rows to score. Dynamic 4 is fair: there are no people, no false ghosts, and the small props are present. The only dynamic-ish error is the curtain occlusion at 38.3 s.
+
+The split between fixable and inherent defects is reasonable. Floaters, the magenta outlier, white balance and the over-hot exposure in the bed and bathroom rows can be fixed in the pipeline. The motion-blur carpet streaks, the view-dependent window glow and the overexposed, low-texture tile are mostly inherent to the footage.
+
+
+### Hotel room corner (`img8014`)
+
+Judge: layout 4, colour 3, moving things 4, largely matches: True.
+
+Verdict: the render largely matches the video, mainly because the geometry is right; colour only just passes. All six rows are tracked and none is marked lost, so lost_rows_score is 0, meaning not applicable. No fade is needed or applied: alignment is good in every row, so no stretch should have been flagged.
+
+Per-row layout / colour scores:
+- 0.9 s: 4.5 / 3.5
+- 2.7 s: 4.5 / 4
+- 4.5 s: 4 / 3.5
+- 6.3 s: 4 / 2.5
+- 8.1 s: 3.5 / 2.5
+- 9.9 s: 4 / 3
+
+That averages to about 4.1 for layout and 3.2 for colour, with no row below 3.5 on layout, so the thresholds are met. Colour clears the 3.0 bar by little.
+
+**What works:**
+- **Layout:** the TV, couch, zebra pillow, outlet, ottoman, paper, the floor lamp with its stem, base and cord, and the carpet are all in the right places and at the right sizes. Only a slight edge misalignment shows in the difference images.
+- **Dynamic:** there are no people in the clip and no ghosts in the render, which is correct. The paper prop is present and in place in every row. It scores 4 instead of 5 because of the white residual fragment beside the paper at 9.9 s and because the paper's printed text is lost.
+
+**Main failures:**
+- **Wall colour around the lamp:** at 6.3 s, 8.1 s and 9.9 s the wall is blown to white and mottled with pink, peach and brown smears. The video's grey wall with its light-cone gradient is gone. At 8.1 s the lamp shade blends into the wall.
+- **Left wall tint at 0.9 s:** a strong salmon colour cast.
+- **Wall floaters:** a squiggle at 2.7 s, blobs at 4.5 s, dark smears at 8.1 s and 9.9 s.
+
+The brief notes that per-frame exposure can clip bright walls to white, and that explains part of it. The mottling and smears, however, are splat artefacts that pruning and exposure-aware training could reduce. What is inherent to the footage: a saturated light source, and the wall behind it seen under large exposure swings.
+
+Metrics: whole-frame mean PSNR 20.6, SSIM 0.87, hist 0.75. The centre-third hist is 0.62, dragged down by the lamp rows (0.38–0.55).
+
+Defects:
+
+- 0.9 s: The left third of the wall has a strong orange/salmon cast where the video shows a cream wall. There is a bluish smear in the top-right corner above the lamp. The TV's on-screen 'Still trying to sign in' text is unreadable. (Fixable: colour/exposure normalisation (per-view appearance or exposure compensation) during training/bake)
+- 0.9 s: The difference image shows thin bright outlines along the TV frame, the couch arm and back, the pillow and the paper. This means a few pixels of pose or scale misalignment. (Fixable: pose refinement / alignment)
+- 2.7 s: A dark squiggle floater sits on the wall just below the TV, right of centre. There is a peach tint on the lower-left wall. The TV screen text and the reflection on the screen are blurred. (Floater: fixable by pruning. Screen blur: largely inherent (view-dependent emissive screen))
+- 4.5 s: The wall left of the lamp, under the TV, is filled with smeared grey/blue/peach blobs. The top edge of the lamp shade is doubled or ghosted on its left side. The TV screen content is smeared. (Wall blobs: fixable (floater pruning / stronger opacity regularisation on the wall plane). Shade ghosting: partly inherent (lit, saturated shade))
+- 6.3 s: The whole wall is blown to near-white with pink/peach mottling, plus a red streak at the top-left. The video shows a grey wall with a clear light cone falling off from the lamp. That gradient is gone. The paper's printed text is lost (blurred). Hist match is 0.66; centre hist is 0.55. (Mostly fixable: the per-frame exposure replay overshoots here (the camera stopped down for the lamp, but the render clips the wall to white), and the mottling is splat noise that pruning or smoothing can address. Some of it is the acknowledged exposure clipping.)
+- 8.1 s: The worst row (PSNR 17.8, centre hist 0.38). The lamp shade dissolves into the white wall: its top rim is barely visible and the upper silhouette is lost, so only the bottom band and stem read clearly. There is a dark blotch on the wall left of the stem at mid-height. Murky brown/grey smears run along the bottom of the wall behind the couch back, near the floor line. (Partly fixable (exposure handling, floater pruning near the wall/floor junction). Partly inherent: the wall right behind a saturated lamp is poorly constrained in the footage.)
+- 9.9 s: A white wispy fragment floats just left of the paper on the ottoman. It looks like leftover from carving out the paper prop, or a duplicate of it. Vertical brown streaky smears cover the wall right of the lamp stem. The shade's top rim is blurred and ghosted. The wall is overall whiter than in the video (hist 0.50). (Fixable: clean up residue from the prop carve-out, prune floaters, and fix exposure)
+- -1 s: Across all rows the lamp shade glows as clipped white, which is acceptable per the brief. The wall area around the lamp is the weakest region in every lamp row, at 6.3 s, 8.1 s and 9.9 s. (Partly inherent (light source and exposure swings in the footage). Partly fixable (exposure-aware training))
+
+
+Skeptic (agrees: True):
+
+I agree with the verdict, but colour passes only at the very edge.
+
+I checked every row at full resolution, including the difference column. The first judge's defect list is accurate and I could not find a defect they invented. Their metric quotes are correct: 6.3 s hist 0.66 and centre hist 0.55; 8.1 s PSNR 17.8 and centre hist 0.38; 9.9 s hist 0.50. There are no gap rows, so it is right that nothing is marked lost.
+
+Where I would be stricter:
+- **8.1 s colour should be 2, not 2.5.** The video's grey wall and light cone are replaced by a flat near-white sheet with peach and brown smears. The shade's upper outline merges into the wall. Only the stem, base and ottoman keep their correct tones.
+- **8.1 s layout is closer to 3 than 3.5.** The top of the shade is unreadable.
+- **0.9 s colour is arguably 3, not 3.5.** The salmon cast covers the whole left strip of the wall, and there is a blue smear in the top right.
+
+Re-scoring strictly per row:
+- Layout: 4.5, 4.5, 4, 4, 3, 4. Average 4.0, no row below 3.
+- Colour: 3, 4, 3.5, 2.5, 2, 3. Average exactly 3.0.
+
+So the thresholds are still met (layout ≥ 3.5, colour ≥ 3) and largely_matches = true holds. The top-level scores of layout 4, colour 3 and dynamic 4 stay as given. Dynamic 4 is fair: there are no people and no ghosts, and the paper prop is in place. The white residue fragment beside the paper at 9.9 s and the lost print on the paper keep it from a 5.
+
+Small defects the first judge did not list:
+- 6.3 s: the shade's top rim is doubled or ghosted, and there is a dark smudge on the paper's left edge.
+- 2.7 s: a soft white smear along the TV's top-right edge, and a small purple blotch on the wall at the right edge.
+- 9.9 s: a peach smear right of the shade. The shade's top extends into a white blob with no rim. The TV frame shows a few pixels of misalignment in the difference image.
+
+fade_justified = true holds only trivially, because no rows were marked lost.
+
+Bottom line: the geometry is clearly right. Colour and lighting are wrong across the wall in half the clip (the three lamp rows), and the verdict survives only because the threshold is ≥ 3.0.
+
+
+### Hotel corridor (`img8015`)
+
+Judge: layout 3.4, colour 2.75, moving things 4, largely matches: False.
+
+This does not largely match. The camera alignment is good: in 6.1, 18.2, 30.3 and 66.6 s the corridor's vanishing point, walls, doors, ceiling soffits, EXIT sign and door handle all sit in the right places. But the floor is never reconstructed as carpet. Near the camera it shows up as streaks, white needle splats or a smooth grey-brown sheet. The white walls and ceiling also carry a persistent peach/pink cast. At 42.4 s the close-up of the vacuum and linens is only partly recognisable (a pink smear with yellow streaks; PSNR 13.3, colour-histogram match 0.53). At 54.5 s there are floaters and a translucent slab on the floor, and the picture on the right wall is missing (centre SSIM 0.32). Per-row layout scores are 4, 4, 4, 2, 3 and 3.5, which average 3.4, below the 3.5 bar. Colour scores are 3, 3, 3, 2, 2.5 and 3, which average 2.75, below the 3 bar. No row is below 2 on layout. The clip has no people and the render shows no false ghosts, so dynamic gets 4. No rows are marked tracking lost, so nothing is faded. Not fading is consistent with what I see: even the 42.4 s failure looks like poor reconstruction rather than a lost pose, since the vacuum's yellow cord lines up. lost_rows_score is 0 only because there are no lost rows to score. Most defects look fixable in the pipeline: prune floaters and needle splats, cap splat scale, regularise or densify the floor, and correct colour per frame. The 42.4 close-up and the fine carpet texture are partly limited by the footage.
+
+Defects:
+
+- 6.1 s: Near carpet (bottom ~40% of frame) is smeared into long streaks and smooth grey-brown patches; the blue-grey flecked carpet texture is gone. (partly: more floor densification/training and scale regularisation would help; grazing-angle repetitive carpet with motion blur is partly inherent)
+- 6.1 s: Ceiling and upper walls have a peach/orange cast instead of neutral white-grey; the door sign on the left wall renders red instead of dark grey; wall-lamp glow on the left is spread into a wide white smear. (mostly fixable: per-frame appearance/white-balance compensation; the lamp clipping is partly the expected exposure replay)
+- 18.2 s: Framed picture on the left wall is an orange/dark smeared blob; a dark diagonal streak runs along the upper left wall; right wall is pinkish; ceiling is orange-tinted; near carpet is streaky brown. (fixable: colour correction, more iterations on wall detail; picture smear partly from few views)
+- 30.3 s: Dark grey wall beside the EXIT sign is covered in milky lighter elliptical blobs (oversized soft splats); the HOUSEKEEPING plaque text is unreadable (just a white bar); the near carpet is a mass of white needle-shaped splats; ceiling strip has green/orange tints. (fixable: needle/anisotropy pruning, cap on splat scale, opacity reset; plaque text detail partly inherent)
+- 42.4 s: Close-up of the vacuum cleaner and stacked white linens next to the wall renders as a pink/white directional smear: the vacuum is only a yellow/dark streak on the left and the linens are replaced by orange/brown blobs at the bottom. PSNR 13.3, colour-histogram match 0.53. Only partly recognisable. (partly: this is a short close-up with few views (largely inherent), but pruning the stretched splats or carving the cart as a prop would reduce the smear; pose looks roughly right (yellow cord on the left lines up), so it is a reconstruction failure, not a tracking failure)
+- 54.5 s: Bottom half of the floor is a smooth translucent grey sheet with bubble-like floaters; a translucent slab floats across the corridor floor a few metres ahead; the framed picture on the right wall is missing (only a dark smudge); left-wall doors are washed out; red/orange streaks on the upper right wall; ceiling is a dark smear. Centre SSIM 0.32. (fixable: prune floaters near the camera path, regularise the floor plane, colour correction; the missing picture may need more views)
+- 66.6 s: Carpet is replaced by a smooth grey-brown sheet with dark scratch marks; the left wall has red/blue blotches and a red streak above the picture; the right wall is pinkish with a dark diagonal smear along the cornice; the ceiling is too dark. (fixable: floor regularisation/densification, colour correction, cornice streak pruning)
+- 0 s: Across all rows: the carpet is never reconstructed as carpet, and the whole scene has a warm pink/peach cast on the white walls and ceiling. (fixable: appearance/exposure compensation and floor densification in the pipeline)
+
+
+Skeptic (agrees: True):
+
+I agree with the verdict, and every score is within half a point of what I would give. I checked each row at full resolution.
+
+The camera alignment is good. At 6.1, 18.2, 30.3 and 66.6 s the vanishing point, doors, soffits, EXIT sign, plaque and door handle all land in the right places, so layout 4 for the first three rows is fair.
+
+The floor is never carpet, though. It shows up as:
+- streaks at 6.1 and 18.2 s
+- white needle splats at 30.3 s
+- a translucent grey sheet with bubble floaters and a floating slab at 54.5 s
+- a smooth sheet with scratches at 66.6 s
+
+The white walls and ceiling carry a pink/peach cast in every row. The door sign at 6.1 s renders red. The picture at 18.2 s is an orange/dark blob. The dark wall at 30.3 s is covered in milky elliptical blobs.
+
+At 42.4 s the render is a pink-white directional smear. Only a yellow streak hints at the vacuum, and the linens are orange blobs (PSNR 13.3, colour-histogram match 0.53). Layout 2 and colour 2 are right there.
+
+At 54.5 s the picture on the right wall is gone (only a dark smudge), and there are red streaks and a dark ceiling smear (centre SSIM 0.32). Layout 3 is fair and arguably a touch generous.
+
+If anything, 66.6 s at layout 3.5 is slightly generous. The walls are heavily smeared, there are red/blue blotches top-left and a dark cornice streak on the right, so I would give 3. That would lower the layout average to about 3.33 rather than raise it.
+
+The verdict is robust either way. Colour averages 2.75, and it cannot reach 3 unless the 42.4 s row is scored 3. A white wall rendered pink, with a histogram match of 0.53, does not justify that.
+
+One small omission: at 18.2 s there is also a dark diagonal streak along the upper right cornice, not only the upper left. It does not change any score.
+
+Dynamic 4 is reasonable. The clip has no people, and the floaters are static artefacts, not ghosts.
+
+No rows are marked tracking lost, so nothing is faded. That is consistent with what I see: the 42.4 s failure keeps the vacuum on the left where it belongs, so the pose is roughly right and this is a reconstruction failure, not lost tracking.
+
+The split between fixable and inherent defects is sensible:
+- **Fixable in the pipeline:** prune needles and floaters, cap splat scale, regularise or densify the floor, correct colour per frame.
+- **Partly inherent to the footage:** the few-view close-up at 42.4 s and the fine carpet texture.
+
+
+### Hotel lobby (`img8016`)
+
+Judge: layout 3.6, colour 2.8, moving things 4, largely matches: False.
+
+Verdict: the render does not largely match the video. Layout is acceptable, but colour falls just short of the bar of 3.
+
+Only 3 of the 6 rows are tracked (2.8, 8.5 and 14.1 s). In those rows the layout clearly matches: the corridor, the red armchairs, the white column, the ceiling with the blue LED strip and the exit sign, the menu stands, the stone pillar, the faceted dark wall and the escalator are all in the right places and sizes. Layout per row is 4, 4 and 3, averaging about 3.6, with no row below 2.
+
+Colour fails the bar. In every tracked row the floor, about half the frame, renders salmon/peach instead of grey-beige oak. Red rises about 15-35 levels while blue drops 10-30, and the dark wall and ceiling stay close to the video. At 2.8 s the left third of the floor is also blown to white and the plank detail is smeared, and the centre colour-histogram match there is 0.205. Colour per row is 2.5, 3 and 3, averaging about 2.8.
+
+Floaters:
+- A yellow blob on the floor at 8.5 s.
+- A see-through patch of the bar area on the wall at 14.1 s.
+- Red and skin-coloured smears on the dark wall at 14.1 s, either a baked reflection of the armchairs or a passer-by baked into the static room.
+
+Moving things: no people appear in the tracked rows of the video and no ghosts are drawn there, which is correct. The only issue is the red smear at 14.1 s. Dynamic scores 4.
+
+Tracking-lost rows (19.7, 25.4 and 31 s) score 1, as expected. The fills are not black: dark green, mid grey and navy, and at 31 s a faint outline bleeds through. Fading is the right call rather than drawing from bad poses, so the fade is justified as policy. The footage itself is sharp and well-lit, though, with good texture (desk, carpet, doors, stanchions). The tracking loss therefore looks like a pipeline failure, not a footage limit. It covers roughly the last 15+ s of the 34 s clip, so the reception desk and entrance are missing from the memory entirely.
+
+Highest-value fixes, in order:
+1. A per-channel colour/white-balance correction for the floor cast; this alone would likely push colour to 3 or above and flip the verdict.
+2. Floater and opacity pruning at 8.5 and 14.1 s.
+3. Masking passers-by out of the static splat.
+4. Recovering poses in the 19.7-34 s stretch.
+
+Metrics on tracked rows: PSNR 18.2, SSIM 0.70, histogram 0.58. Files: grid /private/tmp/claude-501/-Users-yifanluo-Hackathons-CalHacks-13/e2a2e10a-ec8f-4abc-bab2-5e2c4c111cc5/scratchpad/judge_in/final/img8016.jpg; metrics /private/tmp/claude-501/-Users-yifanluo-Hackathons-CalHacks-13/e2a2e10a-ec8f-4abc-bab2-5e2c4c111cc5/scratchpad/judge_in/final/img8016.json
+
+Defects:
+
+- 2.8 s: The floor fills the lower ~55% of the frame. It renders salmon/peach instead of grey-beige oak (mean RGB video 214,185,155 vs render 248,183,147). The plank pattern is smeared into streaks, and the left third of the floor is blown to near-white. Centre colour-histogram match is only 0.205. (Mostly fixable. The hue cast is a colour/white-balance error (per-channel exposure or colour-correction fit, too much freedom in view-dependent colour). The white clipping may partly come from the expected exposure replay. Floor sharpness needs more or closer floor views and is partly limited by the footage.)
+- 2.8 s: The near-left white wall is washed out with faint blue/pink vertical smears, likely a ghost copy of the wall paintings. The dark door frame at the left edge of the video is missing. (Fixable: prune floaters near the camera path.)
+- 2.8 s: The ceiling soffit at upper right and the black ceiling box are smeared into a dark blotch. The far bar is a warm orange blur instead of a dark bar with bottles and screens. (Mostly inherent: distant, seen briefly, low resolution. Mild pruning could help the soffit blotch.)
+- 8.5 s: The whole lower half of the floor is pink-salmon and blurred, and the ceiling has a pink cast. The planks are only faintly visible. (Fixable (colour calibration). Same systematic cast as at 2.8 s and 14.1 s.)
+- 8.5 s: A yellow-orange blob floats on the floor between the plant pot and the white menu stand, with nothing matching it in the video. The plant pot and the left-hand seating (red chairs, tables) look doubled and smeared, and the white doorway is over-bright and enlarged. (Fixable: floater pruning, plus pose/alignment refinement for the doubling.)
+- 8.5 s: The bar's back wall is a blur: bottles, the TV and the bar shelving are lost. (Largely inherent: distant and seen only from far away.)
+- 14.1 s: Red streaks and a skin-coloured, hand-like smear sit on the dark faceted wall at upper centre. None of this is in the video. It is either a baked reflection of the red armchairs on the glossy wall or a passer-by baked into the static room splat. (Fixable: dynamic-object masking before training and floater/opacity pruning. A reflective wall is partly inherent.)
+- 14.1 s: At mid-left the wall goes see-through: a burst of blue/yellow/white/red from the bar area shows through. A spurious lighter panel or opening appears at upper left where the video shows a solid dark wall corner. (Fixable: prune or raise opacity on wall splats, and remove floaters from other parts of the room.)
+- 14.1 s: The fine striped texture of the faceted wall is smeared away, the escalator handrail is doubled and blurred, and the floor is orange-salmon instead of beige. (Texture loss is partly inherent (fine moire-prone stripes on reflective metal). The floor colour is fixable, and the doubled handrail points to small pose errors (refine_poses).)
+- 19.7 s: Tracking lost: the render is a flat dark-green fill, not black. The video shows the reception desk, wavy white feature wall, carpet and a receptionist behind the desk, with mild pan blur. (The fill colour is fixable (use one consistent fade colour). Mild motion blur may explain the loss starting here.)
+- 25.4 s: Tracking lost: the render is a flat mid-grey/mauve fill, not black. The video frame is sharp and well-lit: entrance glass doors, stanchions, patterned carpet, plants, art. That area is entirely missing from the 3D memory. (Fixable in the pipeline. The footage is good here, so relocalisation, a second submap or re-running SfM on this segment should recover poses.)
+- 31 s: Tracking lost: the render is a dark navy fill with a faint rectangular outline bleeding through, so the fade is incomplete and the colour differs from the other lost rows. The video is a sharp view of the sliding glass doors, floor and carpet. (Fixable: finish the fade fully and use a consistent colour, and recover tracking because the footage is clean.)
+
+
+Skeptic (agrees: True):
+
+I agree with the verdict: largely_matches = false. The scores are within about ±0.2 of my own: layout ~3.7, colour ~2.7–2.8, dynamic 4, lost rows 1, fade justified.
+
+Main finding, which I confirmed by measurement: every tracked row has a salmon/peach cast on the floor, and the floor is 30–55% of each frame. Mean floor RGB, video vs render:
+- 2.8 s: 220,196,170 vs 247,194,161
+- 8.5 s: 209,176,140 vs 232,167,130
+- 14.1 s: 238,203,143 vs 252,178,116
+
+So red rises by +14 to +27 and blue falls by −9 to −27. At 8.5 s the ceiling carries the same warm cast (177,133,120 vs 204,137,113), and the red chairs at 2.8 s are oversaturated (189,55,74 vs 245,65,88). The dark wall at 14.1 s is close to the video (43,41,41 vs 51,48,45). That gives colour of about 2.5 / 2.5–3 / 3 per row, which is below the bar of 3. The verdict is therefore correct, and a per-channel colour/white-balance fix is the most valuable change.
+
+Layout holds in all three tracked rows:
+- 2.8 s: corridor, chairs, pillar, exit sign, paintings and ceiling soffit are all in place.
+- 8.5 s: menu stands, stone pillar, plant pots, bar and LED strip are all in place.
+- 14.1 s: the faceted wall, escalator and floor edge are correct, but the wall is corrupted by a see-through burst at mid-left and by red/skin-coloured smears at upper centre.
+
+That gives layout of about 4 / 4 / 3 with no row below 2. Dynamic 4 is fair: no people appear in the tracked video frames, and the only possible baked passer-by is the hand-like smear at 14.1 s.
+
+Corrections to the first judge's defect list (none of them change the scores):
+1. **8.5 s, "doubled" plant pot:** this is wrong. The video itself has two pots: one cut off at the left edge and one at x≈95. The render reproduces both, just smeared.
+2. **8.5 s, "yellow-orange blob with nothing matching it":** this is overstated. It sits where the video has a bright reflection of the lights on the floor, so it is a mis-coloured, sharpened baked highlight rather than a pure floater.
+3. **2.8 s, "left third of the floor blown to near-white":** this is mostly faithful. The video is also near-white there from window glare (245,240,231 vs 249,235,218). The render only loses the plank detail.
+4. **Tracking-lost rows are not flat fills:** after contrast stretching, the 31 s render clearly shows the sliding-door frames and the floor edge, roughly where they are in the video, under the navy tint. The 25.4 s row also shows faint vertical structure. So "the entrance is entirely missing from the memory" is not established. Part of the geometry may exist and simply be hidden by the fade, or rendered from a bad pose.
+
+The fill colours are inconsistent (green, mauve, navy) and the 31 s fade lets the scene show through, as the first judge said. Fading is still justified as a policy. The footage at 25.4 s and 31 s is sharp, though, and 19.7 s has only mild pan blur, so the loss looks like a tracking/relocalisation failure in the pipeline rather than a limit of the footage.
+
+Other defects the first judge noted that I confirm:
+- 2.8 s: the left wall/door frame is washed out with blue/pink vertical smears.
+- 2.8 s: the black ceiling box is a blotch.
+- 8.5 s: the bar's back wall is lost to blur.
+- 14.1 s: the wall's stripe texture is gone and the escalator handrail is blurred/doubled.
+
+
+### Night walk downtown (`img8017`)
+
+Judge: layout 2.9, colour 2.8, moving things 3, largely matches: False.
+
+Verdict: does not largely match. On layout the six tracked rows score 2, 3, 4, 3, 4 and 1.5, averaging about 2.9, below the 3.5 bar. Colour averages about 2.8 (2, 3, 3.5, 2.5, 3.5, 2), below the 3 bar. The 129.7 s row is below 2 on layout, which fails the verdict on its own.
+
+- **Good rows (59 s, 106.1 s):** clearly the same intersection. Buildings, poles, signals, tower windows and crosswalks are where the video has them, only blurrier and warmer.
+- **Background right, foreground wrong (35.4 s, 82.5 s):** distant buildings are fine. Near-ground areas are smeared: crosswalk stripes are oval blobs at 35.4 s and pink-orange streaks with dark holes at 82.5 s. A large red flare haze covers the top of 35.4 s.
+- **Broken rows (11.8 s, 129.7 s):** 11.8 s has lost the whole near plaza (railing, curb, parked car) to pink-beige blobs, with floating bokeh discs in the sky. 129.7 s, looking down at pavement, is unrelated smear.
+- **Moving things (score 3):** no false people are visible. Moving or parked cars are missing or smeared (the SUV at 82.5 s, the car at 35.4 s), and there are no ghosts for vehicles.
+- **Tracking lost:** no rows were flagged, so the lost-rows score is 0 (not applicable). `fade_justified` is false because 129.7 s, and arguably 11.8 s, behave like unreliable or lost stretches that should have been detected and faded.
+
+What could be fixed in the pipeline:
+- Prune floaters and giant splats near the camera path and in the sky.
+- Rebuild or densify the ground close to the camera.
+- Match colour, white balance and exposure to remove the orange cast.
+- Treat cars as dynamic objects.
+- Flag low-confidence stretches such as the camera pointing down at the pavement.
+
+What is inherent to the footage: the light flare, night motion blur, the thin railing and low-texture pavement.
+
+Defects:
+
+- 11.8 s: The lower two-thirds of the frame is a pink-beige smear of blobs. The plaza tiles, the bike-rack railing, the curb, the wearer's shadow and the parked car on the right are all gone. The buildings at the top are only roughly in the right place and are heavily smeared. Layout 2, colour 2. (Mostly fixable: prune floaters near the camera path and recover the ground (seed or densify near the floor). The thin railing is inherently hard.)
+- 11.8 s: Translucent orange and yellow disc blobs float in the sky above the buildings (lens bokeh or flare baked into splats). The video has nothing there. (Fixable: prune large, low-opacity splats in the sky or far away.)
+- 35.4 s: A big red-pink haze covers the top third around the traffic signal and street lamp, so the buildings behind it are washed out. (Partly fixable by pruning giant translucent splats. The flare itself is in the footage.)
+- 35.4 s: The crosswalk stripes show up as soft yellow ellipses. The two nearest stripes are large ovals that are out of position and the wrong shape. The curb and sidewalk edge are lost. Layout 3, colour 3. (Fixable: tighter pruning of giants and needles, plus more training detail on the ground near the camera. Some of it is motion blur in the footage.)
+- 35.4 s: The parked silver car on the right is missing (only a smear). The notice board on the left has shrunk to a small glowing rectangle, and the fence area is muddy. (Partly fixable (detail and pruning). The car may have been carved out as dynamic.)
+- 59 s: Best row (layout 4, colour 3.5). The building, poles, traffic lights and lit tower windows are all in place. The crosswalk cracks are blurred, the strip nearest the camera at the bottom is smeared, and the lit windows are warmer orange than the video's neutral white. (Fixable: colour/white-balance matching. The blur is typical splat softness.)
+- 82.5 s: The background (white building, towers) matches well, but the foreground road is a green-brown mottled smear. The nearest crosswalk stripe is pink-orange with dark holes instead of yellow. The far crosswalk and lane markings across the intersection are lost, and there is a strong overall orange cast (hist 0.61). Layout 3, colour 2.5. (Fixable: colour correction and ground cleanup (floor-snap or prune noisy ground splats).)
+- 82.5 s: The dark SUV driving with its headlights on is absent: no splat and no ghost. Its headlight glare streak is also missing. (Fixable if vehicles are detected as dynamic objects and shown as ghosts or props. Today only people get ghosts.)
+- 106.1 s: Layout is good (4): the storefront, glass, poles and crosswalk are aligned. The car on the left is a dark blur, the left road surface is smeared, and the whole frame is darker and warmer than the video. Colour 3.5. (Fixable: colour/exposure matching. The car is a dynamic-object issue.)
+- 129.7 s: The render has nothing to do with the video. The video is a close-up of grey pavement with a curb line and a car edge on the left. The render is bright white and blue smears in the top third over a dark blur, with no pavement, curb or car (hist 0.40, centre hist 0.28). Layout 1.5, colour 2. (Likely a misregistered pose or missing near-ground geometry while the camera looks down at the pavement. Low texture and night motion blur are inherent. This stretch should at least be detected as low-confidence and faded, which is fixable in gap detection.)
+- 0 s: Across the whole clip the render has a warm orange/brown cast compared with the video's more neutral grey asphalt and white interiors. (Fixable: per-frame colour/exposure matching or white-balance correction in the bake.)
+
+
+Skeptic (agrees: True):
+
+I agree with the first judge's scores and verdict. I checked each row at full resolution (crops in /private/tmp/claude-501/-Users-yifanluo-Hackathons-CalHacks-13/e2a2e10a-ec8f-4abc-bab2-5e2c4c111cc5/scratchpad/crops8017b/).
+
+Row by row:
+- **11.8 s (layout 2, colour 2):** I agree. The left pole, the concrete block and the buildings at the top sit roughly where the video has them. Everything below the street is pink-beige smear: the plaza tiles, the railing, the curb, the parked car on the right and the wearer's shadow are all gone. There are faint translucent discs in the sky at the top right.
+- **35.4 s (layout 3, colour 3):** I agree. The pole, the blue bin and the white building on the right line up with the video. The crosswalk stripes are at roughly the right heights but render as soft yellow ovals. The notice board is a small lit panel, the silver car and the curb are missing, and a red-pink haze covers the top. You could argue for 2.5 here, but 3 is defensible.
+- **59 s (layout 4, colour 3.5):** I agree. Poles, signals, tower windows and stripe positions all line up. The second-floor glass is peach/orange where the video shows neutral white.
+- **82.5 s (layout 3, colour 2.5):** I agree. The background matches well. Near stripes are in the right places but pink-orange, the road is green-brown mottle, the far white crosswalk and lane lines are lost, and the SUV is absent.
+- **106.1 s (layout 4, colour 3.5):** I agree. The storefront, poles and stripes line up. The car is a dark blur, the left road has a horizontal smear, and the frame is darker and warmer overall. Hist 0.91 supports colour 3.5.
+- **129.7 s (layout 1.5, colour 2):** The render has nothing to do with the video, which shows grey pavement with a curb and a car edge. Layout 1–1.5 is right. Colour 2 is if anything slightly generous (centre hist 0.28).
+
+Averages:
+- Layout: (2+3+4+3+4+1.5)/6 ≈ 2.9, below the 3.5 bar.
+- Colour: ≈ 2.75, below the 3 bar.
+- The 129.7 s row is below 2 on layout, which fails the verdict on its own.
+
+`largely_matches=false` holds whichever way the borderline rows are scored.
+
+Moving things (dynamic 3) is fair. There are no false ghosts. The vehicles are missing: the SUV at 82.5 s and the parked or moving cars at 35.4 s. The first judge missed two small details at 82.5 s: the pedestrians on the left sidewalk and a white car are also missing. That is minor and leaves the score at 3, or 2.5 at most.
+
+No rows are flagged as tracking lost. Recording `fade_justified=false` is reasonable: 129.7 s, where the camera looks down at blurry pavement at night, behaves like an unreliable stretch that should have been detected and faded.
+
+The defect list is accurate and I saw no errors in it. The fixable vs inherent calls are sensible:
+- **Fixable in the pipeline:** pruning floaters and giant splats, matching colour and white balance, treating vehicles as dynamic objects, detecting low-confidence stretches.
+- **Inherent to the footage:** the flare, night motion blur, the thin railing and the low-texture pavement.
