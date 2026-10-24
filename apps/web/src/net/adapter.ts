@@ -24,6 +24,8 @@ const CHUNK_FRAMES = 120;
 const CALL_TIMEOUT_MS = 5000;
 const ACQUIRE_TIMEOUT_MS = 8000;
 const ROWS_TIMEOUT_MS = 2000;
+/** How long the queue waits for the viewer to take a grant or give it back before moving on regardless. */
+const DECISION_TIMEOUT_MS = 2000;
 const TICK_MS = 1000;
 
 type Reducers = DbConnection["reducers"];
@@ -137,6 +139,8 @@ export class NetAdapter implements InteractionAuthority {
   private readonly warned = new Set<string>();
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly cancelers = new Set<() => void>();
+  /** Grants handed to the viewer that it has not yet taken ("grab" event) or given back (release). */
+  private readonly decisions = new Map<string, () => void>();
   private readonly unhooks: Array<() => void> = [];
   private interval?: ReturnType<typeof setInterval>;
 
@@ -209,7 +213,17 @@ export class NetAdapter implements InteractionAuthority {
     this.clockHold++;
     const attempt: Attempt = { abandoned: false };
     let settled = false;
-    const work = this.enqueue(() => this.grab(request, attempt)).then(result => { settled = true; return result; });
+    let answer!: (result: Grant | false | undefined) => void;
+    const answered = new Promise<Grant | false | undefined>(resolve => { answer = resolve; });
+    void this.enqueue(async () => {
+      const grant = await this.grab(request, attempt);
+      answer(grant);
+      // Keep the queue until the viewer takes the grant or gives it back. A play, seek or take change the user made
+      // while the grab was in flight is queued behind us; it must run after that release, because the server refuses
+      // it while we still hold the object.
+      if (grant && !attempt.abandoned) await this.decision(request.objectId);
+    }).then(() => answer(undefined)); // dropped by dispose
+    const work = answered.then(result => { settled = true; return result; });
     const result = await this.within(work, ACQUIRE_TIMEOUT_MS);
     if (!settled) {
       attempt.abandoned = true;
@@ -227,14 +241,16 @@ export class NetAdapter implements InteractionAuthority {
 
   /** The viewer is done with an object: its throw came to rest, or it could not use a grant. */
   release(objectId: string): void {
-    const owned = this.owned.get(objectId);
-    if (!owned || owned.releasing || this.disposed) return;
-    owned.releasing = true;
-    this.dropMove(objectId);
-    // A finished throw keeps its place after its keyframe saves. A grant the viewer could not use (a seek or play
-    // cancelled it meanwhile) goes back first, ahead of the clock change that cancelled it: the server refuses a seek
-    // or take change while we still hold the object.
-    void this.enqueue(() => this.sendRelease(owned), !owned.thrown);
+    try {
+      const owned = this.owned.get(objectId);
+      if (!owned || owned.releasing || this.disposed) return;
+      owned.releasing = true;
+      this.dropMove(objectId);
+      // A finished throw keeps its place after its keyframe saves. A grant the viewer could not use (a seek or play
+      // cancelled it meanwhile) goes back first, ahead of the clock change that cancelled it: the server refuses a seek
+      // or take change while we still hold the object. The grab's queue entry waits for this (see decision()).
+      void this.enqueue(() => this.sendRelease(owned), !owned.thrown);
+    } finally { this.decided(objectId); }
   }
 
   // ---- viewer → server -------------------------------------------------------------------------------------------
@@ -247,8 +263,8 @@ export class NetAdapter implements InteractionAuthority {
       case "throw": this.onThrow(event); break;
       case "recording": this.onRecording(event.objectId, event.frames); break;
       case "rest": { const owned = this.owned.get(event.objectId); if (owned) owned.finalPose = serverPose(event.pose); break; }
-      // "grab" needs nothing (acquire already holds it). "fork" is a take made only on this device; a networked grant
-      // never makes one, and its "local-N" id is never sent.
+      case "grab": this.decided(event.objectId); break; // the viewer took the grant; acquire already holds the object
+      // "fork" is a take made only on this device; a networked grant never makes one, and its "local-N" id is never sent.
     }
   };
 
@@ -298,11 +314,12 @@ export class NetAdapter implements InteractionAuthority {
       return;
     }
     const owned = this.owned.get(objectId);
-    if (owned) { owned.releasing = true; void this.enqueue(() => this.sendRelease(owned), true); return; }
+    if (owned) { owned.releasing = true; void this.enqueue(() => this.sendRelease(owned), true); this.decided(objectId); return; }
     void this.enqueue(async () => {
       const row = this.net.connection?.db.objectState.key.find(`${this.row?.branchId}:${objectId}`);
       if (row && this.mine(row.simOwner)) await this.calling(`release the ${this.label(objectId)}`, r => r.release({ objectId, rest: true, ...rowPose(row) }));
     }, true);
+    this.decided(objectId);
   }
 
   private async sendRelease(owned: Owned): Promise<void> {
@@ -673,6 +690,21 @@ export class NetAdapter implements InteractionAuthority {
       check();
     });
   }
+
+  /** Resolves once the viewer takes the grant for objectId or gives it back, after DECISION_TIMEOUT_MS, or on dispose. */
+  private decision(objectId: string): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => {
+        if (this.decisions.get(objectId) === done) this.decisions.delete(objectId);
+        this.cancelers.delete(done); clearTimeout(timer); this.timers.delete(timer); resolve();
+      };
+      const timer = this.later(done, DECISION_TIMEOUT_MS);
+      this.decisions.set(objectId, done);
+      this.cancelers.add(done);
+    });
+  }
+
+  private decided(objectId: string): void { this.decisions.get(objectId)?.(); }
 
   private later(fn: () => void, ms: number): ReturnType<typeof setTimeout> {
     const timer = setTimeout(() => { this.timers.delete(timer); fn(); }, ms);

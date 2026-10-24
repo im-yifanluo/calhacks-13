@@ -368,6 +368,33 @@ test("clock: a refused change is reported and the viewer returns to the room's c
   expect(bob.viewer.timeline.playing).toBe(true);
 });
 
+test("a play pressed while a grab is still waiting runs after the unused grant is given back", async () => {
+  // Found in review: the queue used to start the clock change as soon as the grab's call finished, before the viewer
+  // gave the grant back, so the server refused it ("Wait for objects to settle") and the room stayed on the new take.
+  const room = new RoomServer();
+  const hostClient = room.client("alice", { latency: 60 });
+  const { roomId } = await openRoom(room, hostClient);
+  const host = attach(hostClient);
+  host.viewer.seek(1);
+  await until(() => serverTimeline(room, roomId).anchorMediaUs === 1_000_000n, "seek");
+  await sleep(150);
+  const grab = host.viewer.grab("ball-1");
+  await sleep(5);
+  host.viewer.togglePlay(); // cancels the pending grab in the viewer
+  expect(await grab).toBe(false);
+  await until(() => !serverTimeline(room, roomId).paused, "the room to play");
+  expect(serverTimeline(room, roomId).branchId).toBe(0n);
+  await until(() => host.viewer.timeline.playing, "the viewer to play");
+  expect(host.viewer.timeline.activeId).toBe("original");
+  const calls = room.calls(hostClient);
+  expect(calls.filter(c => c.error).map(c => `${c.reducer}: ${c.error}`)).toEqual([]);
+  const order = calls.map(c => c.reducer);
+  expect(order.lastIndexOf("release")).toBeGreaterThan(order.lastIndexOf("grab"));
+  expect(order.lastIndexOf("release")).toBeLessThan(order.lastIndexOf("setBranch"));
+  expect(host.reports.filter(r => r.startsWith("Could not"))).toEqual([]);
+  expect([...room.h.db.objectState.iter()].some(o => o.simOwner)).toBe(false);
+});
+
 test("acquire never leaves the viewer pending: a grant that comes too late is given back", async () => {
   const room = new RoomServer();
   const hostClient = room.client("alice");
