@@ -119,8 +119,8 @@ def train(work: Path, steps_scaler: float = 0.25, static: bool = False) -> Path:
     cap = STATIC["cap"] if static else CAP
     cmd = [sys.executable, "-m", "memreplay.train_splat", "mcmc", "--data_dir", str(work / "colmap"),
            "--data_factor", "1", "--result_dir", str(out), "--strategy.cap-max", str(cap),
-           "--steps_scaler", str(steps_scaler), "--save_ply", "--app_opt", "--disable_viewer",
-           "--no-normalize-world-space"]
+           "--steps_scaler", str(steps_scaler), "--save_ply", "--disable_viewer",
+           "--no-normalize-world-space"]   # no --app_opt: its per-image colour correction is lost at export
     if static:   # refine ViPE's poses; evaluate on held-out frames at the end
         steps = int(30_000 * steps_scaler)
         cmd += ["--pose_opt", "--test_every", str(STATIC["test_every"]), "--eval_steps", str(steps)]

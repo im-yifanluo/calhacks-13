@@ -42,6 +42,24 @@ def prune(data: np.ndarray, path_xyz: np.ndarray) -> np.ndarray:
     return keep
 
 
+def seen_count(xyz: np.ndarray, cams: list, min_views: int = 2) -> np.ndarray:
+    """How many recorded keyframes have each point inside their image (no occlusion test). cams: Cameras.frames.
+    A Gaussian that only one or two frames saw was fitted to almost nothing and tends to be a streak."""
+    n = np.zeros(len(xyz), np.int32)
+    for c in cams:
+        if not c.good:
+            continue
+        K = np.array(c.K).reshape(3, 3)
+        w2c = np.linalg.inv(np.array(c.c2w).reshape(4, 4))
+        pc = xyz @ w2c[:3, :3].T + w2c[:3, 3]
+        z = pc[:, 2]
+        ok = z > 0.1
+        u = K[0, 0] * pc[:, 0] / np.where(ok, z, 1) + K[0, 2]
+        v = K[1, 1] * pc[:, 1] / np.where(ok, z, 1) + K[1, 2]
+        n += ok & (u >= 0) & (u < c.w) & (v >= 0) & (v < c.h)
+    return n
+
+
 def track_positions(memory: dict) -> np.ndarray:
     tr = memory["camera"]["track"]
     return np.array([k["p"] for k in tr], float) if isinstance(tr, list) else np.zeros((0, 3))
@@ -53,8 +71,9 @@ def _convert(src: Path, dst: Path) -> None:
     subprocess.run(cmd + ["-w", str(src), str(dst)], check=True, capture_output=True)
 
 
-def prune_file(splat: Path, path_xyz: np.ndarray) -> tuple[int, int]:
-    """Prune a .spz/.ply in place. Returns (before, after)."""
+def prune_file(splat: Path, path_xyz: np.ndarray, cams: list | None = None, min_views: int = 2) -> tuple[int, int]:
+    """Prune a .spz/.ply in place (floaters, giants, needles, and with cams: Gaussians seen by < min_views frames).
+    Returns (before, after)."""
     from .layers import read_ply, write_ply
 
     with tempfile.TemporaryDirectory() as td:
@@ -65,6 +84,9 @@ def prune_file(splat: Path, path_xyz: np.ndarray) -> tuple[int, int]:
             _convert(splat, ply)
         data = read_ply(ply)
         keep = prune(data, path_xyz)
+        if cams is not None:
+            xyz = np.stack([data["x"], data["y"], data["z"]], 1).astype(np.float64)
+            keep &= seen_count(xyz, cams) >= min_views
         out = Path(td) / "out.ply"
         write_ply(out, data[keep])
         if splat.suffix == ".ply":
@@ -118,9 +140,13 @@ def clean_memory_dir(mdir: Path) -> dict:
             continue
         m = json.loads(p.read_text())
         path = track_positions(m)
+        cams = None
+        if (mdir / "world" / "cameras.json").exists():          # pipeline folders have it; published ones may not
+            from .handoff import Cameras
+            cams = Cameras.model_validate_json((mdir / "world" / "cameras.json").read_text()).frames
         bg = m["background"]["url"]
         if bg.endswith((".spz", ".ply")) and bg not in done and (mdir / bg).exists():
-            before, after = prune_file(mdir / bg, path)
+            before, after = prune_file(mdir / bg, path, cams)
             m["background"]["splatCount"] = after
             report[bg] = f"{before} -> {after}"
             done.add(bg)

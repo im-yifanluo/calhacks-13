@@ -11,6 +11,7 @@ import { sampleTrack } from "./tracks.js";
 import { mountAudio } from "./audio.js";
 import { Session } from "./session.js";
 import { PhoneJoystick, isTouchDevice } from "./phone-joystick.js";
+import { PathGuide } from "./guided.js";
 import "./style.css";
 
 declare global { interface Window { memoryReplay?: Viewer; __memreplay?: unknown } }
@@ -79,7 +80,29 @@ async function main(): Promise<void> {
     yaw: new THREE.Euler().setFromQuaternion(new THREE.Quaternion(...firstPose.q).normalize(), "YXZ").y };
   if (renderer.xr.isPresenting) { rig.position.set(vrSpawn.x, vrSpawn.y, vrSpawn.z); rig.rotation.set(0, vrSpawn.yaw, 0); }
   scene.add(memory.root);
+  // The recorded path on the floor; guided mode keeps you near it and fogs what the camera never saw (guided.ts).
+  const guide = new PathGuide(memory.cameraTrack, memory.manifest.world.floorY, memory.manifest.camera.fovYDeg,
+    memory.manifest.source.width / memory.manifest.source.height, camera);
+  scene.add(guide.root);
+  const guidedBox = element<HTMLInputElement>("guided");
+  // Desktop guided mode starts you where the wearer started, at their eye height, looking the way they looked.
+  const standOnPath = () => {
+    if (renderer.xr.isPresenting || eyes.checked) return;
+    const k = memory.cameraTrack[0];
+    const q = new THREE.Quaternion(...k.q).normalize();
+    camera.position.set(k.p[0], k.p[1], k.p[2]);
+    controls.target.copy(camera.position).add(new THREE.Vector3(0, 0, -1).applyQuaternion(q).setY(0).normalize().multiplyScalar(1.5));
+    controls.update();
+  };
+  guidedBox.checked = params.get("mode") === "guided";
+  guide.setGuided(guidedBox.checked);
+  if (guidedBox.checked) standOnPath();
+  guidedBox.onchange = () => { guide.setGuided(guidedBox.checked); if (guidedBox.checked) standOnPath(); };
+  const headPos = new THREE.Vector3(), headQuat = new THREE.Quaternion(), correction = new THREE.Vector3();
+  const gaps = memory.manifest.timeline.gaps ?? [];
+  const inGap = (t: number) => gaps.some(([a, b]) => t >= a && t <= b);
   const grid = new THREE.GridHelper(10, 40, 0x437979, 0x243642); grid.position.y = memory.manifest.world.floorY; scene.add(grid);
+  window.__memreplay = { scene, grid, guide, camera, renderer };   // for scripted screenshots and debugging
   viewer = new Viewer(memory, message => { status.textContent = message; }); window.memoryReplay = viewer;
   const currentViewer = viewer;
   const xr = new XRInput(renderer, rig, camera, viewer);
@@ -127,6 +150,17 @@ async function main(): Promise<void> {
       sampleTrack(memory.cameraTrack, currentViewer.timeline.time, camera);
       camera.fov = memory.manifest.camera.fovYDeg; camera.updateProjectionMatrix();
     } else if (!renderer.xr.isPresenting) { joystick.update(dt); if (controls.enabled) controls.update(); }
+    // Lost-tracking stretches: the room there was never reconstructed, so guided mode and the wearer's view fade out.
+    const lost = inGap(currentViewer.timeline.time) && (guide.guided || eyes.checked);
+    if (guide.guided && !eyes.checked) {
+      camera.getWorldPosition(headPos); camera.getWorldQuaternion(headQuat);
+      const outside = guide.excess(headPos);
+      guide.clamp(headPos, correction);
+      if (renderer.xr.isPresenting) rig.position.add(correction);           // the world slides back under you
+      else { camera.position.add(correction); controls.target.add(correction); }
+      guide.update(headPos, headQuat, outside, dt);
+    }
+    guide.blackout(lost, dt);
     const tl = currentViewer.timeline;
     if (timestamp - lastUI > 100) {
       lastUI = timestamp; play.textContent = tl.playing ? "Pause" : "Play take";

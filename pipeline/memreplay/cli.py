@@ -202,6 +202,15 @@ def merge(work: Path, title: str, memory_id: str, device: str, static: bool = Fa
 
     cam_frames = sorted(cams.frames, key=lambda c: c.t)
     first = cam_frames[0]
+    gaps: list[tuple[float, float]] = []
+    for c in cam_frames:                                   # runs of untrusted keyframes -> gaps (0.3 s slack)
+        if c.good:
+            continue
+        if gaps and c.t - gaps[-1][1] <= 0.35:
+            gaps[-1] = (gaps[-1][0], c.t)
+        else:
+            gaps.append((c.t, c.t))
+    gaps = [(round(max(0.0, a - 0.3), 2), round(b + 0.3, 2)) for a, b in gaps if b - a >= 0.5]
     track = [Keyframe(t=c.t, p=(c.c2w[3], c.c2w[7], c.c2w[11]), q=quat_from_c2w_opencv(c.c2w)) for c in cam_frames]
     audio = "input/audio.m4a" if (work / "input" / "audio.m4a").exists() else None
     if static and not memory_id.endswith("-static"):
@@ -213,7 +222,7 @@ def merge(work: Path, title: str, memory_id: str, device: str, static: bool = Fa
         source=Source(device=device, durationSec=frames.duration_sec, fps=frames.fps,
                       width=frames.width, height=frames.height, audioUrl=audio),
         world=World(floorY=world.floorY),
-        timeline=Timeline(durationSec=frames.duration_sec, sampleHz=frames.fps / frames.key_stride),
+        timeline=Timeline(durationSec=frames.duration_sec, sampleHz=frames.fps / frames.key_stride, gaps=gaps or None),
         background=background,
         camera=Camera(track=track, fovYDeg=math.degrees(2 * math.atan(first.h / (2 * first.K[4])))),
         objects=objects,
@@ -246,6 +255,11 @@ def main(argv: list[str] | None = None) -> int:
     rn.add_argument("--force", action="store_true", help="rerun finished steps too")
     rn.add_argument("--redo", nargs="*", choices=list(STAGES), help="rerun just these finished steps")
     rn.add_argument("--skip", nargs="*", choices=list(STAGES), help="leave these steps out")
+    cp = sub.add_parser("compare", help="score viewer renders against the video frames; writes compare.jpg/json")
+    cp.add_argument("dir", type=Path)
+    cp.add_argument("--video", required=True, type=Path)
+    cp.add_argument("--shot", action="append", required=True, help="<seconds>=<screenshot path>")
+    cp.add_argument("--label", default="")
     cl = sub.add_parser("clean", help="prune splat floaters and drop false ghosts in a published memory folder")
     cl.add_argument("dir", type=Path)
     vf = sub.add_parser("verify", help="measure the result against the video; pictures in <work>/verify")
@@ -258,6 +272,11 @@ def main(argv: list[str] | None = None) -> int:
     wk.add_argument("--once", action="store_true")
     args = ap.parse_args(argv)
 
+    if args.cmd == "compare":
+        from . import compare
+        shots = [(float(x.split("=", 1)[0]), Path(x.split("=", 1)[1])) for x in args.shot]
+        compare.run(args.dir, args.video, shots, args.label)
+        return 0
     if args.cmd == "clean":
         from . import cleanup
         print(json.dumps(cleanup.clean_memory_dir(args.dir), indent=2))

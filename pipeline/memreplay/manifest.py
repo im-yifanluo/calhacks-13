@@ -41,6 +41,7 @@ class World(BaseModel):
 class Timeline(BaseModel):
     durationSec: float
     sampleHz: float
+    gaps: list[tuple[float, float]] | None = None  # [from, to] s where camera tracking was lost (viewer fades out)
 
 
 class Background(BaseModel):

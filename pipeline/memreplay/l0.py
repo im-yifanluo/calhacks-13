@@ -230,10 +230,20 @@ def ghosts(work: Path, v: Vipe, wp: WorldPoses, frames: FramesInfo) -> list[Dyna
                 pick = rng.choice(len(pts), per_frame, replace=False)
                 pts, vv, uu = pts[pick], vv[pick], uu[pick]
             seqs[k].append((transform(wp.c2w(idx), pts), rgb[vv, uu]))
+    from .cleanup import keep_ghost
+
     out = []
     (work / "world" / "ghosts").mkdir(parents=True, exist_ok=True)
-    for k, tr in enumerate(tracks):
-        gid = f"person-{k}"
+    real = []
+    for k in range(len(tracks)):
+        ok, why = keep_ghost(seqs[k], hz)
+        if ok:
+            real.append(k)
+        else:
+            print(f"[l0] dropped a 'person' track ({why})")
+    for n, k in enumerate(real):
+        tr = tracks[k]
+        gid = f"person-{n}"
         write_points_sequence(work / "world" / "ghosts" / f"{gid}.bin", seqs[k], hz)
         vis = [i for i, (p, _) in enumerate(seqs[k]) if len(p)]
         out.append(DynamicObject(

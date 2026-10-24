@@ -88,6 +88,12 @@ def run(work: Path) -> dict:
     shift = floor_offset(xyz, opacity, cam_xz)
     data["y"] = (data["y"] - shift).astype(np.float32)
     xyz[:, 1] -= shift
+    # 2. prune floaters in front of the camera path, giants and needles (cleanup.py)
+    from .cleanup import prune, seen_count
+    path = np.array([[c.c2w[3], c.c2w[7], c.c2w[11]] for c in cams.values()])
+    keep = prune(data, path) & (seen_count(xyz, list(cams.values())) >= 2)
+    pruned = int((~keep).sum())
+    data, xyz = data[keep], xyz[keep]
     write_ply(work / "gsplat_static" / "aligned.ply", data)
     to_spz(work / "gsplat_static" / "aligned.ply", work / "world" / "bg_static.spz")
     owner = np.full(len(xyz), -1)
@@ -156,9 +162,11 @@ def run(work: Path) -> dict:
     winfo = WorldInfo.model_validate_json((work / "world" / "world.json").read_text())
     winfo.diagnostics["room_splat_count"] = int(len(room))
     winfo.diagnostics["static_floor_shift_m"] = shift
+    winfo.diagnostics["static_pruned"] = pruned
+    winfo.diagnostics["static_splat_count"] = int(len(data))
     winfo.diagnostics["props_layer"] = report
     (work / "world" / "world.json").write_text(winfo.model_dump_json(indent=2))
     (work / "objects" / "layers.json").write_text(json.dumps(report, indent=2))
-    print(f"[layers] splat floor moved by {-shift:+.3f} m; room {len(room)} Gaussians; props: " +
+    print(f"[layers] splat floor moved by {-shift:+.3f} m; pruned {pruned}; room {len(room)} Gaussians; props: " +
           ", ".join(f"{r['id']} {r['gaussians']} ({r['visual']})" for r in report))
     return {"room": len(room), "props": report}

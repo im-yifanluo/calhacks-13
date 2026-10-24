@@ -43,6 +43,9 @@ export interface MemoryManifest {
     durationSec: number;
     /** rate the tracks were sampled at (viewer interpolates between samples) */
     sampleHz: number;
+    /** stretches [fromSec, toSec] where the recording's camera tracking was lost: the scene there is unreliable, and
+     *  the wearer's view / guided mode fade out instead of showing it */
+    gaps?: [number, number][];
   };
   /** Static scene with dynamic objects removed (inpainted or just masked out). */
   background: {
