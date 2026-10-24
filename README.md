@@ -2,9 +2,23 @@
 
 Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves over time, and you walk back into it with friends on a Quest 3S or a phone. Pause time, grab things, throw them, and branch off an alternate timeline.
 
+- **Integrating the branches? Start with [docs/INTEGRATION.md](docs/INTEGRATION.md).** Agents should read [CLAUDE.md](CLAUDE.md) first.
 - **Full plan** (tracks, design, timeline, risks): [docs/PLAN.md](docs/PLAN.md)
 - **Vision pipeline runbook:** [pipeline/README.md](pipeline/README.md)
-- **Status:** the multiplayer server works (18/18 smoke checks pass). The viewer runs in a browser with a mock scene. In the pipeline, the file formats are done (including ghosts, primitive objects, velocity and audio) and `memreplay merge` is done and tested. The pipeline steps themselves (S1–S6) are not written yet, and nothing has run on a real pod or real glasses footage.
+
+## Status (Sat Oct 24, early morning)
+
+Most of the app is built, but on **separate branches that aren't merged yet and conflict with each other**. [docs/INTEGRATION.md](docs/INTEGRATION.md) has the merge plan.
+
+| Part | Where | State |
+|---|---|---|
+| Vision pipeline | `main` (`pipeline/`) | Designed, with a runbook, Runpod setup scripts and file formats. Only the merge step (S7) is built, tested by hand on sample data. Steps S3–S6 aren't written. Nothing has run on a pod or real footage. |
+| Scene format (`memory.json`) | `main` (`packages/shared/`) | Latest version, with audio, room collider, people ghosts, simple-shape objects and velocity. Other branches use the older version. |
+| Viewer engine: physics, VR controls, timeline replay | `origin/nikko` | Built, 17 tests pass. Doesn't support main's new scene fields yet, and isn't connected to the server. |
+| Multiplayer server, client, upload, phone, iOS capture | `origin/stdb/jerry-p4` | Built, 16 tests. Replaces main's server module. |
+| Local CPU pipeline, JSON schemas, debug viewer | `origin/part1` | Built, 20 tests. Overlaps main's pipeline; the merge plan says which parts to keep. |
+| What `main` itself runs today | `main` | Scaffold viewer with a mock scene, and the server module with an 18-step two-player smoke test (`/smoke.html`). |
+| Not built by anyone | — | The pipeline worker (upload → pipeline → ready), the viewer↔server adapter, and viewer support for the new scene fields. |
 
 ---
 
@@ -26,7 +40,7 @@ You need **Node 20 or newer** and **git**.
 
 ```bash
 node -v            # should print v20 or higher. If not: brew install node
-git clone <repo-url> memory-replay && cd memory-replay
+git clone https://github.com/im-yifanluo/calhacks-13.git memory-replay && cd memory-replay
 npm install
 npm run dev
 ```
@@ -38,6 +52,8 @@ Open http://localhost:5173. You should see a butterfly splat and a box moving al
 ---
 
 ## Part 2 · P4: SpacetimeDB (multiplayer server)
+
+> This section describes the server on `main`. Jerry's branch (`origin/stdb/jerry-p4`) replaces it, with port 3000, an upload service and tests; see `git show origin/stdb/jerry-p4:docs/P4.md` and [docs/INTEGRATION.md](docs/INTEGRATION.md) §2 B.
 
 **Install the CLI** (macOS / Linux; on Windows use WSL):
 
@@ -67,6 +83,8 @@ npm run stdb:generate        # refresh apps/web/src/module_bindings
 ---
 
 ## Part 3 · P3 / P4: Quest 3S and phones
+
+> The full viewer (physics, VR controls, timeline replay) is on Nikko's branch (`origin/nikko`); see `git show origin/nikko:docs/P3_VIEWER.md`. The commands below work on both.
 
 **One-time Quest setup**
 
@@ -153,8 +171,12 @@ apps/web/            Viewer: one web app for Quest, phones and laptops (three.js
 server/spacetime/    SpacetimeDB module: rooms, players, clock, branches, grabbing
 packages/shared/     memory.json format (TypeScript). Python copy: pipeline/memreplay/manifest.py
 pipeline/            Python pipeline: glasses clip → ViPE (cameras, depth, masks) → room, ghosts, objects → memory.json
+  README.md          the runbook; memreplay/handoff.py: file formats; runpod/: pod setup scripts
 docs/PLAN.md         The plan
+docs/INTEGRATION.md  How the unmerged branches fit together, and the merge plan
+CLAUDE.md            Starting point for AI agents working in this repo
 ```
+This is `main`'s layout. After integration, `apps/web/src/` follows the target layout in [docs/INTEGRATION.md](docs/INTEGRATION.md) §2 C.
 
 ---
 

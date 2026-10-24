@@ -11,7 +11,7 @@ Record a moment on Ray-Ban Meta glasses, rebuild it as a **4D scene** (3D + time
 | Question | Decision | Why |
 |---|---|---|
 | Unity or web? | **One WebXR web app** (three.js + Spark splats), served over HTTPS to the Quest 3S browser, phones and laptops | One URL gives you sharing, phones and multiplayer together. Unity Gaussian splats on Quest are only "reported to work" (aras-p's plugin is no longer developed), and Unity would mean a second phone build. |
-| XR framework | Default: **plain three.js + Spark 2.4 + Rapier**, already scaffolded in `apps/web`. Spike: **Meta IWSDK** (Havok physics, grab, locomotion built in), timeboxed to 90 min tonight | IWSDK saves hours of grab and hand code. The risk is that it pins `three` to `super-three@0.185`, and Spark has to share that same instance. Switch only if the spike renders a `.spz` on Quest at 72 fps. |
+| XR framework | Default: **plain three.js + Spark 2.4 + Rapier**, built out on `origin/nikko` (see docs/INTEGRATION.md). Spike: **Meta IWSDK** (Havok physics, grab, locomotion built in), timeboxed to 90 min tonight | IWSDK saves hours of grab and hand code. The risk is that it pins `three` to `super-three@0.185`, and Spark has to share that same instance. Switch only if the spike renders a `.spz` on Quest at 72 fps. |
 | Full 4D Gaussian splatting? | **No, use a layered scene.** A static background, people as per-frame colored points ("ghosts"), and each grabbable object as a simple shape with a collider and a position track | Per-scene 4DGS (Shape of Motion, MoSca) takes hours to train, is fragile on head-mounted video, and **gives no colliders**, so no physics. Layering gets you motion and physics together. |
 | Camera solve | **NVIDIA ViPE on the single clip. No room sweep.** Go/no-go about 3 hours after the pod starts. | One model gives the camera path, lens, metric depth for every pixel and per-frame masks. The glasses have one camera and export a single view, so there is no stereo pair: ViPE triangulates across time as the wearer moves, and a metric depth model sets the scale. DA3 and VGGT assume a static scene, and VGGT has no metric scale. A separate sweep would mean registering two clips, and it breaks the "footage you already shot" pitch. |
 | Semantic segmentation | **ViPE's own masks**, prompted with single words we type (`person`, `hand`, `ball`, `can`...). **SAM 2.1 + Grounding DINO only if ViPE's masks are poor. SAM 3 is cut.** | ViPE already writes a mask with object IDs for every frame. SAM 3 has gated weights and an environment that clashes with the rest. Dropping it takes the setup from 5 environments to 2. |
@@ -59,7 +59,7 @@ The Slack connected to Claude is **RoboTouchLab (UIUC), not CalHacks**, so none 
  │ memory, room, player,   │                    │ S1 normalize  ffmpeg: 30 fps mp4 + audio │
  │ timeline, branch,       │                    │ S2 ViPE       camera path, depth, masks  │
  │ object_state, grab,     │                    │ S3 world      open3d: floor, +Y up       │
- │ branch_keyframe         │                    │ S4 L0         points, room, ghosts       │
+ │ branch_keyframes        │                    │ S4 L0         points, room, ghosts       │
  └──────────┬──────────────┘                    │ S5 objects    tracks + Claude shapes     │
             │ websocket subscriptions           │ S6 background gsplat → bg.spz            │
             ▼                                   │ S7 merge      memreplay merge            │
@@ -188,6 +188,8 @@ If it fails, move down the S2 fallbacks in order.
 **Licenses** (fine for a hackathon demo; note them for later): ViPE is Apache 2.0, except the UniK3D backend (BY-NC-SA, don't use it) and its track-anything code (AGPL-3.0). gsplat and SAM 2.1 are Apache 2.0. Optional: CoTracker3 is CC-BY-NC, and SAM 3D is under the SAM License. MapAnything: use the Apache weights variant.
 
 ### 2.3 Viewer (`apps/web`)
+
+> **Status:** the module layout below is built on Nikko's branch (`origin/nikko`: `loader`, `physics`, `timeline`, `tracks`, `viewer`, `input-xr`, `input-desktop`). Phone touch input and networking are on Jerry's branch (`origin/stdb/jerry-p4`: `input-touch`, `net/`). `main` still has the single-file scaffold. The target layout after merging is in [INTEGRATION.md](INTEGRATION.md) §2 C.
 Modules:
 - `loader`: manifest, Spark `SplatMesh`es, colliders.
 - `clock`: the shared playhead.
@@ -210,17 +212,19 @@ Modules:
 - Phones and judges: `npm run tunnel` (cloudflared gives an HTTPS URL; add the host to Vite `server.allowedHosts`).
 
 ### 2.4 Multiplayer and timelines (`server/spacetime`)
+
+> **Status:** the tables below describe `main`'s module. Jerry's branch (`origin/stdb/jerry-p4`) has a more complete module that should replace it. It adds upload fields on `memory`, status transitions only the pipeline can make, string keys on `objectState`, `simOwner`, clock sampling and validated keyframe chunks, and it rejects catching a thrown object. Comparison and decision in [INTEGRATION.md](INTEGRATION.md) §2 B. The upload page and presigned upload in the §2 diagram exist only on that branch. The pipeline's status reporting (`scripts/pipeline-status.py`) is there too, but no worker calls it yet.
 **Tables**
 
 | Table | Fields (short) | Written by |
 |---|---|---|
 | `memory` | id, owner, title, manifestUrl, status (uploaded/processing/ready/failed), progress | upload page, pipeline |
 | `room` | id, memoryId, joinCode, host | createRoom |
-| `player` | identity, roomId, name, device (quest/phone/desktop), color, head pose, hand poses, online | setPose at 10–15 Hz |
+| `player` | identity, roomId, name, device (quest/phone/desktop), color, head pose, hand positions, online | setPose at 10–15 Hz |
 | `timeline` | roomId, branchId, paused, speed, anchorMediaUs, anchorServerTs | play / pause / seek only |
 | `branch` | id, memoryId, parentId, forkMediaUs, name, creator | forkBranch |
 | `object_state` | (branchId, objectId), heldBy?, mode (held/thrown/rest), pose, velocity, fromMediaUs | grab / move / release |
-| `branch_keyframe` | branchId, objectId, chunk of recorded `[t,p,q]` | owner, after its sim ends |
+| `branchKeyframes` (wire name `branch_keyframes`) | branchId, objectId, startMediaUs, `keyframesJson` chunk of `[{t,p,q}]` with t in absolute media seconds | owner, after its sim ends |
 
 **The shared clock costs nothing per frame.** Each client computes `t = anchorMediaUs + (now − anchorServerTs) × speed`, and the server only writes on play, pause or seek.
 
@@ -228,7 +232,7 @@ Modules:
 1. **Pause:** everyone freezes at the same `t`. Each grabbable object becomes a Rapier body at its track pose, **with its track velocity**, so a ball caught mid-air keeps its momentum when released.
 2. **Grab:** the `grab(objectId)` reducer succeeds only if nobody holds the object. The holder simulates it and streams `moveObject` at 15 Hz; others interpolate. On release, the holder keeps simulating until the body sleeps, then writes a rest pose.
 3. **Changing anything while paused** forks a branch: `forkBranch(parent, t0)`. The branch tree shows a new fork marker at `t0`.
-4. **Play on a branch:** objects you touched run physics from their overridden state, and everything else follows its recorded track. The owner records the touched objects' trajectories into `branch_keyframe`, so the branch **replays identically for everyone, including people who join later.**
+4. **Play on a branch:** objects you touched run physics from their overridden state, and everything else follows its recorded track. The owner records the touched objects' trajectories into `branchKeyframes`, so the branch **replays identically for everyone, including people who join later.**
 5. **Switching branches** in the timeline tree is a `setBranch` reducer.
 6. **Claude "what if":** a typed prompt becomes `{objectId, impulse, t}` on a new branch.
 

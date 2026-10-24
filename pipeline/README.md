@@ -427,6 +427,8 @@ If it fails, go down the S2 fallbacks in order.
 
 ## 9. What the viewer must support (for P3)
 
+> **Status:** the viewer engine is on Nikko's branch (`origin/nikko`). It doesn't support any of the items below yet, and it doesn't compile against this scene format until they're added. Nobody has built the **pipeline worker** yet either. It takes an uploaded video from Jerry's upload service, runs S1–S7, publishes the files and marks the memory `ready` with `scripts/pipeline-status.py` (on `origin/stdb/jerry-p4`). See [docs/INTEGRATION.md](../docs/INTEGRATION.md) §2 A and §4.
+
 These are new in `memory.json`, and `apps/web` doesn't handle them yet:
 - **`points-sequence` ghosts:** read the binary (layout in `handoff.py`) and draw each frame with `THREE.Points`, using a `Float16BufferAttribute` for positions and a `Uint8` colour attribute.
 - **`primitive` objects:** a tinted sphere, box or cylinder mesh.
