@@ -53,3 +53,50 @@ kbd { font: inherit; background: #263944; padding: 1px 4px; border-radius: 3px; 
   #play { min-width: 73px; padding: 9px; } #status { font-size: 11px; } .help { flex-direction: column; gap: 6px; }
 }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+/* Shared room panel (session.ts), from jerry's #panel. Scoped to #room-panel so it never restyles the HUD. */
+.local-label.shared { color: #a2e8d6; }
+#room-panel { position: absolute; top: 150px; right: 36px; width: 304px; max-height: max(150px, calc(100dvh - 162px - var(--hud-space, 250px))); display: flex; flex-direction: column; background: #101e29ed; border: 1px solid #30434e; border-radius: 16px; box-shadow: 0 12px 50px #0005; backdrop-filter: blur(16px); font-size: 12px; color: #d7e7ed; }
+#room-panel .room-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 14px; }
+#room-toggle { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; min-height: 36px; padding: 4px 0; border: 0; background: none; text-align: left; }
+#room-toggle:hover { background: none; color: #fff; }
+#room-toggle::after { content: "▾"; color: #91a9b6; font-size: 10px; }
+#room-panel.collapsed #room-toggle::after { content: "▸"; }
+.room-eyebrow { font-size: 10px; letter-spacing: .14em; font-weight: 650; color: #a2e8d6; }
+#room-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d7e7ed; }
+#room-connection { font: 10px ui-monospace, monospace; color: #91a9b6; text-align: right; max-width: 52%; }
+#room-body { overflow: auto; padding: 0 16px 12px; border-top: 1px solid #293d49; }
+#room-panel.collapsed #room-body { display: none; }
+#room-panel details { border-bottom: 1px solid #293d49; padding: 10px 0; }
+#room-panel summary { font-weight: 600; font-size: 12px; margin-bottom: 4px; }
+#room-panel label { display: block; font-size: 11px; letter-spacing: .02em; color: #b4c5cc; margin: 10px 0; }
+#room-panel input:not([type=checkbox]), #room-panel select { display: block; width: 100%; max-width: none; min-width: 0; min-height: 42px; margin-top: 4px; padding: 8px; font: inherit; font-size: 13px; color: #e7f2f1; background: #0b141e; border: 1px solid #3a505f; border-radius: 8px; }
+#room-panel .row input { margin-top: 0; }
+#room-panel button { min-height: 42px; }
+#room-panel #library-add { width: 100%; }
+#room-panel .row { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
+#room-panel .row > * { flex: 1; min-width: 0; }
+#room-label { display: block; margin-top: 12px; font-size: 12px; }
+#room-people { list-style: none; margin: 6px 0 0; padding: 0; color: #b6cbd5; }
+#room-people li { display: flex; align-items: center; gap: 8px; padding: 3px 0; overflow-wrap: anywhere; }
+#room-people .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; }
+#room-panel p { font-size: 11px; color: #9bb1bc; margin: 8px 0; line-height: 1.5; }
+#room-panel p:empty { display: none; }
+#room-panel a { color: #a2e8d6; }
+#room-message { overflow-wrap: anywhere; }
+#room-panel #room-error, #room-panel #library-errors { color: #ffad9e; white-space: pre-wrap; overflow-wrap: anywhere; }
+#upload-panel { border-bottom: 1px solid #293d49; padding-bottom: 10px; }
+#upload-panel h2 { font-size: 13px; margin: 12px 0 4px; }
+#upload-panel video { display: block; width: 100%; max-height: 180px; margin: 8px 0; border-radius: 8px; background: #000; }
+#upload-panel button { margin-right: 8px; }
+#upload-start { background: #a2e8d6; color: #0c2927; border-color: #a2e8d6; font-weight: 650; }
+#upload-panel progress { display: block; width: 100%; margin-top: 12px; accent-color: #a2e8d6; }
+/* Phone WALK pad (phone-joystick.ts): touch devices only, never in VR or the wearer's view. */
+#joystick { position: absolute; left: 24px; bottom: calc(var(--hud-space, 250px) + 16px); width: 88px; height: 88px; display: none; place-items: center; border-radius: 50%; border: 1px solid #a2e8d677; background: radial-gradient(circle, #a2e8d633 20%, #162834aa 23%); touch-action: none; user-select: none; -webkit-user-select: none; }
+.touch #joystick { display: grid; }
+#joystick .knob { grid-area: 1 / 1; width: 34px; height: 34px; border-radius: 50%; background: #a2e8d640; border: 1px solid #a2e8d6aa; pointer-events: none; }
+#joystick .joystick-label { grid-area: 1 / 1; font-size: 9px; letter-spacing: .1em; color: #d7e7ed; pointer-events: none; }
+.in-xr #room-panel, .in-xr #joystick, .wearer-view #joystick { display: none; }
+@media (max-width: 650px) {
+  #room-panel { top: 198px; right: 12px; width: min(304px, calc(100% - 24px)); max-height: max(120px, calc(100dvh - 210px - var(--hud-space, 300px))); }
+  #joystick { left: 16px; bottom: calc(var(--hud-space, 300px) + 12px); }
+}

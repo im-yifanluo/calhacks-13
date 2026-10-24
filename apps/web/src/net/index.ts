@@ -30,6 +30,22 @@ export type Pose = {
   vy: number;
   vz: number;
 };
+/**
+ * True for the SDK's failure to exchange a stored token (`WebSocketTokenError`, HTTP 401): the
+ * server no longer accepts it, for example after its data directory was reset. The SDK does not
+ * export that class, so match its name and status.
+ */
+export function tokenRejected(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.name === "WebSocketTokenError" &&
+    (error as Error & { status?: unknown }).status === 401
+  );
+}
+/** Delay before rebuilding after the n-th failed first connection (the SDK only retries established ones). */
+export const initialRetryDelayMs = (failures: number) =>
+  Math.min(30_000, 1000 * 2 ** Math.max(0, failures - 1));
+const seconds = (ms: number) => Math.max(1, Math.round(ms / 1000));
 export class Multiplayer extends EventTarget {
   connection?: DbConnection;
   identity?: Identity;
@@ -40,6 +56,9 @@ export class Multiplayer extends EventTarget {
   offsetUs = 0;
   private bestRtt = Infinity;
   private clockTimer?: ReturnType<typeof setInterval>;
+  private retryTimer?: ReturnType<typeof setTimeout>;
+  private initialFailures = 0;
+  private disposed = false;
   private poseAt = 0;
   private queued = false;
   private changed = () => {
@@ -52,15 +71,19 @@ export class Multiplayer extends EventTarget {
   };
   connect() {
     const key = `memreplay-token:${import.meta.env.VITE_STDB_DATABASE || "memory-replay"}`;
-    this.connection = DbConnection.builder()
+    const storedToken = sessionStorage.getItem(key) || undefined;
+    let connected = false;
+    const connection: DbConnection = DbConnection.builder()
       .withUri(
         import.meta.env.VITE_STDB_URL ||
           `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/stdb/`,
       )
       .withDatabaseName(import.meta.env.VITE_STDB_DATABASE || "memory-replay")
-      .withToken(sessionStorage.getItem(key) || undefined)
+      .withToken(storedToken)
       .withAutomaticReconnect()
       .onConnect((conn, identity, token) => {
+        connected = true;
+        this.initialFailures = 0;
         this.identity = identity;
         this.token = token;
         sessionStorage.setItem(key, token);
@@ -110,19 +133,46 @@ export class Multiplayer extends EventTarget {
         sessionStorage.setItem(key, token);
         this.changed();
       })
-      .onDisconnect((_ctx, error) => {
+      // The SDK passes the next attempt number only when it will retry (automatic reconnect
+      // of an established connection); undefined means it has given up for good.
+      .onDisconnect((_ctx, error, nextAttempt) => {
+        if (this.connection !== connection) return;
         this.ready = false;
-        this.status = "Disconnected — reconnecting";
+        this.status =
+          nextAttempt === undefined
+            ? "Disconnected — reload to reconnect"
+            : "Connection lost — reconnecting…";
         if (error) this.error = error.message;
         this.changed();
       })
-      .onConnectError((_ctx, error) => {
+      .onConnectError((_ctx, error, nextAttempt, nextDelayMs) => {
+        if (this.connection !== connection || this.disposed) return;
         this.ready = false;
-        this.status = "Connection failed — reload to retry";
         this.error = error.message;
+        if (nextAttempt !== undefined) {
+          this.status = `Reconnecting… (attempt ${nextAttempt}, next in ${seconds(nextDelayMs ?? 0)} s)`;
+        } else if (connected) {
+          this.status = "Connection failed — reload to retry";
+        } else if (storedToken && tokenRejected(error)) {
+          // The server rejects this tab's saved identity: forget it and join as a new guest.
+          sessionStorage.removeItem(key);
+          this.status = "Saved session expired — connecting as a new guest…";
+          this.error = "";
+          this.connect();
+          return;
+        } else {
+          // First connection failed (server down or unreachable). The SDK never retries these.
+          const delay = initialRetryDelayMs(++this.initialFailures);
+          this.status = `Can't reach the multiplayer server — retrying in ${seconds(delay)} s`;
+          clearTimeout(this.retryTimer);
+          this.retryTimer = setTimeout(() => {
+            if (!this.disposed) this.connect();
+          }, delay);
+        }
         this.changed();
       })
       .build();
+    this.connection = connection;
   }
   private syncClock() {
     if (this.ready)
@@ -182,8 +232,13 @@ export class Multiplayer extends EventTarget {
     const r = this.room;
     return r ? this.connection?.db.memory.id.find(r.memoryId) : undefined;
   }
+  /** Library rows in id order, so the list keeps its order across reconnects. */
   get memories() {
-    return this.connection ? [...this.connection.db.memory.iter()] : [];
+    return this.connection
+      ? [...this.connection.db.memory.iter()].sort((a, b) =>
+          a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+        )
+      : [];
   }
   get players() {
     const r = this.room;
@@ -258,7 +313,9 @@ export class Multiplayer extends EventTarget {
     );
   }
   dispose() {
+    this.disposed = true;
     if (this.clockTimer) clearInterval(this.clockTimer);
+    clearTimeout(this.retryTimer);
     this.connection?.disconnect();
   }
 }

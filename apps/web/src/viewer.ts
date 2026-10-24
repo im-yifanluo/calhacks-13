@@ -18,6 +18,9 @@ export type ViewerEvent =
   | { type: "pose"; objectId: string; branchId: string; pose: Keyframe; velocity: [number, number, number] }
   | { type: "recording"; objectId: string; branchId: string; frames: Keyframe[] };
 
+/** Two clock times closer than this (seconds) are the same instant. */
+const SAME_TIME = 0.001;
+
 export class Viewer {
   readonly timeline: Timeline;
   readonly physics: Physics;
@@ -33,6 +36,7 @@ export class Viewer {
   private lastMove = 0;
   private operation = 0;
   private pendingGrab = false;
+  private pendingRequest: GrabRequest | null = null;
   private lastPublish = 0;
   private disposed = false;
   private remotePoses = new Map<string, { from: Keyframe; to: Keyframe; receivedAt: number }>();
@@ -57,7 +61,7 @@ export class Viewer {
     this.sample();
   }
 
-  setAuthority(authority: InteractionAuthority): void { this.authority = authority; }
+  setAuthority(authority: InteractionAuthority | undefined): void { this.authority = authority; }
   subscribe(listener: (event: ViewerEvent) => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   private emit(event: ViewerEvent): void { for (const listener of this.listeners) { try { listener(event); } catch (error) { console.error("Viewer listener", error); } } }
   private clockEvent(): void { this.emit({ type: "clock", time: this.timeline.time, playing: this.timeline.playing, branchId: this.timeline.activeId }); }
@@ -101,7 +105,7 @@ export class Viewer {
     const op = ++this.operation;
     const authority = this.authority;
     const request: GrabRequest = { objectId, branchId: this.timeline.activeId, time: this.timeline.time, pose: keyframe(this.timeline.time, object.root) };
-    this.pendingGrab = true;
+    this.pendingGrab = true; this.pendingRequest = request;
     try {
       const grant = authority ? await authority.acquire(request) : true;
       if (!grant) { this.report("Another player owns that object."); return false; }
@@ -127,7 +131,7 @@ export class Viewer {
       this.report(`Holding ${object.definition.label}. Move and release to throw.`);
       return true;
     } catch (error) { this.report(`Grab failed: ${String(error)}`); return false; }
-    finally { this.pendingGrab = false; }
+    finally { this.pendingGrab = false; this.pendingRequest = null; }
   }
 
   moveHeld(position: THREE.Vector3, rotation: THREE.Quaternion, dt: number): void {
@@ -209,9 +213,23 @@ export class Viewer {
     this.report(id === "original" ? "Original recording. Pause anywhere to make a new take." : "Alternate take selected. Press Play to replay your edit.");
   }
 
-  /** Incoming shared-clock updates do not echo a clock event. Times are seconds, not microseconds. */
+  /**
+   * Apply the shared clock (seconds, not microseconds). Never emits a clock event. Ignored, without touching a held
+   * object or a running preview, when:
+   * - it matches the local clock: time within 1 ms, same playing, speed and branch;
+   * - a grab is pending and it is paused within 1 ms of the request's time: the server's echo of that grab (its
+   *   reducer forks and moves the room to the new branch in the same transaction). The grant switches branch;
+   * - the branch is unknown (reported). Import branch rows with timeline.upsertBranch first.
+   * Anything else is a genuine change and wins over local interaction: it finishes a running preview, drops a held
+   * object and cancels a pending grab.
+   */
   applyClock(time: number, playing: boolean, speed = 1, branchId = this.timeline.activeId): void {
-    if (!Number.isFinite(speed) || speed <= 0) return;
+    if (!Number.isFinite(time) || !Number.isFinite(speed) || speed <= 0) return;
+    const timeline = this.timeline, target = Math.max(0, Math.min(timeline.duration, time));
+    if (Math.abs(target - timeline.time) < SAME_TIME && playing === timeline.playing && speed === timeline.speed &&
+      branchId === timeline.activeId) return;
+    if (this.pendingRequest && !playing && Math.abs(target - this.pendingRequest.time) < SAME_TIME) return;
+    if (!timeline.branches.some(b => b.id === branchId)) { this.report(`Ignored a clock update for an unknown take (${branchId}).`); return; }
     this.finishSimulation(); this.remotePoses.clear();
     if (branchId !== this.timeline.activeId) this.timeline.select(branchId);
     this.timeline.seek(time); this.timeline.playing = playing; this.timeline.speed = speed; this.sample();
