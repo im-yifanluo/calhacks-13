@@ -39,8 +39,10 @@ import CreateRoomReducer from "./create_room_reducer";
 import ForkBranchReducer from "./fork_branch_reducer";
 import GrabReducer from "./grab_reducer";
 import JoinRoomReducer from "./join_room_reducer";
+import LeaveRoomReducer from "./leave_room_reducer";
 import MoveObjectReducer from "./move_object_reducer";
 import ReleaseReducer from "./release_reducer";
+import SampleClockReducer from "./sample_clock_reducer";
 import SaveBranchKeyframesReducer from "./save_branch_keyframes_reducer";
 import SeekReducer from "./seek_reducer";
 import SetBranchReducer from "./set_branch_reducer";
@@ -53,6 +55,7 @@ import SetPoseReducer from "./set_pose_reducer";
 // Import all table schema definitions
 import BranchRow from "./branch_table";
 import BranchKeyframesRow from "./branch_keyframes_table";
+import ClockSampleRow from "./clock_sample_table";
 import MemoryRow from "./memory_table";
 import ObjectStateRow from "./object_state_table";
 import PlayerRow from "./player_table";
@@ -69,8 +72,8 @@ const tablesSchema = __schema({
       { accessor: 'id', name: 'branch_id_idx_btree', algorithm: 'btree', columns: [
         'id',
       ] },
-      { accessor: 'memoryId', name: 'branch_memory_id_idx_btree', algorithm: 'btree', columns: [
-        'memoryId',
+      { accessor: 'roomId', name: 'branch_room_id_idx_btree', algorithm: 'btree', columns: [
+        'roomId',
       ] },
     ],
     constraints: [
@@ -83,23 +86,38 @@ const tablesSchema = __schema({
       { accessor: 'branchId', name: 'branch_keyframes_branch_id_idx_btree', algorithm: 'btree', columns: [
         'branchId',
       ] },
-      { accessor: 'id', name: 'branch_keyframes_id_idx_btree', algorithm: 'btree', columns: [
-        'id',
+      { accessor: 'key', name: 'branch_keyframes_key_idx_btree', algorithm: 'btree', columns: [
+        'key',
       ] },
     ],
     constraints: [
-      { name: 'branch_keyframes_id_key', constraint: 'unique', columns: ['id'] },
+      { name: 'branch_keyframes_key_key', constraint: 'unique', columns: ['key'] },
     ],
   }, BranchKeyframesRow),
+  clockSample: __table({
+    name: 'clock_sample',
+    indexes: [
+      { accessor: 'identity', name: 'clock_sample_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'clock_sample_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, ClockSampleRow),
   memory: __table({
     name: 'memory',
     indexes: [
       { accessor: 'id', name: 'memory_id_idx_btree', algorithm: 'btree', columns: [
         'id',
       ] },
+      { accessor: 'requestId', name: 'memory_request_id_idx_btree', algorithm: 'btree', columns: [
+        'requestId',
+      ] },
     ],
     constraints: [
       { name: 'memory_id_key', constraint: 'unique', columns: ['id'] },
+      { name: 'memory_request_id_key', constraint: 'unique', columns: ['requestId'] },
     ],
   }, MemoryRow),
   objectState: __table({
@@ -108,12 +126,12 @@ const tablesSchema = __schema({
       { accessor: 'branchId', name: 'object_state_branch_id_idx_btree', algorithm: 'btree', columns: [
         'branchId',
       ] },
-      { accessor: 'id', name: 'object_state_id_idx_btree', algorithm: 'btree', columns: [
-        'id',
+      { accessor: 'key', name: 'object_state_key_idx_btree', algorithm: 'btree', columns: [
+        'key',
       ] },
     ],
     constraints: [
-      { name: 'object_state_id_key', constraint: 'unique', columns: ['id'] },
+      { name: 'object_state_key_key', constraint: 'unique', columns: ['key'] },
     ],
   }, ObjectStateRow),
   player: __table({
@@ -165,8 +183,10 @@ const reducersSchema = __reducers(
   __reducerSchema("fork_branch", ForkBranchReducer),
   __reducerSchema("grab", GrabReducer),
   __reducerSchema("join_room", JoinRoomReducer),
+  __reducerSchema("leave_room", LeaveRoomReducer),
   __reducerSchema("move_object", MoveObjectReducer),
   __reducerSchema("release", ReleaseReducer),
+  __reducerSchema("sample_clock", SampleClockReducer),
   __reducerSchema("save_branch_keyframes", SaveBranchKeyframesReducer),
   __reducerSchema("seek", SeekReducer),
   __reducerSchema("set_branch", SetBranchReducer),

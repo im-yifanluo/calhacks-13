@@ -12,6 +12,7 @@ import {
 
 export const Branch = __t.object("Branch", {
   id: __t.u64(),
+  roomId: __t.u64(),
   memoryId: __t.u64(),
   parentId: __t.u64(),
   forkMediaUs: __t.u64(),
@@ -21,32 +22,54 @@ export const Branch = __t.object("Branch", {
 export type Branch = __Infer<typeof Branch>;
 
 export const BranchKeyframes = __t.object("BranchKeyframes", {
-  id: __t.u64(),
+  key: __t.string(),
   branchId: __t.u64(),
   objectId: __t.string(),
   startMediaUs: __t.u64(),
+  endMediaUs: __t.u64(),
   keyframesJson: __t.string(),
+  author: __t.identity(),
 });
 export type BranchKeyframes = __Infer<typeof BranchKeyframes>;
 
+export const ClockSample = __t.object("ClockSample", {
+  identity: __t.identity(),
+  clientSentUs: __t.u64(),
+  serverTs: __t.timestamp(),
+});
+export type ClockSample = __Infer<typeof ClockSample>;
+
+export const Connection = __t.object("Connection", {
+  id: __t.connectionId(),
+  identity: __t.identity(),
+});
+export type Connection = __Infer<typeof Connection>;
+
 export const Memory = __t.object("Memory", {
   id: __t.u64(),
+  requestId: __t.string(),
   owner: __t.identity(),
+  pipelineIdentity: __t.identity(),
   title: __t.string(),
+  sourceUrl: __t.string(),
   manifestUrl: __t.string(),
   status: __t.string(),
   progress: __t.f32(),
+  error: __t.string(),
+  durationUs: __t.u64(),
   createdAt: __t.timestamp(),
 });
 export type Memory = __Infer<typeof Memory>;
 
 export const ObjectState = __t.object("ObjectState", {
-  id: __t.u64(),
+  key: __t.string(),
   branchId: __t.u64(),
   objectId: __t.string(),
   heldBy: __t.option(__t.identity()),
+  simOwner: __t.option(__t.identity()),
   mode: __t.string(),
   fromMediaUs: __t.u64(),
+  updatedAt: __t.timestamp(),
   px: __t.f32(),
   py: __t.f32(),
   pz: __t.f32(),
