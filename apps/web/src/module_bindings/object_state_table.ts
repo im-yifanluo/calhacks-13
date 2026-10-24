@@ -11,12 +11,14 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  id: __t.u64().primaryKey(),
+  key: __t.string().primaryKey(),
   branchId: __t.u64().name("branch_id"),
   objectId: __t.string().name("object_id"),
   heldBy: __t.option(__t.identity()).name("held_by"),
+  simOwner: __t.option(__t.identity()).name("sim_owner"),
   mode: __t.string(),
   fromMediaUs: __t.u64().name("from_media_us"),
+  updatedAt: __t.timestamp().name("updated_at"),
   px: __t.f32(),
   py: __t.f32(),
   pz: __t.f32(),

@@ -12,10 +12,15 @@ import {
 
 export default __t.row({
   id: __t.u64().primaryKey(),
+  requestId: __t.string().name("request_id"),
   owner: __t.identity(),
+  pipelineIdentity: __t.identity().name("pipeline_identity"),
   title: __t.string(),
+  sourceUrl: __t.string().name("source_url"),
   manifestUrl: __t.string().name("manifest_url"),
   status: __t.string(),
   progress: __t.f32(),
+  error: __t.string(),
+  durationUs: __t.u64().name("duration_us"),
   createdAt: __t.timestamp().name("created_at"),
 });

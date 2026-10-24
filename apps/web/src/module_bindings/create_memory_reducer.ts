@@ -11,6 +11,10 @@ import {
 } from "spacetimedb";
 
 export default {
+  requestId: __t.string(),
   title: __t.string(),
+  sourceUrl: __t.string(),
   manifestUrl: __t.string(),
+  pipelineIdentity: __t.identity(),
+  durationUs: __t.u64(),
 };

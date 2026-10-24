@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host",
+    "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "dev:lan": "HTTPS=1 vite --host",
@@ -14,7 +14,7 @@
     "@dimforge/rapier3d-compat": "^0.21.0",
     "@memreplay/shared": "*",
     "@sparkjsdev/spark": "^2.4.0",
-    "spacetimedb": "^2.13.0",
+    "spacetimedb": "2.13.0",
     "three": "^0.186.1"
   },
   "devDependencies": {

@@ -15,4 +15,5 @@ export default {
   status: __t.string(),
   progress: __t.f32(),
   manifestUrl: __t.string(),
+  error: __t.string(),
 };

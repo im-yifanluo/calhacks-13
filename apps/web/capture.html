@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Memory Replay · Capture test</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <a href="/?demo=1">MEMORY REPLAY</a
+        ><span id="connection" role="status">Connecting…</span>
+      </header>
+      <h1>See what you recorded.</h1>
+      <p class="intro">
+        Try <strong>O · ON → F · OFF → automatic upload</strong> here first. The
+        sample scene below simulates the camera. Video storage and database
+        verification use your real local services.
+      </p>
+      <div class="columns">
+        <section class="card" aria-labelledby="sim-heading">
+          <div class="sim-heading">
+            <h2 id="sim-heading">O / F simulation</h2>
+            <span id="sim-state" role="status">OFF</span>
+          </div>
+          <p class="sim-note">
+            Animated sample scene · No glasses or webcam connected
+          </p>
+          <canvas
+            id="sim-canvas"
+            width="640"
+            height="360"
+            aria-label="Simulated camera scene with a moving ball and recording timer"
+          ></canvas>
+          <div class="sim-caption">
+            <span>SIMULATED CAMERA</span
+            ><span id="sim-timer">0.0 s / 30 s</span>
+          </div>
+          <label for="sim-title">Test title</label>
+          <input id="sim-title" maxlength="75" value="O-F recording test" />
+          <div class="sim-buttons">
+            <button id="sim-on" disabled aria-keyshortcuts="O">O · ON</button>
+            <button id="sim-off" disabled aria-keyshortcuts="F">F · OFF</button>
+          </div>
+          <p class="sim-note">
+            Press O, wait 3–5 seconds, then press F. You can click the buttons
+            or use your keyboard outside text fields. F automatically saves,
+            uploads and verifies the clip.
+          </p>
+          <p id="sim-status" role="status">
+            Ready when the database is connected.
+          </p>
+          <p id="sim-proof"></p>
+          <button id="sim-retry" hidden>Retry upload / verify</button>
+          <button id="sim-reset" hidden>New test</button>
+          <a id="sim-download" hidden>Download this test clip</a>
+        </section>
+        <section class="card">
+          <h2>Stored recordings</h2>
+          <p>
+            These rows come from SpacetimeDB. Select one, then play the video
+            fetched from its stored URL.
+          </p>
+          <label for="recordings">Database recordings</label
+          ><select id="recordings">
+            <option value="">No uploaded videos yet</option>
+          </select>
+          <dl>
+            <dt>Database row</dt>
+            <dd id="row-id">—</dd>
+            <dt>Processing status</dt>
+            <dd id="row-status">—</dd>
+            <dt>Video URL</dt>
+            <dd><a id="source-link" target="_blank" rel="noopener">—</a></dd>
+          </dl>
+          <video
+            id="stored-video"
+            controls
+            playsinline
+            preload="metadata"
+            aria-label="Stored video playback"
+          ></video>
+          <button id="check-storage" disabled>Verify stored file</button>
+          <p id="storage-proof" role="status">
+            Select a recording to check its file.
+          </p>
+          <p id="playback-proof" role="status"></p>
+        </section>
+      </div>
+      <details class="card import-card">
+        <summary>Test a real Wayfarer video instead</summary>
+        <p>
+          For live glasses preview and O/F control, install the native iPhone
+          app. This browser simulation does not connect to the glasses. You can
+          also record with the glasses' capture button, import through Meta AI
+          and upload here.
+        </p>
+        <section id="upload-panel"></section>
+      </details>
+      <p id="error" role="alert"></p>
+      <footer>
+        Video bytes live in storage; SpacetimeDB stores the record and URL.
+        “Uploaded” confirms ingestion, not a finished 3D reconstruction. This
+        demo library uses public database rows.
+      </footer>
+    </main>
+    <script type="module" src="/src/capture.ts"></script>
+  </body>
+</html>
