@@ -5,6 +5,7 @@ Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves 
 - **Integrating the branches? Start with [docs/INTEGRATION.md](docs/INTEGRATION.md).** Agents should read [CLAUDE.md](CLAUDE.md) first.
 - **Full plan** (tracks, design, timeline, risks): [docs/PLAN.md](docs/PLAN.md)
 - **Vision pipeline runbook:** [pipeline/README.md](pipeline/README.md)
+- **P3 viewer:** [controls, verification, asset conventions, and the P4 integration API](docs/P3_VIEWER.md).
 
 ## Status (Sat Oct 24, early morning)
 
@@ -45,7 +46,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. You should see a butterfly splat and a box moving along a timeline. The splat can take ~10 s to appear on slow Wi-Fi.
+Open http://localhost:5173. The local demo uses a procedural splat floor, a moving ball, and a cube, with no external asset downloads. Pause, drag an object, release to throw, then play the new take. Select **Original** to return to the untouched recording. Load pipeline assets with `?memory=<encoded-manifest-url>`.
 
 > If `npm install` times out on venue Wi-Fi, switch to a phone hotspot and run it again.
 
@@ -99,10 +100,13 @@ npm run dev
 adb reverse tcp:5173 tcp:5173
 ```
 
-In the Quest Browser, open **http://localhost:5173** and press **VR**. Over USB this counts as a secure page, so VR works without HTTPS.
+In the Quest Browser, open **http://localhost:5173** and press **Enter VR**. Over USB this counts as a secure page, so VR works without HTTPS.
 
 - **A or X button:** play / pause
-- **Thumbstick left/right (while paused):** scrub through time
+- **Squeeze or hand pinch:** grab a paused object; move and release to throw
+- **Trigger on the floating panel:** play/pause, seek ±1 second, cycle takes, or return to Original
+- **Left thumbstick:** move; **right thumbstick:** snap-turn
+- **B or Y button:** cycle takes
 - **Debug the headset page:** open `chrome://inspect` in desktop Chrome
 
 **Phones and judges** need a public link:
@@ -154,6 +158,7 @@ memreplay merge work/<id> --title "..."
 |---|---|
 | `npm run dev` | Viewer at http://localhost:5173 (smoke test at `/smoke.html`) |
 | `npm run build` | Production build into `apps/web/dist` |
+| `npm test` | P3 track, branch, ownership, and real Rapier regression tests |
 | `npm run tunnel` | Public HTTPS link for phones and judges |
 | `npm run stdb:start` | Local SpacetimeDB on port 3055 |
 | `npm run stdb:publish:local` | Upload the server module to it |

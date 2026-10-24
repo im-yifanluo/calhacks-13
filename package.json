@@ -14,7 +14,8 @@
     "stdb:start": "spacetime start --listen-addr 127.0.0.1:3055",
     "stdb:publish:local": "spacetime publish -s http://127.0.0.1:3055 -p server/spacetime memory-replay",
     "stdb:generate": "spacetime generate --lang typescript --out-dir apps/web/src/module_bindings -p server/spacetime",
-    "tunnel": "cloudflared tunnel --url http://localhost:5173"
+    "tunnel": "cloudflared tunnel --url http://localhost:5173",
+    "test": "npm run test -w apps/web"
   },
   "engines": {
     "node": ">=20"
