@@ -17,7 +17,7 @@ while [ $n -lt $N ]; do
     rsync -az --no-owner --no-group -e "$SSH" \
       --include='memory.json' --include='memory.static.json' --include='colmap_names.txt' \
       --include='world/' --include='world/bg_room.spz' --include='world/bg_static.spz' --include='world/room_collider.glb' \
-      --include='world/cameras.json' --include='world/world.json' --include='world/ghosts.json' --include='world/exposure.json' \
+      --include='world/cameras.json' --include='world/world.json' --include='world/ghosts.json' --include='world/exposure.json' --include='world/ghosts/' --include='world/ghosts/*' \
       --include='objects/' --include='objects/*.spz' --include='objects/*.json' --include='people/' --include='people/*' \
       --include='input/' --include='input/audio.m4a' --include='verify/' --include='verify/report.json' --exclude='*' \
       "$POD:/workspace/work/$c/" "$D/" \

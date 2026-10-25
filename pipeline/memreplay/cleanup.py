@@ -4,9 +4,11 @@ Splats: a splat trained from a walk grows "floaters" right in front of the camer
 make sense from one training view; in the lobby a white smear over a third of the view), plus giant or needle-thin
 Gaussians far from the path. prune() removes
   - Gaussians whose centre is within NEAR_PATH m of the recorded camera path (nothing real sits inside the wearer's head),
-  - Gaussians bigger than MAX_SCALE m, or needles (longest axis > 0.3 m and > 15x the middle one),
+  - Gaussians bigger than MAX_SCALE m, or needles (longest axis > 0.12 m and > 8x the middle one),
   - practically invisible ones (opacity < 0.002; faint Gaussians still build surfaces like floors), and anything
-    > 80 m from the path.
+    > MAX_DIST m from the path.
+  Beyond FAR m (distant facades, the sky dome seeded SKY_DISTANCE m out by the background stage) Gaussians are
+  coarse by nature: the size limit grows with distance, the needle and haze rules are off, and faint ones go.
 
 Ghosts: Grounding DINO sometimes calls a patterned wall a "person". A real person is seen for >= 1 s, touches the
 floor, and is 0.8-2.3 m tall; keep_ghost() checks that on the points-sequence file.
@@ -16,6 +18,7 @@ floor, and is 0.8-2.3 m tall; keep_ghost() checks that on the points-sequence fi
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -25,6 +28,12 @@ import numpy as np
 
 NEAR_PATH = 0.5
 MAX_SCALE = 1.5
+FAR = 60.0              # m from the path: beyond this, far-field rules apply
+FAR_SCALE_PER_M = 0.06  # size limit beyond FAR grows with distance (9 m for a sky Gaussian 150 m out)
+MAX_DIST = 400.0        # m: nothing farther than this (the viewer's far plane is 200 m from the eye)
+SKY_FILL = float(os.environ.get("MEMREPLAY_SKY_FILL", "2.5"))  # grow far sky Gaussians by this factor (1 = off)
+SKY_MIN_OPACITY = 0.7   # and make them at least this opaque: a sky is smooth and sits behind everything
+SKY_ABOVE_EYE = 5.0     # m above the camera path: below this a far Gaussian may be a facade, not sky
 NEAR_BIG_RADIUS = 1.5   # m from the path
 NEAR_BIG = 0.35         # m: a Gaussian this long, this close, is a floater (close surfaces are finely resolved)
 
@@ -39,11 +48,37 @@ def prune(data: np.ndarray, path_xyz: np.ndarray) -> np.ndarray:
     d = cKDTree(path_xyz).query(xyz, k=1)[0]
     srt = np.sort(s, axis=1)                                   # small, mid, big
     big, mid = srt[:, 2], np.maximum(srt[:, 1], 1e-6)
-    keep = np.isfinite(xyz).all(1) & (d > NEAR_PATH) & (d < 80) & (big < MAX_SCALE) & (op > 0.002)
-    keep &= ~((big > 0.12) & (big / mid > 8))                  # needles: one long axis (flat discs build floors)
-    keep &= ~((big > 0.6) & (op < 0.3))                        # big, faint blobs: haze and light blooms
+    far = d > FAR                                              # distant facades and the sky dome
+    keep = np.isfinite(xyz).all(1) & (d > NEAR_PATH) & (d < MAX_DIST) & (op > 0.002)
+    keep &= big < np.where(far, FAR_SCALE_PER_M * d, MAX_SCALE)  # giants (far ones may legitimately be metres across)
+    keep &= far | ~((big > 0.12) & (big / mid > 8))            # needles: one long axis (flat discs build floors)
+    keep &= far | ~((big > 0.6) & (op < 0.3))                  # big, faint blobs: haze and light blooms
+    keep &= ~(far & (op < 0.1))                                # far and faint: never visible, only a cost
     keep &= ~((d < NEAR_BIG_RADIUS) & (big > NEAR_BIG))        # big blobs right in front of the camera: floaters
     return keep
+
+
+def fill_sky(data: np.ndarray, path_xyz: np.ndarray) -> int:
+    """Grow and firm up the sky dome, in place. The background stage seeds sky pixels 150 m out and the trainer
+    leaves a few thousand opaque Gaussians there, 1-5 m across, with gaps between them that render as black holes
+    in the sky. Far (> FAR m) Gaussians well above the camera path are the sky: scale them by SKY_FILL so neighbours
+    overlap and raise their opacity to SKY_MIN_OPACITY. Returns how many were touched."""
+    from scipy.spatial import cKDTree
+
+    if SKY_FILL <= 1.0 or len(data) == 0:
+        return 0
+    xyz = np.stack([data["x"], data["y"], data["z"]], 1).astype(np.float64)
+    op = 1 / (1 + np.exp(-data["opacity"].astype(np.float64)))
+    d = cKDTree(path_xyz).query(xyz, k=1)[0]
+    m = (d > FAR) & (xyz[:, 1] - np.median(path_xyz[:, 1]) > SKY_ABOVE_EYE) & (op > 0.1)
+    if not m.any():
+        return 0
+    for k in ("scale_0", "scale_1", "scale_2"):
+        data[k][m] = (data[k][m] + np.log(SKY_FILL)).astype(np.float32)
+    o = np.maximum(op[m], SKY_MIN_OPACITY)
+    data["opacity"][m] = np.log(o / (1 - o)).astype(np.float32)
+    print(f"[layers] sky: grew {int(m.sum())} far Gaussians x{SKY_FILL:g} and set opacity >= {SKY_MIN_OPACITY}")
+    return int(m.sum())
 
 
 def seen_count(xyz: np.ndarray, cams: list, min_views: int = 2) -> np.ndarray:

@@ -86,6 +86,19 @@ clip ─► S1 normalize ─► S1 nouns ─► S2 ViPE ─► S3 world ─► S
 Tried and switched off: per-frame depth-scale alignment (map-based and pairwise). ViPE's pose errors leak into the depth
 ratios, and both versions made reprojection worse (see the report). `world.ALIGN_DEPTH`.
 
+**S6 today** (the table above is the original design; the report's §4 has the history):
+- **S6 splat** (`background.py`): gsplat MCMC, cap 500k Gaussians, `steps_scaler 0.67` (about 20k steps), appearance
+  model on (`--app_opt`; without it MCMC collapses), default pose refinement, ViPE depth supervision through COLMAP-style
+  tracks (`--depth_loss`, λ 0.01), people masked out with a 12 px margin, sky pixels kept in the loss and seeded on a
+  dome 150 m out (`MEMREPLAY_SKY_DOME`). Static mode trains the room on every frame.
+- **S6c bake** (`bake.py`): exports the room at the mean appearance embedding, calibrates colour against the frames
+  (global gain and bias), writes the per-frame exposure `e` that the viewer replays in wearer's view, and applies a
+  viewer gain only if `world/viewer_gain.json` exists (identity by default: a per-clip fit cost 0.3 dB on glasses clips).
+- **S6b layers** (`layers.py`, `cleanup.py`): prunes floaters near the path, giants, needles, haze and anything seen by
+  fewer than two frames; beyond 60 m (facades, the sky dome) the size limit grows with distance and only faint
+  Gaussians go (the old 80 m cut-off rendered the rotunda's sky black), then grows the far sky Gaussians so they
+  overlap (`MEMREPLAY_SKY_FILL`, 2.5); carves each kept prop out of the room splat by mask votes.
+
 ---
 
 ## 3. Recording tips (what made the sample clips easy or hard)

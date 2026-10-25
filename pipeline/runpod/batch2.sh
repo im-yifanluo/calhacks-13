@@ -3,6 +3,7 @@
 # uploader): normalize, nouns, ViPE (this GPU), world, l0, objects (CPU), then append the clip to the train queue
 # (/workspace/logs/train_queue) for trainq.sh. Summary lines go to /workspace/logs/static_run.log (status page).
 source /workspace/memory-replay/pipeline/runpod/env.sh
+export MEMREPLAY_PROP_MOTION=0        # demo footage: park every prop (identity hops looked like motion)
 GPU=$1; shift
 LOG=/workspace/logs/static_run.log; Q=/workspace/logs/train_queue
 say() { echo "$(date +%T) $*" | tee -a $LOG; }
