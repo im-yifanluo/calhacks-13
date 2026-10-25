@@ -147,7 +147,7 @@ export class Multiplayer extends EventTarget {
   /** Library-only guest persistence. Viewer tabs retain separate player identities. */
   private get tokenStorage() { return this.persistentLibraryGuest ? localStorage : sessionStorage; }
   private rememberToken(key: string, token: string) {
-    if (savedAccount()) return;   // a personal-key account keeps its token in the account store
+    if (savedAccount()) return;   // a password account keeps its token in the account store
     if (!this.persistentLibraryGuest) this.hold(token);
     this.tokenStorage.setItem(key, token);
   }
@@ -294,7 +294,7 @@ export class Multiplayer extends EventTarget {
         this.token = token;
         const account = savedAccount();
         if (account && account.identity !== identity.toHexString()) {
-          this.blockAuth("This personal key could not be verified. Sign out and use your saved key.");
+          this.blockAuth("This password could not be verified. Sign out and use your saved password.");
           conn.disconnect();
           return;
         }
@@ -380,7 +380,7 @@ export class Multiplayer extends EventTarget {
         this.ready = false;
         this.connecting = false;
         if (savedAccount() && storedToken && tokenRejected(error)) {
-          this.blockAuth("Personal key rejected — sign out and use a valid saved key");
+          this.blockAuth("Password rejected — sign out and use a valid saved password");
         } else if (error.name === "IdentityChangedError") {
           this.blockAuth("Your identity changed — reload to sign in again");
         } else if (nextAttempt !== undefined) {

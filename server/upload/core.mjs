@@ -152,7 +152,7 @@ export function makeHandler({
       const body = listing || connectionsRoute || ((profileRoute || accountRoute) && req.method === "GET")
         ? { identity: route.searchParams.get("identity") }
         : await json(req);
-      // POST /account either creates/promotes an identity or restores an existing personal key.
+      // POST /account either creates/promotes an identity or restores an existing password.
       let credential;
       const restoring = accountRoute && req.method === "POST" && body.personalKey !== undefined;
       const creating = accountRoute && req.method === "POST" && !restoring;
@@ -174,7 +174,7 @@ export function makeHandler({
         if (creating) await registerAccount(name, auth);
         const profile = await getAccount(credential.identity, auth);
         if (profile.provider !== "key" || !profile.displayName)
-          throw new ApiError(401, "This identity has no registered personal-key account");
+          throw new ApiError(401, "This identity has no registered password account");
         const result = { ...accountConfig, ...profile };
         if (req.method === "POST") Object.assign(result, { token: credential.token, personalKey: encodePersonalKey(credential) });
         return send(200, result);
@@ -270,7 +270,7 @@ export function databaseConfig(env = process.env) {
         method: "POST", headers: { Authorization: auth, "Content-Type": "application/json" },
         body: JSON.stringify([name]), signal: AbortSignal.timeout(10000),
       });
-      if (!response.ok) throw new ApiError(response.status >= 500 ? 502 : 400, "Could not register this name. An existing personal key keeps its registered name.");
+      if (!response.ok) throw new ApiError(response.status >= 500 ? 502 : 400, "Could not register this name. An existing password keeps its registered name.");
     },
     getAccount: async (identity, auth) => {
       if (!/^[a-f0-9]{64}$/.test(identity)) throw new ApiError(401, "Invalid identity");

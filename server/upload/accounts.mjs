@@ -1,4 +1,4 @@
-/** Same portable personal-key format as apps/web/src/account-key.ts. No credentials live in the database. */
+/** Same portable password format as apps/web/src/account-key.ts. No credentials live in the database. */
 export class ApiError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
@@ -17,23 +17,23 @@ export function encodePersonalKey(account) {
 
 export function decodePersonalKey(value, settings) {
   if (typeof value !== "string" || value.length > 16384 || !/^memos1\.[A-Za-z0-9_-]+$/.test(value.trim()))
-    throw new ApiError(401, "Use the complete personal key beginning with memos1.");
+    throw new ApiError(401, "Use the complete password beginning with memos1.");
   let data;
   try {
     data = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.from(value.trim().slice(7), "base64url")));
     if (!data || typeof data !== "object" || typeof data.identity !== "string" || !/^[a-f0-9]{64}$/.test(data.identity) ||
       typeof data.token !== "string" || data.token.length > 8192 ||
       !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(data.token)) throw new Error();
-  } catch { throw new ApiError(401, "The personal key is incomplete or damaged"); }
+  } catch { throw new ApiError(401, "The password is incomplete or damaged"); }
   if (data.server !== settings?.server || data.database !== settings?.database)
-    throw new ApiError(401, "This personal key belongs to a different memos server or database");
+    throw new ApiError(401, "This password belongs to a different memos server or database");
   return { ...settings, identity: data.identity, token: data.token };
 }
 
 /** Resolve credentials using configured destinations only. Verification still happens at SpacetimeDB. */
 export function credentials(header, identity, settings) {
   if (typeof header !== "string" || !header.startsWith("Bearer "))
-    throw new ApiError(401, "Sign in with a personal key or SpacetimeDB token first");
+    throw new ApiError(401, "Sign in with a password or SpacetimeDB token first");
   const bearer = header.slice(7);
   if (bearer.startsWith("memos1.")) {
     const account = decodePersonalKey(bearer, settings);

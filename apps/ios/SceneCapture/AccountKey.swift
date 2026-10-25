@@ -26,7 +26,7 @@ struct HostedAccount: Decodable {
     }
 }
 
-/// Same wire format as apps/web/src/account-key.ts. Decoding never authenticates a key.
+/// Same wire format as apps/web/src/account-key.ts. Decoding never authenticates a password.
 struct AccountKey: Codable, Equatable {
     let server: String
     let database: String
@@ -57,8 +57,8 @@ struct AccountKey: Codable, Equatable {
         case invalid, destination
         var errorDescription: String? {
             switch self {
-            case .invalid: return "Paste the complete personal key starting with memos1. A party code is different."
-            case .destination: return "This key belongs to a different server or database. Check your server address."
+            case .invalid: return "Paste the complete password starting with memos1. A party code is different."
+            case .destination: return "This password belongs to a different server or database. Check your server address."
             }
         }
     }

@@ -7,19 +7,19 @@ Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves 
 - **Viewer:** [docs/P3_VIEWER.md](docs/P3_VIEWER.md) · **Multiplayer and upload:** [docs/P4.md](docs/P4.md) · **Upload test:** [docs/CAPTURE_TEST.md](docs/CAPTURE_TEST.md)
 - **I3 / I4 / I5 / I7 connection checks:** [Access, setup and one-command test](docs/CONNECTIONS.md). Run `npm run test:connections` for an isolated live database/storage/worker-handoff/multiplayer test without a GPU.
 - **Integrated iPhone → Runpod pipeline:** [Setup and acceptance](docs/RUNPOD_INTEGRATION.md). `npm run test:pipeline` runs the actual Swift upload queue and worker transport against isolated SpacetimeDB/R2 with substituted reconstruction stages. `npm run test:pipeline:live -- --clip /absolute/clip.mp4` requires a configured GPU worker and passes only after a real scene is published and visible through the API and database subscription.
-- **Live phone upload API:** `https://memos.alightdell64.chatgpt.site` — [Account/upload contract and verification](docs/UPLOAD_API.md). Uses the website's Maincloud database and personal keys, with durable R2 storage. Public MP4 upload/playback verified; hosted clips are limited to 90 MiB. `npm run test:upload-api` checks real database/upload/restart behavior locally.
+- **Live phone upload API:** `https://memos.alightdell64.chatgpt.site` — [Account/upload contract and verification](docs/UPLOAD_API.md). Uses the website's Maincloud database and passwords, with durable R2 storage. Public MP4 upload/playback verified; hosted clips are limited to 90 MiB. `npm run test:upload-api` checks real database/upload/restart behavior locally.
 - **Vision pipeline runbook:** [pipeline/README.md](pipeline/README.md); results on the 5 sample clips: [docs/VISION_PIPELINE_REPORT.md](docs/VISION_PIPELINE_REPORT.md)
 
 **Phone app:** open `apps/ios/SceneCaptureDemo.xcodeproj` for a native iPhone/Simulator demo with **On** and **Off**, automatic upload, database + SHA-256 verification, offline playback and retry. [Installation and test instructions](docs/PHONE_APP.md). The separate glasses SDK project requires Meta's supported Xcode toolchain. Web library: `/library.html` (name-based guest profile, upload, processing status and ready scene links). Diagnostics: `/capture.html`. [Frontend flow and identity details](docs/FRONTEND_FLOW.md).
 
-**Parties and personal-key sign-in:** [Setup and test guide](docs/PARTIES.md). Create a party with a synthetic scene, share its invite link, and let the leader control time. The native phone app has a Party tab. Enter a name to receive a private sign-in key, or paste a saved key to restore your name on another device. Guest parties still work immediately. `npm run party:dev` starts the web/upload pair for the dedicated local party database.
+**Parties and password sign-in:** [Setup and test guide](docs/PARTIES.md). Create a party with a synthetic scene, share its invite link, and let the leader control time. The native phone app has a Party tab. Enter a name to receive a private sign-in password, or paste a saved password to restore your name on another device. Guest parties still work immediately. `npm run party:dev` starts the web/upload pair for the dedicated local party database.
 
 ## Status (Sat Oct 24)
 
 | Part | State |
 |---|---|
 | Viewer: splats, physics, VR controls, timeline replay, people ghosts, audio (Nikko) | Merged. Checked in a desktop browser; never run on a Quest. |
-| Multiplayer: parties, leader clock, invite links, avatars, shared takes | Local database and multi-client tests pass. Name-and-key sign-in replaces Google; the shared cloud database remembers registered names. |
+| Multiplayer: parties, leader clock, invite links, avatars, shared takes | Local database and multi-client tests pass. Name-and-password sign-in replaces Google; the shared cloud database remembers registered names. |
 | Upload service and capture test page (Jerry) | Merged. Uploads to local disk or S3/R2 and registers the clip in SpacetimeDB. |
 | Vision pipeline (`pipeline/`) | Built and run on all 5 sample clips (iPhone): video → ViPE → world frame → room splat, collider, people ghosts, grabbable props → `memory.json`, plus a static walk-through file (`memory.static.json`) per clip. `memreplay worker` picks up uploads; not yet run against a live SpacetimeDB. |
 | Native iPhone app | Standalone On/Off demo builds for Simulator. Full Meta SDK target and physical glasses remain unverified. See [docs/PHONE_APP.md](docs/PHONE_APP.md). |

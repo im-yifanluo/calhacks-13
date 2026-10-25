@@ -247,7 +247,7 @@ final class SceneLibrary: ObservableObject {
         if let identity {
             let credential: String
             if usesPortableAPI {
-                guard let key = identity.personalKey else { throw CaptureFailure.message("Sign in with your website personal key first") }
+                guard let key = identity.personalKey else { throw CaptureFailure.message("Sign in with your website password first") }
                 credential = key
             } else { credential = identity.token }
             request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
@@ -271,7 +271,7 @@ final class SceneLibrary: ObservableObject {
             }
             return saved
         }
-        guard !usesPortableAPI else { throw CaptureFailure.message("Paste your website personal key in Capture to sign in, or create an account.") }
+        guard !usesPortableAPI else { throw CaptureFailure.message("Paste your website password in Capture to sign in, or create an account.") }
         let (data,response) = try await URLSession.shared.data(for: request("/api/identity", method: "POST"))
         try check(data,response)
         let identity = try JSONDecoder().decode(ServerIdentity.self, from: data)
@@ -293,7 +293,7 @@ final class SceneLibrary: ObservableObject {
         userID = profile.identity.lowercased()
         profileReady = profile.provider == "key" && !profile.displayName.isEmpty
         if profileReady || displayName.isEmpty { displayName = profile.displayName }
-        profileMessage = profileReady ? "Signed in. Use your personal key to open this account on the web or Quest." : "Create a personal key with your name, or paste your existing key."
+        profileMessage = profileReady ? "Signed in. Use your password to open this account on the web or Quest." : "Create a password with your name, or paste your existing password."
     }
     private func loadProfile(_ auth: ServerIdentity) async throws {
         applyProfile(try await fetchProfile(auth))
@@ -347,7 +347,7 @@ final class SceneLibrary: ObservableObject {
             UIPasteboard.general.setItems([["public.utf8-plain-text": encoded]],
                 options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(120)])
             #endif
-            profileMessage = "Personal key copied for 2 minutes. Save it privately; anyone with it can sign in as you."
+            profileMessage = "Password copied for 2 minutes. Save it privately; anyone with it can sign in as you."
         } catch { profileMessage = error.localizedDescription }
     }
     func saveProfile() async {
@@ -412,7 +412,7 @@ final class SceneLibrary: ObservableObject {
             while !pending.isEmpty {
                 var item = pending[0]
                 guard item.server == nil || item.server == savedEndpoint else { throw CaptureFailure.message("This upload belongs to another server. Restore its address in Settings to retry.") }
-                guard item.owner == nil || item.owner == hex else { throw CaptureFailure.message("This clip belongs to another account. Restore its personal key to retry.") }
+                guard item.owner == nil || item.owner == hex else { throw CaptureFailure.message("This clip belongs to another account. Restore its password to retry.") }
                 let file = directory.appendingPathComponent(item.filename)
                 // Once a receipt exists its assignment is immutable, including across config changes/retries.
                 let pipeline = item.prepared?.pipeline ?? (item.isSimulation != true && cachedDestination?.pipelineAvailable != false)

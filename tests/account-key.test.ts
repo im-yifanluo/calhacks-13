@@ -18,15 +18,15 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
 
-describe("personal key format and storage", () => {
-  test("a key carries the signed credential and exact destination, with no name or party data", () => {
+describe("password format and storage", () => {
+  test("a password carries the signed credential and exact destination, with no name or party data", () => {
     expect(databaseSettings().server).toBe(account.server);
     const key = encodeAccountKey(account);
     expect(decodeAccountKey(` ${key}\n`)).toEqual(account);
     expect(key).toMatch(/^memos1\.[A-Za-z0-9_-]+$/);
     expect(Object.keys(decodeAccountKey(key)).sort()).toEqual(["database", "identity", "server", "token"]);
   });
-  test("party codes, public IDs, damaged keys and keys from other servers are rejected", () => {
+  test("party codes, public IDs, damaged passwords and passwords from other servers are rejected", () => {
     for (const input of ["", "ABC1234", identity.toHexString(), "memos1.bad!", "memos1.AAAA", "memos1." + "a".repeat(16384)])
       expect(() => decodeAccountKey(input)).toThrow();
     for (const changed of [{ database: "another" }, { server: "https://impostor.example" }])
@@ -45,7 +45,7 @@ describe("personal key format and storage", () => {
     expect(sessionStorage.getItem("memreplay-token:memos-test")).toBeNull();
     expect(localStorage.getItem("memreplay-library-token:memos-test")).toBeNull();
   });
-  test("when persistent storage is blocked the key still works for this tab", () => {
+  test("when persistent storage is blocked the password still works for this tab", () => {
     vi.stubGlobal("localStorage", { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); }, removeItem() {} });
     expect(saveAccount(account)).toBe(false);
     expect(savedAccount()).toEqual(account);
@@ -54,7 +54,7 @@ describe("personal key format and storage", () => {
   });
 });
 
-describe("key sign-in verification", () => {
+describe("password sign-in verification", () => {
   function verifier(profile: { provider: string; displayName: string } | undefined = { provider: "key", displayName: "Saved Name" }) {
     const on: Record<string, (...args: any[]) => void> = {};
     let applied = () => {};
@@ -78,7 +78,7 @@ describe("key sign-in verification", () => {
     expect(conn.disconnect).toHaveBeenCalledOnce();
     expect(savedAccount()).toBeUndefined(); // UI commits only after successful verification
   });
-  test("a rejected key does not overwrite the current saved account", async () => {
+  test("a rejected password does not overwrite the current saved account", async () => {
     saveAccount(account);
     const { on, conn } = verifier();
     const login = verifySignInKey(encodeAccountKey(account));
@@ -88,7 +88,7 @@ describe("key sign-in verification", () => {
     expect(savedAccount()).toEqual(account);
     expect(conn.disconnect).toHaveBeenCalledOnce();
   });
-  test("forging the public identity in an otherwise well-formed key is rejected", async () => {
+  test("forging the public identity in an otherwise well-formed password is rejected", async () => {
     const { on, conn } = verifier();
     const login = verifySignInKey(encodeAccountKey(account));
     const rejected = expect(login).rejects.toThrow(/could not be verified/);

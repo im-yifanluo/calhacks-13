@@ -9,7 +9,7 @@ and **how to change things without stepping on each other**.
 | Person | Owns (code) | Responsible for | Interfaces they own |
 |---|---|---|---|
 | **Nikko** | `apps/ios/`, `server/upload/` | **Glasses and upload.** The phone app: Meta glasses capture through the DAT SDK, the durable upload queue (ported from `apps/ios/CameraAccess`), and the upload service it talks to. | I1, I2 (both sides), I3 (caller) |
-| **Jerry** | `server/spacetime/`, cloud accounts, then `apps/web/` | **Hosting first:** the Maincloud database, the R2 bucket, the upload service and the viewer on HTTPS, plus the database rules (reducers, parties, leadership, name/key sign-in). **Then the viewer:** party and VR fixes, multi-headset testing, the phone/desktop UI. | I3 (reducer), I5 (bucket), I6 (reader), I7 (both sides) |
+| **Jerry** | `server/spacetime/`, cloud accounts, then `apps/web/` | **Hosting first:** the Maincloud database, the R2 bucket, the upload service and the viewer on HTTPS, plus the database rules (reducers, parties, leadership, name/password sign-in). **Then the viewer:** party and VR fixes, multi-headset testing, the phone/desktop UI. | I3 (reducer), I5 (bucket), I6 (reader), I7 (both sides) |
 | **Yifan** | `pipeline/`, `packages/shared/` (scene format), the Runpod pods | **Pipeline.** Video → scene, the GPU worker, the scene format, the demo scenes. No UI work. | I4, I5 (worker), I6 (writer) |
 
 If a task touches another person's files, ask them first or open the PR with them as reviewer.
@@ -27,8 +27,8 @@ If a task touches another person's files, ask them first or open the PR with the
 | I7 | Viewer ↔ DB | WebSocket subscription; reducers: sign-in `register_account`, `set_display_name`; party `create_party`, `join_room`, `leave_room`, `transfer_leadership`, `attach_party_memory`; time (leader only) `set_paused`, `seek`, `set_playback_speed`, `set_branch`, `fork_branch`; interaction `grab`, `move_object`, `release`, `save_branch_keyframes`; presence `set_pose`; clock `sample_clock` | Jerry (server and client) |
 
 **Sign-in (changed tonight):** Google sign-in is gone. People sign in with a **name**; `register_account` binds it to
-a **personal key** (`memos1.…`, stored by the browser/phone) so the same identity works on another device. Guests can
-still set a display name with `set_display_name`; a name registered to a key can't be changed that way.
+a **password** (`memos1.…`, stored by the browser/phone) so the same identity works on another device. Guests can
+still set a display name with `set_display_name`; a name registered to a password can't be changed that way.
 
 ## How we work from now on
 

@@ -117,7 +117,7 @@ uploadPanel(net, $("upload-panel"), request => {
 const fields = document.createElement("fieldset"); fields.id = "upload-fields";
 while ($("upload-panel").firstChild) fields.append($("upload-panel").firstChild!);
 $("upload-panel").append(fields);
-const gate = element("p", "upload-gate", "Sign in above with your name or personal key to upload a video."); gate.id = "upload-gate";
+const gate = element("p", "upload-gate", "Sign in above with your name or password to upload a video."); gate.id = "upload-gate";
 $("upload-panel").prepend(gate);
 mountAuth(net);
 mountSceneImport(net);

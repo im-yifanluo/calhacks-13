@@ -17,7 +17,7 @@ async function fixture() {
     registerIdentity: async () => { created++; return { identity, token }; },
     verify: async (id: string, auth: string) => { verifies++; return id === identity && auth === `Bearer ${token}`; },
     registerAccount: async (name: string) => {
-      if (profile.provider === "key" && profile.displayName !== name) throw new Error("This key already belongs to a registered name");
+      if (profile.provider === "key" && profile.displayName !== name) throw new Error("This password already belongs to a registered name");
       profile = { identity, displayName: name, provider: "key" };
     },
     getAccount: async () => profile,
@@ -35,14 +35,14 @@ async function fixture() {
   return { base, call, verifies: () => verifies, created: () => created };
 }
 
-test("server and website personal keys round-trip in both directions", () => {
+test("server and website passwords round-trip in both directions", () => {
   expect(decodePersonalKey(encodeAccountKey(account), settings)).toEqual(account);
   expect(decodeAccountKey(encodePersonalKey(account), { ...settings, uri: "wss://db.example" })).toEqual(account);
   for (const changed of [{ server: "https://evil.example" }, { database: "elsewhere" }, { identity: [] }, { token: "broken" }])
     expect(() => decodePersonalKey(encodePersonalKey({ ...account, ...changed }), settings)).toThrow();
 });
 
-test("account config, creation, key restoration and authenticated lookup match the phone contract", async () => {
+test("account config, creation, password restoration and authenticated lookup match the phone contract", async () => {
   const f = await fixture();
   expect(await (await f.call("/api/account/config")).json()).toEqual({ version: 1, ...settings, keyPrefix: "memos1.", maxUploadBytes: 2147483648, pipelineAvailable: true });
   const response = await f.call("/api/account", { name: "  Jerry  " });
@@ -66,7 +66,7 @@ test("an existing raw-token identity can be promoted without changing its owner"
   expect((await f.call("/api/account", { displayName: "Different name" }, encodePersonalKey(account))).status).toBe(400);
 });
 
-test("forged, foreign, mismatched and unregistered personal keys cannot sign in", async () => {
+test("forged, foreign, mismatched and unregistered passwords cannot sign in", async () => {
   const f = await fixture();
   expect((await f.call("/api/account", { personalKey: encodePersonalKey(account) })).status).toBe(401);
   await f.call("/api/account", { name: "Jerry" });
@@ -78,7 +78,7 @@ test("forged, foreign, mismatched and unregistered personal keys cannot sign in"
   expect((await f.call("/api/account", { identity, name: "Stolen" })).status).toBe(401);
 });
 
-test("personal keys can upload/list without a separate identity; raw tokens remain compatible", async () => {
+test("passwords can upload/list without a separate identity; raw tokens remain compatible", async () => {
   const f = await fixture();
   await f.call("/api/account", { name: "Jerry" });
   const input = { name: "clip.mp4", type: "video/mp4", size: 100, title: "Phone clip", durationSec: 5, pipeline: true };

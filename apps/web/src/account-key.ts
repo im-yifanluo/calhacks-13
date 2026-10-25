@@ -1,4 +1,4 @@
-/** Personal keys contain a host-signed credential, never a public identity alone. */
+/** Passwords contain a host-signed credential, never a public identity alone. */
 export interface AccountKey {
   server: string;
   database: string;
@@ -29,7 +29,7 @@ export function encodeAccountKey(account: AccountKey): string {
 export function decodeAccountKey(input: string, expected = databaseSettings()): AccountKey {
   const value = input.trim();
   if (!value.startsWith(PREFIX) || value.length > MAX_KEY_LENGTH || !/^[A-Za-z0-9_-]+$/.test(value.slice(PREFIX.length)))
-    throw new Error("Paste the complete personal key starting with memos1. A party code is different.");
+    throw new Error("Paste the complete password starting with memos1. A party code is different.");
   let data: AccountKey;
   try {
     const bytes = Uint8Array.from(atob(value.slice(PREFIX.length).replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
@@ -37,9 +37,9 @@ export function decodeAccountKey(input: string, expected = databaseSettings()): 
     if (!data || typeof data !== "object" || typeof data.token !== "string" || data.token.length > 8192 ||
       !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(data.token) ||
       typeof data.identity !== "string" || !/^[0-9a-f]{64}$/.test(data.identity)) throw new Error();
-  } catch { throw new Error("This personal key is incomplete or damaged. Paste your saved key again."); }
+  } catch { throw new Error("This password is incomplete or damaged. Paste your saved password again."); }
   if (data.server !== expected.server || data.database !== expected.database)
-    throw new Error("This key belongs to a different memos server. Open the site where you created it.");
+    throw new Error("This password belongs to a different memos server. Open the site where you created it.");
   return { server: data.server, database: data.database, identity: data.identity, token: data.token };
 }
 export function savedAccount(): AccountKey | undefined {

@@ -70,7 +70,7 @@ Vite copies all files under `public/` into production builds even when Git ignor
 
 ## Publish an existing reconstruction for all devices
 
-In the hosted memos **Memory library**, sign in with your existing personal key.
+In the hosted memos **Memory library**, sign in with your existing password.
 Choose **Publish scene folder** under **Publish rendered scenes**. Select either
 one complete scene folder or a parent folder containing several scene folders.
 Each scene needs `memory.json` and every referenced asset. `memory.static.json`,
@@ -81,7 +81,7 @@ An interrupted transfer can be resumed with the same button while the tab remain
 The uploader validates scene contents before starting. Files go to object storage;
 SpacetimeDB receives an owned `ready` memory record only after the upload service
 verifies all referenced assets exist. Individual files are limited to 64 MiB.
-Personal keys are never included in asset URLs. Anyone with a scene URL can read
+Passwords are never included in asset URLs. Anyone with a scene URL can read
 its assets, so only share scenes intended for that audience.
 
 Open a ready memory in 3D, choose that memory in **Watch together**, and click

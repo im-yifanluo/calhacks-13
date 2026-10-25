@@ -16,25 +16,25 @@ export function verifySignInKey(input: string, timeoutMs = 15000): Promise<{ acc
       connection?.disconnect();
       error ? reject(new Error(error)) : resolve({ account, name: name! });
     };
-    const timer = setTimeout(() => finish("Could not verify the key. Check your connection and try again."), timeoutMs);
+    const timer = setTimeout(() => finish("Could not verify the password. Check your connection and try again."), timeoutMs);
     try {
       connection = DbConnection.builder().withUri(uri).withDatabaseName(database).withToken(account.token)
         .onConnect((conn, identity) => {
           if (done) return;
-          if (identity.toHexString() !== account.identity) return finish("This key could not be verified.");
+          if (identity.toHexString() !== account.identity) return finish("This password could not be verified.");
           conn.subscriptionBuilder()
             .onApplied(() => {
               const profile = conn.db.profile.identity.find(identity);
-              if (profile?.provider !== "key" || !profile.displayName) return finish("This key has no registered name on this server.");
+              if (profile?.provider !== "key" || !profile.displayName) return finish("This password has no registered name on this server.");
               finish(undefined, profile.displayName);
             })
             .onError(() => finish("Could not read this account. Try again when connected."))
             .subscribe(tables.profile.where(row => row.identity.eq(identity)));
         })
-        .onConnectError(() => finish("The key was rejected or the server is unreachable. Check the complete key and your connection."))
-        .onDisconnect(() => finish("Connection lost while checking the key. Try again."))
+        .onConnectError(() => finish("The password was rejected or the server is unreachable. Check the complete password and your connection."))
+        .onDisconnect(() => finish("Connection lost while checking the password. Try again."))
         .build();
-    } catch { finish("Could not verify the key. Please try again."); }
+    } catch { finish("Could not verify the password. Please try again."); }
   });
 }
 
@@ -85,7 +85,7 @@ export function mountAuth(net: Multiplayer): void {
     if (busy) return;
     const displayName = name.value.trim();
     if (!displayName || displayName.length > 40) return show("Enter a name from 1 to 40 characters.", true);
-    busy = true; render(); show("Creating your personal key…");
+    busy = true; render(); show("Creating your password…");
     void (async () => {
       try {
         await net.callConnected(() => net.connection!.reducers.registerAccount({ name: displayName }));
@@ -94,19 +94,19 @@ export function mountAuth(net: Multiplayer): void {
         const persistent = saveAccount(account);
         window.dispatchEvent(new Event('memos-account-changed'));
         rememberName(displayName);
-        show(persistent ? "Signed in. Save your personal key to sign in on another device." : "Signed in for this tab. Save your key; this browser could not remember it for later.");
-      } catch (error) { show(error instanceof Error ? error.message : "Could not create your key.", true); }
+        show(persistent ? "Signed in. Save your password to sign in on another device." : "Signed in for this tab. Save your password; this browser could not remember it for later.");
+      } catch (error) { show(error instanceof Error ? error.message : "Could not create your password.", true); }
       finally { busy = false; render(); }
     })();
   };
   login.onsubmit = event => {
     event.preventDefault();
     if (busy) return;
-    busy = true; render(); show("Checking your personal key…");
+    busy = true; render(); show("Checking your password…");
     void (async () => {
       try {
         const verified = await verifySignInKey(key.value);
-        // Invalid keys never sign out the existing guest or account.
+        // Invalid passwords never sign out the existing guest or account.
         if (net.ready && net.room) await net.attempt(() => net.connection!.reducers.leaveRoom({}), null);
         saveAccount(verified.account);
         rememberName(verified.name);
@@ -121,24 +121,24 @@ export function mountAuth(net: Multiplayer): void {
     const account = savedAccount();
     if (account) return encodeAccountKey(account);
     const profile = net.identity && net.connection?.db.profile.identity.find(net.identity);
-    if (!net.ready || profile?.provider !== "key") throw new Error("Save a name first to create your personal key.");
+    if (!net.ready || profile?.provider !== "key") throw new Error("Save a name first to create your password.");
     const { server, database } = databaseSettings();
     return encodeAccountKey({ server, database, identity: net.identity!.toHexString(), token: net.token });
   };
   element<HTMLButtonElement>("account-copy-key").onclick = () => {
     void (async () => {
-      try { await navigator.clipboard.writeText(personalKey()); show("Personal key copied. Keep it private, like a password."); }
-      catch { show("Copy is unavailable here. Use Save key file instead.", true); }
+      try { await navigator.clipboard.writeText(personalKey()); show("Password copied. Keep it private."); }
+      catch { show("Copy is unavailable here. Use Save password file instead.", true); }
     })();
   };
   element<HTMLButtonElement>("account-save-key").onclick = () => {
     try {
       const url = URL.createObjectURL(new Blob([personalKey() + "\n"], { type: "text/plain" }));
       const link = document.createElement("a");
-      link.href = url; link.download = "memos-personal-key.txt"; link.click();
+      link.href = url; link.download = "memos-password.txt"; link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      show("Key file downloaded. Store it somewhere private.");
-    } catch (error) { show(error instanceof Error ? error.message : "Could not save your key.", true); }
+      show("Password file downloaded. Store it somewhere private.");
+    } catch (error) { show(error instanceof Error ? error.message : "Could not save your password.", true); }
   };
   signout.onclick = () => {
     if (busy) return;
