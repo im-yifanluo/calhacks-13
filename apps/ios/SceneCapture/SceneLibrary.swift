@@ -12,6 +12,19 @@ struct SavedScene: Codable, Identifiable {
     let durationUs: String
     let requestId: String
     let pipelineIdentity: String?
+    let manifestUrl: String?
+    let progress: Double?
+    let error: String?
+
+    var progressFraction: Double { min(1, max(0, progress?.isFinite == true ? progress! : 0)) }
+    var processingLabel: String {
+        switch status {
+        case "ready": return "Ready to explore"
+        case "processing": return "Building your scene · \(Int(progressFraction * 100))%"
+        case "failed": return "Processing failed"
+        default: return "Video received · waiting for processing"
+        }
+    }
 }
 struct Playback: Identifiable { let id = UUID(); let url: URL }
 struct PreparedUpload: Codable {
@@ -32,6 +45,7 @@ struct PendingCapture: Codable, Identifiable {
     var filename: String { "\(id.uuidString).mp4" }
 }
 struct ServerIdentity: Codable { let identity: String; let token: String }
+private struct UserProfile: Decodable { let identity: String; let displayName: String }
 private struct MemoryList: Decodable { let memories: [SavedScene] }
 private struct CompletedUpload: Decodable { let memory: SavedScene }
 
@@ -61,6 +75,12 @@ private enum IdentityVault {
 @MainActor
 final class SceneLibrary: ObservableObject {
     @Published var endpoint = UserDefaults.standard.string(forKey: "memreplay.endpoint") ?? ""
+    @Published var viewerEndpoint = UserDefaults.standard.string(forKey: "memreplay.viewerEndpoint") ?? ""
+    @Published var displayName = ""
+    @Published var userID = ""
+    @Published var profileReady = false
+    @Published var savingProfile = false
+    @Published var profileMessage = "Enter your name to get started."
     @Published var title = "Wayfarer capture test"
     @Published var scenes: [SavedScene] = []
     @Published var pending: [PendingCapture] = []
@@ -70,12 +90,31 @@ final class SceneLibrary: ObservableObject {
     @Published var playback: Playback?
     @Published var message = "Enter the web app's server address in Settings."
     @Published var proof = ""
+    @Published var sceneConnectionError = ""
     let directory: URL
     private var savedEndpoint = UserDefaults.standard.string(forKey: "memreplay.endpoint") ?? ""
+    private var savedViewerEndpoint = UserDefaults.standard.string(forKey: "memreplay.viewerEndpoint") ?? ""
     var partyURL: URL? {
-        guard let url = URL(string: savedEndpoint), ["http", "https"].contains(url.scheme ?? ""),
+        guard let url = URL(string: savedViewerEndpoint.isEmpty ? savedEndpoint : savedViewerEndpoint), ["http", "https"].contains(url.scheme ?? ""),
               url.host != nil, url.user == nil, url.password == nil else { return nil }
         return url
+    }
+    var libraryURL: URL? { partyURL?.appendingPathComponent("library.html") }
+    func sceneURL(_ scene: SavedScene) -> URL? {
+        guard let origin = partyURL else { return nil }
+        return Self.viewerURL(scene, origin: origin)
+    }
+    static func viewerURL(_ scene: SavedScene, origin: URL) -> URL? {
+        guard scene.status == "ready", let value = scene.manifestUrl, !value.isEmpty,
+              let manifest = URL(string: value, relativeTo: origin)?.absoluteURL,
+              ["https", "http"].contains(manifest.scheme ?? ""), manifest.host != nil,
+              manifest.user == nil, manifest.password == nil,
+              ["https", "http"].contains(origin.scheme ?? ""), origin.host != nil,
+              origin.user == nil, origin.password == nil,
+              var parts = URLComponents(url: origin, resolvingAgainstBaseURL: false) else { return nil }
+        parts.path = "/"; parts.fragment = nil
+        parts.queryItems = [URLQueryItem(name: "memory", value: manifest.absoluteString)]
+        return parts.url
     }
     private var queueURL: URL { directory.appendingPathComponent("queue.json") }
     private var catalogURL: URL { directory.appendingPathComponent("captures.json") }
@@ -103,15 +142,25 @@ final class SceneLibrary: ObservableObject {
         #endif
     }
     func saveSettings() {
-        guard !uploading, !checking else { return }
+        guard !uploading, !checking, !savingProfile else { return }
         let value = endpoint.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: value), ["http", "https"].contains(url.scheme ?? ""), url.host != nil,
               url.query == nil, url.fragment == nil, url.user == nil, url.password == nil, url.path.isEmpty else {
             message = "Enter an HTTP(S) app origin, for example http://your-mac.local:5173"; return
         }
+        let viewer = viewerEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if !viewer.isEmpty {
+            guard let url = URL(string: viewer), ["http", "https"].contains(url.scheme ?? ""), url.host != nil,
+                  url.query == nil, url.fragment == nil, url.user == nil, url.password == nil, url.path.isEmpty else {
+                message = "Use an HTTP(S) web viewer origin, or leave it blank to use the upload server."; return
+            }
+        }
         endpoint = value; savedEndpoint = value
+        viewerEndpoint = viewer; savedViewerEndpoint = viewer
         UserDefaults.standard.set(value, forKey: "memreplay.endpoint")
-        scenes = []; message = "Server saved. Tap Test connection."
+        UserDefaults.standard.set(viewer, forKey: "memreplay.viewerEndpoint")
+        scenes = []; profileReady = false; userID = ""; displayName = ""
+        message = "Server saved. Enter your name, then continue."
     }
     private func persist() throws { try JSONEncoder().encode(pending).write(to: queueURL, options: .atomic) }
     func enqueue(_ capture: PendingCapture) throws {
@@ -150,8 +199,34 @@ final class SceneLibrary: ObservableObject {
         try IdentityVault.save(identity,for:savedEndpoint)
         return identity
     }
-    func refresh() async {
-        guard !uploading, !checking else { return }
+    private func loadProfile(_ auth: ServerIdentity) async throws {
+        let hex = auth.identity.replacingOccurrences(of: "0x", with: "")
+        let (data, response) = try await URLSession.shared.data(for: request("/api/profile?identity=\(hex)", identity: auth))
+        try check(data, response)
+        let profile = try JSONDecoder().decode(UserProfile.self, from: data)
+        userID = profile.identity
+        profileReady = !profile.displayName.isEmpty
+        if profileReady { displayName = profile.displayName }
+    }
+    func saveProfile() async {
+        guard !uploading, !checking, !savingProfile else { return }
+        let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name.utf16.count <= 40 else { profileMessage = "Use a name of 1–40 characters."; return }
+        savingProfile = true
+        defer { savingProfile = false }
+        do {
+            let auth = try await identity()
+            let hex = auth.identity.replacingOccurrences(of: "0x", with: "")
+            let (data, response) = try await URLSession.shared.data(for: request("/api/profile", method: "POST", body: ["identity": hex, "displayName": name], identity: auth))
+            try check(data, response)
+            let profile = try JSONDecoder().decode(UserProfile.self, from: data)
+            userID = profile.identity; displayName = profile.displayName; profileReady = true
+            profileMessage = "Welcome, \(profile.displayName). Your ID is saved on this iPhone."
+            await uploadPending()
+        } catch { profileMessage = error.localizedDescription }
+    }
+    func refresh(silent: Bool = false) async {
+        guard !uploading, !checking, !savingProfile else { return }
         checking = true
         defer {
             checking = false
@@ -159,11 +234,16 @@ final class SceneLibrary: ObservableObject {
         }
         do {
             let auth = try await identity()
+            if !profileReady { try await loadProfile(auth) }
             let hex = auth.identity.replacingOccurrences(of: "0x", with: "")
             let (data,response) = try await URLSession.shared.data(for: request("/api/memories?identity=\(hex)",identity:auth))
             try check(data,response); scenes = try JSONDecoder().decode(MemoryList.self,from:data).memories
-            message = "Database connected. \(scenes.count) recordings registered for this app."
-        } catch { message = error.localizedDescription }
+            sceneConnectionError = ""
+            if !silent { message = "Database connected. \(scenes.count) recordings registered for this app." }
+        } catch {
+            sceneConnectionError = error.localizedDescription
+            if !silent { message = error.localizedDescription }
+        }
     }
     func uploadPending() async {
         guard !uploading, !checking, !pending.isEmpty else { return }
@@ -171,6 +251,8 @@ final class SceneLibrary: ObservableObject {
         uploading = true; defer { uploading = false }
         do {
             let auth = try await identity()
+            if !profileReady { try await loadProfile(auth) }
+            guard profileReady else { message = "Enter your name before uploading. Your clips are saved locally."; return }
             let hex = auth.identity.replacingOccurrences(of: "0x",with: "")
             while !pending.isEmpty {
                 var item = pending[0]

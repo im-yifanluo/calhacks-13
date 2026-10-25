@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#101918" />
+    <title>memos · Your memories</title>
+  </head>
+  <body>
+    <header class="navigation">
+      <a class="brand" href="/library.html"><span aria-hidden="true">◌</span> memos</a>
+      <nav aria-label="Main navigation"><a href="/">Explore demo ↗</a><span id="connection" role="status">Connecting…</span></nav>
+    </header>
+    <main>
+      <section class="hero">
+        <div><p class="eyebrow">FROM YOUR GLASSES. BACK INTO THE MOMENT.</p><h1>Keep the moment.<br /><em>Step back inside.</em></h1><p class="intro">Capture on your iPhone with Meta glasses. Follow your video's progress here, then explore the finished scene on the web or in VR.</p></div>
+        <ol class="journey" aria-label="How it works"><li><span>01</span><div><strong>Capture</strong><p>Record through the iPhone app.</p></div></li><li><span>02</span><div><strong>Send</strong><p>Stop recording. The app uploads.</p></div></li><li><span>03</span><div><strong>Step inside</strong><p>Open your scene when processing finishes.</p></div></li></ol>
+      </section>
+      <section class="profile-panel" aria-labelledby="profile-heading">
+        <div><h2 id="profile-heading">Make yourself at home.</h2><p id="profile-summary">Enter your name. We'll give you a unique guest ID on this browser.</p><p id="profile-id" class="small"></p></div>
+        <form id="profile-form"><label for="display-name">Your name</label><div><input id="display-name" autocomplete="nickname" maxlength="40" required placeholder="e.g. Nikko" /><button class="primary" id="save-profile">Continue</button></div><p id="profile-message" role="status"></p></form>
+        <p class="profile-help">Names don't have to be unique. This guest stays on this device; entering the same name elsewhere won't link accounts. This demo library is shared.</p>
+      </section>
+      <div id="notice" class="notice" role="status" hidden></div>
+      <p id="error" role="alert" hidden></p>
+      <div class="workspace">
+        <section class="memories" aria-labelledby="library-heading">
+          <div class="section-heading"><div><p class="eyebrow">YOUR SHARED DEMO LIBRARY</p><h2 id="library-heading">Memories <span id="memory-count">0</span></h2></div><span id="live-note">Waiting for connection</span></div>
+          <div class="filters"><label class="sr-only" for="search">Search memories</label><input id="search" type="search" placeholder="Find a moment…" /><label class="sr-only" for="filter">Filter memories</label><select id="filter"><option value="all">All memories</option><option value="ready">Ready to explore</option><option value="pending">In progress</option><option value="failed">Needs attention</option><option value="test">Test recordings</option></select></div>
+          <div id="memory-grid" class="memory-grid"></div>
+          <div id="empty" class="empty"><span aria-hidden="true">◌</span><h3>Your next memory starts here.</h3><p>Connect the iPhone app to this backend, or upload an exported video. It will appear here automatically.</p></div>
+        </section>
+        <aside>
+          <section class="panel capture-guide"><p class="eyebrow">CAPTURE WITH META GLASSES</p><h2>Record. Stop. Sent.</h2><p>In the iPhone app, connect with Meta AI, start your camera preview, and record. Stopping saves and uploads the clip automatically.</p><p class="muted">Keep the app open through upload. The browser displays results; glasses capture uses the native Meta SDK app.</p><button id="copy-library" class="secondary">Copy this library link</button><p class="small">The phone and this page must use the same backend/database.</p></section>
+          <section class="panel upload-card"><p class="eyebrow">ALREADY HAVE A CLIP?</p><div id="upload-panel"></div><p id="upload-health" role="status">Checking upload service…</p></section>
+          <a class="diagnostics" href="/capture.html">Capture diagnostics ↗</a>
+        </aside>
+      </div>
+      <footer><span>memos / Cal Hacks</span><span>A video becomes a scene only after reconstruction completes.</span></footer>
+    </main>
+    <dialog id="video-dialog"><div class="dialog-heading"><h2 id="video-title">Original recording</h2><button id="close-video" aria-label="Close recording">✕</button></div><video id="source-video" controls playsinline preload="metadata"></video><p>This is the original recording. Open in 3D when the scene is ready.</p></dialog>
+    <script type="module" src="/src/library.ts"></script>
+  </body>
+</html>

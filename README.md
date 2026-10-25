@@ -7,7 +7,7 @@ Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves 
 - **Viewer:** [docs/P3_VIEWER.md](docs/P3_VIEWER.md) · **Multiplayer and upload:** [docs/P4.md](docs/P4.md) · **Upload test:** [docs/CAPTURE_TEST.md](docs/CAPTURE_TEST.md)
 - **Vision pipeline runbook:** [pipeline/README.md](pipeline/README.md); results on the 5 sample clips: [docs/VISION_PIPELINE_REPORT.md](docs/VISION_PIPELINE_REPORT.md)
 
-**Phone app:** open `apps/ios/SceneCaptureDemo.xcodeproj` for a native iPhone/Simulator demo with **On** and **Off**, automatic upload, database + SHA-256 verification, offline playback and retry. [Installation and test instructions](docs/PHONE_APP.md). The separate glasses SDK project requires Meta's supported Xcode toolchain. Browser demo: `/capture.html`.
+**Phone app:** open `apps/ios/SceneCaptureDemo.xcodeproj` for a native iPhone/Simulator demo with **On** and **Off**, automatic upload, database + SHA-256 verification, offline playback and retry. [Installation and test instructions](docs/PHONE_APP.md). The separate glasses SDK project requires Meta's supported Xcode toolchain. Web library: `/library.html` (name-based guest profile, upload, processing status and ready scene links). Diagnostics: `/capture.html`. [Frontend flow and identity details](docs/FRONTEND_FLOW.md).
 
 **Parties and Google sign-in:** [Setup and test guide](docs/PARTIES.md). Create a party with a synthetic scene, share its invite link, and let the leader control time. The native phone app has a Party tab. Google requires your own web client ID; guest parties work immediately. `npm run party:dev` starts the web/upload pair for the dedicated local party database.
 

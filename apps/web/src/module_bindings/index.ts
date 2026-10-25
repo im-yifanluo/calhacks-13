@@ -48,6 +48,7 @@ import SampleClockReducer from "./sample_clock_reducer";
 import SaveBranchKeyframesReducer from "./save_branch_keyframes_reducer";
 import SeekReducer from "./seek_reducer";
 import SetBranchReducer from "./set_branch_reducer";
+import SetDisplayNameReducer from "./set_display_name_reducer";
 import SetMemoryStatusReducer from "./set_memory_status_reducer";
 import SetPausedReducer from "./set_paused_reducer";
 import SetPlaybackSpeedReducer from "./set_playback_speed_reducer";
@@ -220,6 +221,7 @@ const reducersSchema = __reducers(
   __reducerSchema("save_branch_keyframes", SaveBranchKeyframesReducer),
   __reducerSchema("seek", SeekReducer),
   __reducerSchema("set_branch", SetBranchReducer),
+  __reducerSchema("set_display_name", SetDisplayNameReducer),
   __reducerSchema("set_memory_status", SetMemoryStatusReducer),
   __reducerSchema("set_paused", SetPausedReducer),
   __reducerSchema("set_playback_speed", SetPlaybackSpeedReducer),

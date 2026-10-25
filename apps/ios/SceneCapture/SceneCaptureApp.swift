@@ -22,13 +22,21 @@ struct SceneCaptureApp: App {
         WindowGroup {
             TabView {
                 CaptureView(capture: capture, library: library).tabItem { Label("Capture", systemImage: "record.circle") }
-                LibraryView(library: library).tabItem { Label("Saved videos", systemImage: "film.stack") }
+                LibraryView(library: library).tabItem { Label("Memories", systemImage: "square.stack.3d.up") }
                 PartyView(library: library).tabItem { Label("Party", systemImage: "person.3") }
                 SettingsView(library: library).tabItem { Label("Settings", systemImage: "gearshape") }
             }
             .tint(.mint).preferredColorScheme(.dark)
             .sheet(item: $library.playback) { SourcePlayer(url: $0.url) }
             .task { await library.resume() }
+            .task(id: phase) {
+                guard phase == .active else { return }
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: .seconds(5)) } catch { return }
+                    guard !Task.isCancelled else { return }
+                    if !library.endpoint.isEmpty { await library.refresh(silent: true) }
+                }
+            }
             .onOpenURL { url in Task { await capture.handleURL(url) } }
             .onChange(of: phase) { _, next in
                 if next == .background { Task { await capture.backgrounded() } }
@@ -57,6 +65,8 @@ struct CaptureView: View {
                         connection
                         #endif
                     }
+                    if !library.profileReady { UserProfileView(library: library) }
+                    else { Text("Capturing as \(library.displayName)").font(.subheadline).foregroundStyle(.mint) }
                     VStack(spacing: 0) {
                         if let image = capture.preview {
                             Image(uiImage: image).resizable().scaledToFit().accessibilityLabel("Camera preview")
@@ -83,7 +93,7 @@ struct CaptureView: View {
                         HStack(spacing: 14) {
                             Button { Task { await capture.recordOn() } } label: {
                                 Label("On", systemImage: "record.circle").frame(maxWidth: .infinity, minHeight: 38)
-                            }.tint(.mint).disabled(!capture.canStart).keyboardShortcut("o", modifiers: [])
+                            }.tint(.mint).disabled(!capture.canStart || !library.profileReady).keyboardShortcut("o", modifiers: [])
                             Button { Task { await capture.recordOff() } } label: {
                                 Label("Off", systemImage: "stop.fill").frame(maxWidth: .infinity, minHeight: 38)
                             }.tint(.orange).disabled(!capture.canStop).keyboardShortcut("f", modifiers: [])
@@ -147,6 +157,13 @@ struct LibraryView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section("From recording to 3D") {
+                    Text("Your videos upload when recording stops. This library follows processing automatically; open the finished scene in the web viewer when it is ready.")
+                    if let url = library.libraryURL { Link("Open web memory library", destination: url) }
+                    if !library.sceneConnectionError.isEmpty {
+                        Text("Live status unavailable: \(library.sceneConnectionError)").font(.caption).foregroundStyle(.orange)
+                    }
+                }
                 Section("Upload status · \(library.pending.count) pending") {
                     Text(library.message)
                     Button("Retry uploads") { Task { await library.uploadPending() } }.disabled(library.uploading || library.checking || library.pending.isEmpty)
@@ -170,12 +187,22 @@ struct LibraryView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(scene.title).font(.headline)
                             Text("Database row #\(scene.id) · \(scene.status)").font(.caption).textSelection(.enabled)
-                            Text(scene.sourceUrl).font(.caption2).textSelection(.enabled)
+                            Text(scene.processingLabel).font(.subheadline)
+                            if scene.status == "processing" { ProgressView(value: scene.progressFraction) }
+                            if scene.status == "failed", let error = scene.error, !error.isEmpty {
+                                Text(error).font(.caption).foregroundStyle(.orange)
+                            }
+                            if let url = library.sceneURL(scene) {
+                                Link("Open in 3D", destination: url).buttonStyle(.borderedProminent)
+                                ShareLink(item: url) { Label("Share scene / open on Quest", systemImage: "square.and.arrow.up") }.buttonStyle(.bordered)
+                            } else if scene.status == "ready" {
+                                Text("Waiting for a usable scene URL from the backend.").font(.caption).foregroundStyle(.orange)
+                            }
                             Button("Play stored video") { library.play(scene) }.buttonStyle(.bordered)
                         }
                     }
                 }
-            }.navigationTitle("Saved videos")
+            }.navigationTitle("Memories")
                 .refreshable { await library.refresh() }
                 .toolbar { Button("Refresh") { Task { await library.refresh() } }.disabled(library.uploading || library.checking) }
                 .fileImporter(isPresented: $importing, allowedContentTypes: [.mpeg4Movie]) { result in
@@ -214,11 +241,27 @@ struct PartyView: View {
                     }
                 }
                 Section("From a recording to a scene") {
-                    Text("Finish recording with Off and wait for upload verification. In the party lobby, choose your video and create a party. The synthetic demo stays available while the video awaits reconstruction.")
+                    Text("Finish recording with Off and wait for upload verification. Follow processing in Memories, then open the finished scene or choose it in the party lobby. The synthetic demo stays available while reconstruction runs.")
                     Text("The party opens in your browser for Google sign-in, invite links and the interactive viewer. Guest mode also works. Sign-in does not change this app's capture identity.")
                     Text("A reconstruction worker is still required to turn video into a 3D scene.").foregroundStyle(.secondary)
                 }
             }.navigationTitle("Party")
+        }
+    }
+}
+struct UserProfileView: View {
+    @ObservedObject var library: SceneLibrary
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("What should we call you?").font(.headline)
+            TextField("Your name", text: $library.displayName).textFieldStyle(.roundedBorder)
+                .textContentType(.nickname).autocorrectionDisabled().accessibilityLabel("Your name")
+            Button(library.savingProfile ? "Saving…" : library.profileReady ? "Save name" : "Continue with this name") {
+                Task { await library.saveProfile() }
+            }.buttonStyle(.borderedProminent).disabled(library.savingProfile || library.checking || library.uploading)
+            Text(library.profileMessage).font(.caption)
+            if !library.userID.isEmpty { Text("User ID: \(library.userID)").font(.caption2.monospaced()).textSelection(.enabled) }
+            Text("Your name labels a unique guest ID saved on this device. The same name on another device creates a different user.").font(.caption).foregroundStyle(.secondary)
         }
     }
 }
@@ -227,11 +270,16 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Your profile") { UserProfileView(library: library) }
                 Section("Memory Replay server") {
                     TextField("http://your-mac.local:5173", text: $library.endpoint)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                         .accessibilityLabel("Server address")
-                    Button("Save server") { library.saveSettings() }.disabled(library.uploading || library.checking)
+                    TextField("Web viewer URL (optional)", text: $library.viewerEndpoint)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                        .accessibilityLabel("Web viewer address")
+                    Text("Leave the viewer URL blank when the web app and upload API share one address. For separate hosting, enter the web app's HTTPS origin. Both must use the same SpacetimeDB database.").font(.caption)
+                    Button("Save server") { library.saveSettings() }.disabled(library.uploading || library.checking || library.savingProfile)
                     Button("Test connection") { Task { await library.refresh() } }.disabled(library.uploading || library.checking)
                     Text(library.message)
                 }

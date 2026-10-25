@@ -221,6 +221,10 @@ test("Google profiles come from verified issuer claims; audience and expiration 
       (_key, value) => (typeof value === "bigint" ? String(value) : value),
     ),
   ).not.toContain("private@example.com");
+  call(google, mod.setDisplayName, { displayName: "Chosen name" });
+  call(google, mod.onDisconnect);
+  call(google, mod.onConnect);
+  expect(h.db.profile.identity.find(identity(google))?.displayName).toBe("Chosen name");
   const wrong = auth("google-sub", 11n, {
     iss: "https://accounts.google.com",
     aud: "other-app",

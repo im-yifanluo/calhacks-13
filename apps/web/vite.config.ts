@@ -36,6 +36,7 @@ export default defineConfig({
         // fileURLToPath, not URL.pathname: pathname stays percent-encoded ("CalHacks%2013") and breaks paths with spaces.
         viewer: fileURLToPath(new URL("./index.html", import.meta.url)),
         capture: fileURLToPath(new URL("./capture.html", import.meta.url)),
+        library: fileURLToPath(new URL("./library.html", import.meta.url)),
       },
     },
   },
