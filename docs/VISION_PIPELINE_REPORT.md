@@ -168,8 +168,11 @@ What the glasses scenes look like from the recorded camera (grids in `apps/web/p
 
 Lessons from this footage: the capture viewport must match the clip's aspect (a 9:16 viewport on 3:4 footage
 stretched every render 1.33× and cost 3 dB in every score, found by the judge panel); crowds overflow ViPE's 255
-instance ids (capped at 250); sky needs its own handling outdoors (a smear today); and a per-clip viewer colour
-correction that helped indoors made these scenes slightly worse, so it is off by default.
+instance ids (capped at 250); sky needs its own handling outdoors: sky pixels are now kept in the loss and seeded
+on a dome 150 m out (100 m after the rotunda's rescale), and the splat prune, which used to throw away everything
+beyond 80 m or bigger than 1.5 m, had to learn about the far field (the rotunda rendered a *black* sky at 11 dB
+until it did: its sky is about 7,900 opaque Gaussians of 1–5 m at 94 m); and a per-clip viewer colour correction
+that helped indoors made these scenes slightly worse, so it is off by default.
 
 <!-- GLASSES-TABLE -->
 
@@ -208,6 +211,44 @@ Compared with the panel's first pass on the morning's retrain (room corner 3.4 /
 2.3 / 1.7, night walk 3.0 / 2.8): the room corner went from a narrow fail to a pass, the corridor gained a full
 point on layout and a point on colour (depth supervision), the hotel room and night walk moved little. The last
 round of changes (the viewer gain in §4) targets the cast the panel still saw on every clip.
+
+### Real 4DGS against the layered pipeline (Oct 24, evening)
+
+While the layered pipeline ran, an independent agent trained true 4D Gaussian splatting on two glasses clips on a
+second pod: 4DGaussians (hustvl, CVPR 2024: canonical Gaussians plus a HexPlane deformation field), built in about
+10 minutes with small patches. Full report with method, settings and incidents: [FOURD_REPORT.md](FOURD_REPORT.md);
+code: `pipeline/fourd/`; side-by-side image: [fourd_vs_static_v59.jpg](fourd_vs_static_v59.jpg) (video | ours |
+4DGS, six moments of the speaker clip).
+
+| v59 (speaker at the podium), 44 held-out frames, recorded camera | PSNR | SSIM | LPIPS | people px | other px |
+|---|---|---|---|---|---|
+| 4DGS, vanilla (run c) | **30.5** | **0.934** | **0.163** | 25.1 | 31.1 |
+| 4DGS, split room / people + random background (run e, half-trained) | 26.0 | 0.886 | 0.245 | 23.3 | 26.2 |
+| Layered pipeline, static room (`baked.ply`) | 18.2 | 0.794 | 0.338 | 9.1 | 20.0 |
+
+v71 (stage, then a crowded hall), 97 held-out cameras: 4DGS 28.7 / 0.905 / 0.218 against 18.0 / 0.777 / 0.389 for
+the static room; on people pixels 25.7 against 9.5 dB.
+
+What it means:
+- **From the recorded camera, real 4DGS wins by a wide margin.** People are sharp, solid splats that move as in the
+  video, and it needs no segmentation or tracking at all. Our people are point ghosts, hence 9 dB on people pixels.
+- **Vanilla 4DGS is not a VR scene.** Every Gaussian may move, so the deformation field absorbs camera-pose error and
+  the whole room wobbles (background Gaussians drift a median 7 cm; invisible from the recorded camera, a shimmer
+  from anywhere else). It trains over white, so bright walls come out see-through (21 dB instead of 30.5 on a dark
+  background). The export is 880 MB for 17 s. Nothing in it is an object, so nothing can be grabbed or thrown.
+- **The split variant fixes three of the four**: only Gaussians seeded on people deform, training uses a random
+  background. The room is exactly static (median motion 0.0 cm), the export is opaque, and the payload is
+  `static.spz` (4.5 MB) plus 0.8 MB per 10 Hz frame (144 MB for v59), for about 5 dB less. It was half-trained when
+  the shared volume filled up; a retrain to completion was started at 8:45 PM.
+- **Caveat on the numbers**: held-out frames sit between training frames on the same path, which favours 4DGS, and
+  nobody has looked at either from a new viewpoint in VR. The two methods were trained on different tone-mappings of
+  the same clip (the colour fix landed between them), so the image's raw per-row PSNRs are not comparable; after a
+  global colour match 4DGS leads 24.1 to 20.6 dB.
+- **Cost**: 31–44 min on one H200 per clip (17 min for our static room), 3 GB of PLY plus 0.9 GB of spz per clip,
+  which is what filled the volume.
+- **Where each fits**: 4DGS for reliving the moment from where you stood (the viewer's follow-the-walk mode), the
+  layered scene for walking around with physics and props. The split export (one static splat plus a people splat
+  swapped every 100 ms) is the version worth loading in the viewer; not done tonight.
 
 ## 4. What went wrong, and what we did
 
@@ -304,12 +345,24 @@ In the order we hit it. Every fix is in the code and the runbook.
   split into two objects, gap filling drew fake arcs for carried objects, the last batch of room points was dropped,
   wall columns were blurred out of the collider, the worker would hang a job on a stage error.
 
+**Glasses footage, evening (Oct 24)**
+- **Black sky on the rotunda (found 8:25 PM)**: the sky-dome retrain scored 11.2 dB against 17.6 before. The dome had
+  worked (7,900 opaque Gaussians 94 m out), but `layers` pruned everything beyond 80 m or bigger than 1.5 m, rules
+  written for floaters indoors. Fix: beyond 60 m the size limit grows with distance (0.06 m per metre), the needle and
+  haze rules are off, and only faint far Gaussians (opacity < 0.1) go. Re-layered from the trained splats, no retrain.
+- **The shared volume filled up (8:20 PM)**: the 4DGS track exported 3 GB of per-time PLYs per run; at 100 % every
+  write on both pods failed and the three trainings in flight (o3331, o3332, v106) and their queue workers died
+  silently (their logs could not even record the error). Restarted at 8:37 PM after the agent freed 25 GB; exports
+  are spz-only from here, and the agent keeps 15 GB free.
+- **Scoring decode check**: the agent suspected the scorer's ffmpeg decode was darker than the OpenCV frames the
+  trainer sees; measured on the current clips the two differ by about 2 levels of 255, so the scores stand.
+
 ## 5. What to improve next (in order of value)
 
 1. **Record a clip made for this**: walk sideways while panning, phone at one height, someone tossing a ball and
    walking through. Then test real Ray-Ban Meta footage (ultrawide: undistort first; ViPE's depth assumes a pinhole).
-2. **Trained people** (the real "4D" step): freeze the static room, then train moving Gaussians only on the people
-   masks, with a few shared motion bases per person, supervised by the frames, ViPE's depth and 2D point tracks
+2. **Trained people** (the real "4D" step; the 4DGS track above shows the payoff, 25 dB on people pixels against 9):
+   freeze the static room, then train moving Gaussians only on the people masks, with a few shared motion bases per person, supervised by the frames, ViPE's depth and 2D point tracks
    (CoTracker3, `setup.sh extras`). Methods: Shape of Motion, MoSca, RiGS (static/rigid/transient Gaussians; code
    available). Or fit an animatable body avatar for a full 360° person (a single camera never sees their back).
    Budget ~0.5–2 GPU-hours per clip; keep moving Gaussians ≲ 100–200k for the Quest.

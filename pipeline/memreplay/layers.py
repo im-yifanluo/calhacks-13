@@ -93,11 +93,12 @@ def run(work: Path) -> dict:
     data["y"] = (data["y"] - shift).astype(np.float32)
     xyz[:, 1] -= shift
     # 2. prune floaters in front of the camera path, giants and needles (cleanup.py)
-    from .cleanup import prune, seen_count
+    from .cleanup import fill_sky, prune, seen_count
     path = np.array([[c.c2w[3], c.c2w[7], c.c2w[11]] for c in cams.values()])
     keep = prune(data, path) & (seen_count(xyz, list(cams.values())) >= 2)
     pruned = int((~keep).sum())
     data, xyz = data[keep], xyz[keep]
+    fill_sky(data, path)                                       # the sky dome: overlap and firm up (cleanup.py)
     write_ply(work / "gsplat_static" / "aligned.ply", data)
     to_spz(work / "gsplat_static" / "aligned.ply", work / "world" / "bg_static.spz")
     owner = np.full(len(xyz), -1)

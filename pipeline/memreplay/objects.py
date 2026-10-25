@@ -493,11 +493,11 @@ def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
                        "visible": [float(t[0]), float(t[-1])], "max_speed_m_s": float(speeds.max()),
                        "path_length_m": float(np.sum(np.linalg.norm(np.diff(P, axis=0), axis=1))) if len(P) > 1 else 0.0})
     if len(result) > MAX_PROPS:
-        order = sorted(range(len(result)), key=lambda i: -report[i]["sightings"])
-        keep_i = set(order[:MAX_PROPS])
+        sight = {r["id"]: r.get("sightings", 0) for r in report}  # report also lists dropped objects: match by id
+        keep_ids = {o.id for o in sorted(result, key=lambda o: -sight.get(o.id, 0))[:MAX_PROPS]}
         print(f"[objects] keeping the {MAX_PROPS} most-seen of {len(result)} props")
-        result = [r for i, r in enumerate(result) if i in keep_i]
-        report = [r for i, r in enumerate(report) if i in keep_i]
+        result = [o for o in result if o.id in keep_ids]
+        report = [r for r in report if r["id"] in keep_ids or not r.get("kept")]
     (work / "objects" / "objects.json").write_text(ObjectsFragment(objects=result).model_dump_json(indent=2))
     (work / "objects" / "report.json").write_text(json.dumps(report, indent=2))
     print(f"[objects] {len(result)} objects: " + ", ".join(f"{r['id']} ({r['shape']}, {r['mass_kg']} kg, "
