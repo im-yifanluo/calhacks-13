@@ -1,0 +1,265 @@
+{
+ "run": "run4_glasses_final, part 2 (o3331 o3332), Oct 24 ~9:20 PM PT",
+ "results": [
+  {
+   "id": "o3331",
+   "title": "Palace of Fine Arts: colonnade walk 2",
+   "first": {
+    "layout": 3.6,
+    "colour": 3,
+    "dynamic": 4,
+    "lost_rows_score": 0,
+    "fade_justified": true,
+    "largely_matches": true,
+    "defects": [
+     {
+      "t": 5,
+      "what": "The rotunda columns on the right are drawn in an over-saturated orange-red with dark vertical streaks and a blue streak at the right edge. In the video they are sunlit peach-beige stone, and the capitals and rotunda frieze are smeared. Whole-frame colour-histogram match is only 0.24.",
+      "fixable": "fixable: colour calibration / appearance-model baking on sunlit stone; floater pruning for the streaks"
+     },
+     {
+      "t": 5,
+      "what": "Dark smeared tree-canopy blobs spill into the sky at the top left and top centre. The lawn has directional motion-blur streaks instead of grass texture.",
+      "fixable": "partly fixable: prune floaters against the sky; the lawn streaks come from few views (largely inherent)"
+     },
+     {
+      "t": 5,
+      "what": "The path is lighter and blue-grey compared with the neutral grey asphalt, and it is smooth with no texture.",
+      "fixable": "fixable: colour calibration"
+     },
+     {
+      "t": 15,
+      "what": "The right third of the frame, the near colonnade, is a flat, saturated orange smear. The individual column shafts and fluting are not resolved above the bases, and there is a small blue streak inside it.",
+      "fixable": "mostly inherent (close-range, single pass, strong sideways parallax on textureless sunlit stone); the orange cast is fixable"
+     },
+     {
+      "t": 15,
+      "what": "A translucent grey-blue smeared human figure is baked into the static splat on the path, just left of and behind the walker ghost. It is leftover from a passer-by that was not masked out.",
+      "fixable": "fixable: dynamic-person masking before training"
+     },
+     {
+      "t": 15,
+      "what": "The person at the far left edge (arm and orange bag) has no ghost in the render.",
+      "fixable": "fixable: person detection/tracking at the frame edges"
+     },
+     {
+      "t": 15,
+      "what": "The lawn at the bottom right is heavily streaked, and the path has pink and blue smudges.",
+      "fixable": "partly inherent (near-field ground seen at grazing angles)"
+     },
+     {
+      "t": 25,
+      "what": "The column shafts are covered in orange camouflage-like blotches where the sunlit patches are over-saturated. The far colonnade at the right edge turns into yellow-green and orange blobs. The left building and tree area are blurred and dark at the left edge.",
+      "fixable": "colour fixable; far colonnade blobs partly inherent (far field, few views)"
+     },
+     {
+      "t": 25,
+      "what": "A passer-by's arm and hand at the bottom-right edge of the video is missing from the render.",
+      "fixable": "fixable: edge-of-frame person detection"
+     },
+     {
+      "t": 35,
+      "what": "The left building wall at the left edge is smeared into brown streaks, and the upper-left canopy has smeared floaters. The colonnade has blotchy orange patches.",
+      "fixable": "partly fixable (pruning, colour); edge smear is under-observed geometry"
+     },
+     {
+      "t": 35,
+      "what": "The video shows about 7 distant pedestrians, but only about 4 to 5 ghosts appear. Some far people are missing.",
+      "fixable": "fixable: lower the detection size threshold or keep more far tracks"
+     },
+     {
+      "t": 45,
+      "what": "Past the first big column, the colonnade on the right smears into orange and blue blobs instead of arches and columns. The left building wall has mottled, graffiti-like colour patches.",
+      "fixable": "partly inherent (far field); colour fixable"
+     },
+     {
+      "t": 55,
+      "what": "The left building wall is smeared with vertical streaks and blue patches, and the tree trunk at centre left is smeared or doubled. The top-centre canopy is a blurry dark mass. At the vanishing point, the distant colonnade and trees are replaced by a bright orange-white blob, and the right colonnade is washed out and pale.",
+      "fixable": "partly fixable (far-field prune / sky fill for the centre blob); the wall and trunk smear is largely inherent to a single forward walk"
+     },
+     {
+      "t": 55,
+      "what": "The two standing people are present as striped ghosts in the right place and at the right size. The bench is present. This is not a defect and is noted only to confirm the dynamic content is correct.",
+      "fixable": "n/a"
+     }
+    ],
+    "summary": "Scores are 1 to 5 by row. Layout: 5 s 4, 15 s 3, 25 s 4, 35 s 4, 45 s 3.5, 55 s 3, mean about 3.6. Colour: 3, 2.5, 3, 3.5, 3, 3, mean about 3.0. Dynamic is about 4.\n\n**Verdict: largely_matches = true, but only just.** Layout clears 3.5 narrowly, colour sits exactly at 3, and no row is below 3 on layout.\n\n**What matches:** The camera alignment holds at every sampled moment. The path, lawn edge, colonnade, rotunda, left building, lamp posts, bench, bin and signs are all in the right places and sizes. People are present as ghosts where the video has them: the two walkers and scooter at 5 s, the walker at 15 s, and the two standing people at 55 s.\n\n**Main failures:**\n- The colonnade and rotunda stone is consistently over-saturated orange with blotchy patches, where the video shows peach-beige. At 15 s it is a flat orange smear covering the right third, with no resolved columns. Colour-histogram match is low in the early rows (0.24 and 0.39 whole frame).\n- The asphalt is too light and blue.\n- One unmasked passer-by is baked into the static splat as a translucent smear at 15 s.\n- Far-field smears appear at 45 to 55 s, including a bright blob at the vanishing point at 55 s.\n- A few people at the frame edges and some distant people are missing.\n\n**Most fixable:**\n- The stone colour cast, in colour calibration or the appearance model.\n- Masking the baked-in person.\n- Pruning far-field floaters.\n\nThe near-colonnade smear at 15 s and the wall streaks at 55 s look largely inherent to a single forward walk. No rows were flagged as tracking lost, and none needed to be, so leaving every row unfaded is correct."
+   },
+   "check": {
+    "agree": false,
+    "reason": "I agree with the first judge on the camera alignment and on most of the defects. The pass is not supported because the colour average was rounded up. At 5 s the whole rotunda is flame orange-red with a blue streak, where the video shows sunlit peach-beige stone. That row has the clip's worst colour-histogram match (0.24 whole frame, 0.32 centre), so a 3 there is generous; 2.5 fits better. At 35 s the columns still carry orange camouflage blotches, the left building wall is brown-orange instead of tan brick, and the path is blue-grey. That is \"obvious errors in parts\", a 3, not a 3.5. With those two corrections, colour averages about 2.8, below the required 3, so largely_matches is false. Layout is also borderline. The 5 s rotunda has smeared capitals, lost fluting and a blue streak, which makes it nearer 3.5 than 4, so layout comes out at exactly 3.5. I also lower dynamic from 4 to 3.5. People are mostly present as ghosts, but a translucent passer-by is baked into the static scene at 15 s (and a faint smear appears at 5 s), and several edge or far people are missing. One factual correction: at 35 s the video shows 5 pedestrians, not about 7, and 4 of them clearly have ghosts. No rows are tracking-lost, so leaving every row unfaded is correct.",
+    "corrected": {
+     "layout": 3.5,
+     "colour": 2.8,
+     "dynamic": 3.5,
+     "lost_rows_score": 0,
+     "fade_justified": true,
+     "largely_matches": false,
+     "defects": [
+      {
+       "t": 5,
+       "what": "The rotunda (about 30% of the frame) is drawn saturated orange-red with dark vertical streaks and a blue streak at the right edge. In the video it is sunlit peach-beige. The capitals and the carved frieze on the base are smeared, and the column fluting is gone. Colour-histogram match is 0.24 whole frame and 0.32 centre.",
+       "fixable": "fixable: colour calibration / appearance-model baking on sunlit stone; prune the blue floater streak"
+      },
+      {
+       "t": 5,
+       "what": "The asphalt path is lighter and blue-grey where the video shows neutral grey, and it has no texture. The lawn has directional streaks instead of grass texture.",
+       "fixable": "colour fixable; lawn streaks largely inherent (near ground at grazing angles, few views)"
+      },
+      {
+       "t": 5,
+       "what": "A faint translucent dark smear stands on the path to the right of the scooter ghost, where the video shows empty path. The near-left tree canopy is motion-smeared.",
+       "fixable": "fixable: mask transient people before training; canopy smear partly inherent"
+      },
+      {
+       "t": 15,
+       "what": "The right third (the two nearest colonnade columns) is a flat, saturated orange smear with a blue streak. The individual columns, fluting and shadow bands are not resolved above the bases.",
+       "fixable": "orange cast fixable (colour); loss of column structure mostly inherent (close range, single forward pass, strong parallax on textureless stone)"
+      },
+      {
+       "t": 15,
+       "what": "A translucent grey human-shaped smear is baked into the static scene on the path, just left of and behind the walker ghost. It is larger than the distant backpack person who actually stands there.",
+       "fixable": "fixable: dynamic-person masking before training"
+      },
+      {
+       "t": 15,
+       "what": "The person at the far left edge (arm and orange bag) has no ghost. The path has cyan and blue smudges, and the lawn at the bottom right is heavily streaked.",
+       "fixable": "edge person fixable (detection at frame edges); ground streaks partly inherent"
+      },
+      {
+       "t": 25,
+       "what": "The column shafts are covered in orange camouflage blotches where the video shows even peach-beige stone with soft shadow. At the right edge, the tree and far colonnade become yellow-green and orange blobs. The left building has a pink cast.",
+       "fixable": "colour fixable; far-field blobs partly inherent"
+      },
+      {
+       "t": 25,
+       "what": "A passer-by's hand and arm at the bottom-right edge of the video is missing from the render. The path is blue-grey.",
+       "fixable": "fixable: edge-of-frame person detection; colour calibration"
+      },
+      {
+       "t": 35,
+       "what": "The left building wall is brown-orange and smeared at its left edge instead of tan brick, and the upper-left canopy has smeared floaters against the sky. The colonnade columns are blotchy orange.",
+       "fixable": "partly fixable (colour, floater pruning); edge smear is under-observed geometry"
+      },
+      {
+       "t": 35,
+       "what": "The video shows 5 pedestrians; 4 have clear ghosts. The blue-shirt walker between the grey-hoodie and black-dress people is missing or reduced to a small blue fragment.",
+       "fixable": "fixable: keep smaller or more distant person tracks"
+      },
+      {
+       "t": 45,
+       "what": "Past the first big column, the right edge of the colonnade smears into orange and blue blobs instead of a column and arch. The far rotunda at mid-right is an orange-white blob. The left building wall has mottled pink and teal graffiti-like patches, and the green door is a dark teal smear.",
+       "fixable": "colour fixable; far-field smear partly inherent"
+      },
+      {
+       "t": 55,
+       "what": "The left building wall (about a third of the frame) is smeared into vertical streaks with purple, blue and white patches, and has no brick texture. The pale pillar or trunk near the wall is an orange blob.",
+       "fixable": "largely inherent to a single forward walk past a close wall; colour partly fixable"
+      },
+      {
+       "t": 55,
+       "what": "A bright orange-white vertical floater sits in the upper centre-right, where the video shows a dark green tree against the sky. The right colonnade is washed-out pale peach instead of shaded grey-beige.",
+       "fixable": "fixable: far-field prune / sky-fill check; colour calibration"
+      },
+      {
+       "t": 55,
+       "what": "Not a defect: the two standing people (striped ghosts), the bench and the two small distant walkers are present in the right places and at the right sizes.",
+       "fixable": "n/a"
+      }
+     ],
+     "summary": "Scores per row (1 to 5):\n- Layout: 5 s 3.5, 15 s 3, 25 s 4, 35 s 4, 45 s 3.5, 55 s 3. Mean 3.5, exactly at the threshold, and no row is below 3.\n- Colour: 2.5, 2.5, 3, 3, 3, 3. Mean about 2.8, below the required 3.\n- Dynamic: about 3.5.\n\n**Verdict: largely_matches = false**, because colour falls short.\n\n**What holds:** The camera alignment is right at every sampled moment. The path, lawn edge, colonnade, rotunda, left building, lamp posts, bench and bin are in the right places and sizes. Most people appear as ghosts in the right place.\n\n**What fails:**\n- Every row shows the sunlit stone as over-saturated orange or blotchy. At 5 s it is a flame-orange rotunda (histogram match 0.24); at 15 s the right third is a flat orange smear.\n- The asphalt is consistently blue-grey.\n- Building walls are smeared and mis-coloured at 45 to 55 s.\n- A translucent passer-by is baked into the scene at 15 s.\n- A bright floater appears at 55 s.\n- Some edge and far people are missing.\n\n**Most fixable:**\n- Colour calibration of sunlit stone and asphalt. This alone could lift colour to about 3.\n- Masking transient people.\n- Pruning far-field floaters.\n\nThe near-colonnade smear at 15 s and the wall streaks at 55 s look inherent to a single forward walk. No rows are tracking-lost, so leaving every row unfaded is correct."
+    }
+   }
+  },
+  {
+   "id": "o3332",
+   "title": "Palace of Fine Arts: garden and people",
+   "first": {
+    "layout": 3.4,
+    "colour": 2.8,
+    "dynamic": 3,
+    "lost_rows_score": 0,
+    "fade_justified": true,
+    "largely_matches": false,
+    "defects": [
+     {
+      "t": 4.2,
+      "what": "Colonnade on the right has rainbow streaks (blue, yellow, magenta) running down the columns. The far end of the path (rotunda) is a blurred orange-tinted mush.",
+      "fixable": "pipeline: view-dependent colour or appearance-model overfit on far geometry seen from few views. Fix with lower SH degree or a clamp, and by pruning far-field streak splats."
+     },
+     {
+      "t": 4.2,
+      "what": "The grass is much more saturated (neon green) than in the video, and the path is lighter and bluish grey where the video shows mid grey asphalt.",
+      "fixable": "pipeline: colour calibration and exposure"
+     },
+     {
+      "t": 12.5,
+      "what": "The rotunda and colonnade in the background are tinted orange and red. Top-left trees are smeared into vertical streaks. The lawn is teal and oversaturated with streaky texture.",
+      "fixable": "pipeline: colour calibration plus far-field pruning. Some foliage blur comes from walking footage."
+     },
+     {
+      "t": 12.5,
+      "what": "Distant people and the cart at the far end of the path are faint or missing. The two near walkers' ghosts are correct.",
+      "fixable": "pipeline: ghosts for far or small people (detection threshold)"
+     },
+     {
+      "t": 20.8,
+      "what": "The columns and entablature are oversaturated orange, with blue and orange iridescent streaks on the columns.",
+      "fixable": "pipeline: SH/appearance clamp, colour calibration"
+     },
+     {
+      "t": 20.8,
+      "what": "A solid flat blue rectangular block stands at the base of the columns, roughly where a man in a blue shirt stands in the video. A dark green box sits at the left edge. Neither appears in the video frame.",
+      "fixable": "pipeline: mis-parked or misclassified prop splats (prop specs and parking)"
+     },
+     {
+      "t": 20.8,
+      "what": "The woman at the left edge and the man in the blue shirt behind the striped-shirt walker have no ghosts. The close walker's ghost is a holey, blocky mosaic, which is acceptable as an abstraction. The cart prop is correct.",
+      "fixable": "pipeline: person detection and tracking for partly cropped and mid-distance people"
+     },
+     {
+      "t": 29.1,
+      "what": "The left column is torn and smeared with rainbow edges. The green hillside behind the columns is a yellow-orange blob. Large blurry fern leaves (near-camera floaters) cover the top-right quarter.",
+      "fixable": "pipeline: floater pruning, sky and far-field fill, colour. Partly inherent because the hillside is seen only briefly."
+     },
+     {
+      "t": 29.1,
+      "what": "The dappled sunlit patches on the paving are saturated yellow-orange blobs instead of bright neutral white.",
+      "fixable": "pipeline: colour and exposure calibration (highlight clipping and white balance)"
+     },
+     {
+      "t": 29.1,
+      "what": "People are almost entirely missing. The man in the cap shows only as a faint white smear. The man in the blue shirt and the woman beside him have no ghost, and the difference image lights up both figures.",
+      "fixable": "pipeline: person ghost tracking (detections dropped at mid range)"
+     },
+     {
+      "t": 37.4,
+      "what": "Above the bush, the upper-right third (colonnade column and trees) is replaced by orange, red and white flame-like vertical streaks. The sky patch is a smeared cyan blob. The magnolia and grass are recognisable but heavily blurred.",
+      "fixable": "partly pipeline (far-field prune and sky fill, floater removal), partly inherent: the camera is pressed close to the bush, so the background gets few clean views"
+     },
+     {
+      "t": 37.4,
+      "what": "The sidewalk has a pink tint. The two people at the far right have no ghosts.",
+      "fixable": "pipeline: colour and far-person ghosts"
+     },
+     {
+      "t": 45.8,
+      "what": "The whole upper half (columns, rotunda dome, tree behind the bush) is a pink-orange smear. None of that background structure is recognisable. Only the bush, planter grass, curb and path match.",
+      "fixable": "partly pipeline (far-field prune and sky dome fill instead of leaving smeared splats), partly inherent (background poorly observed)"
+     },
+     {
+      "t": 45.8,
+      "what": "A brown and dark rectangular box floats beside the close man's head with nothing matching it in the video. The man's ghost is correctly placed but blocky.",
+      "fixable": "pipeline: stray or mis-parked prop"
+     }
+    ],
+    "summary": "Verdict: it does not very largely match. Non-lost rows average 3.4 on layout and 2.8 on colour, so the clip fails both thresholds (3.5 and 3), though no row is below 2 on layout.\n\nPer-row scores:\n\n| Row | Layout | Colour | Dynamic |\n|---|---|---|---|\n| 4.2 s | 4 | 3.5 | 4.5 |\n| 12.5 s | 4 | 3 | 4 |\n| 20.8 s | 4 | 3 | 3 |\n| 29.1 s | 3 | 2.5 | 1.5 |\n| 37.4 s | 3 | 2.5 | 2 |\n| 45.8 s | 2.5 | 2.5 | 3.5 |\n\nThe first three rows are clearly the same scene with correct alignment: curving path, lawn, magnolia, colonnade and cart prop all sit in the right places, and the walkers' ghosts land on the people. The second half falls apart in the background. At 29.1 s the left column is torn, the green hillside is a yellow blob, ferns float as blurry near-camera splats and the sunlit paving patches turn yellow. At 37.4 s and 45.8 s the colonnade and dome are replaced by orange, red or pink flame-like smears, and only the near bush, grass, curb and path survive.\n\nColour is consistently off:\n- The grass is oversaturated and the path has a bluish cast.\n- The columns show rainbow streaks and the architecture has an orange cast.\n\nThese point to SH or appearance-model overfit on far, rarely seen geometry plus colour calibration problems. All are fixable in the pipeline: SH clamp, far-field and floater pruning, sky and far fill, white-balance and highlight handling.\n\nMoving things are uneven:\n- Close people are tracked well (4.2 s, 12.5 s, 20.8 s, 45.8 s).\n- Mid-range and edge people are often missing (20.8 s, 29.1 s, 37.4 s).\n- Stray solid prop blocks appear that the video doesn't have: a blue block and a green box at 20.8 s, a brown box at 45.8 s.\n\nNo rows are marked tracking lost, and that is correct: the camera pose in the bad late rows is still aligned (curb, bush and the person's ghost match), so the problem is reconstruction quality, not tracking. No fade is warranted, and lost_rows_score is 0 because there are no lost rows to score. Metrics agree with what I saw: mean PSNR 17.4 and SSIM 0.56, with SSIM dropping to 0.43\u20130.45 in the last two rows."
+   },
+   "check": {
+    "agree": true,
+    "reason": "I agree with the verdict: it does not very largely match. I looked at every row at full resolution, and my scores land within about 0.5 of the first judge's on every row. Neither verdict threshold is close: my layout average is about 3.3\u20133.4 (threshold 3.5) and my colour average about 2.6\u20132.75 (threshold 3).\n\nPer-row check:\n- **4.2 s:** Layout 4 is right: path, lawn, colonnade and walker ghosts all line up. Colour 3.5 is slightly generous; I'd give 3.\n  - The asphalt, the largest area, is lighter and bluish.\n  - The grass is neon.\n  - The centre-left tree is orange where the video shows it green, which the first judge didn't list.\n  - Rainbow streaks run down the right columns.\n- **12.5 s:** Layout 4 holds, though the top-left column and tree are vertical smears. Colour 3 is fair to slightly generous: the rotunda is orange-red and the lawn teal. The man cut off at the left edge has no ghost.\n- **20.8 s:** Layout 4 and colour about 2.5\u20133 are fair; the colonnade is strongly orange with blue streaks. I confirm the flat blue block where the blue-shirted man stands, the dark green box at the left edge, and the blocky but correctly placed striped-shirt ghost. The cart prop is right.\n- **29.1 s:** Layout 3, colour 2.5 and dynamic 1.5 are right. The left column is torn, the hillside is a yellow blob, and the sun patches on the paving are yellow. Only a faint smear remains of the man in the cap; the blue-shirted man and the woman beside him are missing.\n  - One factual correction: the blurry fronds at top-right are not pure floaters. The video does have fern fronds there, but the render makes them oversized and blurred, so it is a blur and scale defect.\n- **37.4 s:** Layout 3, colour 2.5 and dynamic 2 are right. The upper-right third is orange, red and white flame streaks, the sky is a cyan blob and the sidewalk is pinkish. The two people at far right are missing.\n- **45.8 s:** Layout 2.5 is right: the upper ~40% (columns, dome, tree) is a pink-orange smear, while the bush, planter, curb and path match. The man's ghost is placed correctly but blocky, and a spurious brown box floats by his head. I'd give dynamic 3 rather than 3.5 because of that box.\n\nNo rows are marked tracking lost, and that is correct: the near geometry and the ghosts stay aligned even in the worst rows, so the failures are reconstruction quality (far-field and appearance), not pose. No fade is warranted. The metrics agree: mean PSNR 17.4 and SSIM 0.56, with SSIM 0.45/0.43 in the last two rows.\n\nThe fixability calls are reasonable. The pipeline issues are the appearance-model or SH overfit on far geometry, colour and white balance, far-field and floater pruning with sky fill, mis-parked prop boxes and missed mid-range people. Part of it is inherent, because the background is seen briefly from close to the bushes."
+   }
+  }
+ ],
+ "report": "# Judging report: Palace of Fine Arts clips\n\n**Final scores (1\u20135; to pass, layout must be at least 3.5 and colour at least 3)**\n\n- **o3331, colonnade walk 2:** layout 3.5, colour 2.8, dynamic 3.5. **Does not largely match.** The skeptic overturned a narrow pass because colour had been rounded up.\n- **o3332, garden and people:** layout 3.4, colour 2.8, dynamic 3.0. **Does not largely match.** Both judges agree.\n\nTracking held in every row of both clips, so leaving all rows unfaded is correct.\n\n**Fixable in the pipeline**\n\n1. **Colour cast.** This shows in every row of both clips. Sunlit stone comes out saturated orange, often blotchy or with rainbow streaks. Asphalt is blue-grey and grass is neon. The worst case is the o3331 rotunda at 5 s, where the colour-histogram match is 0.24. Fixes:\n   - calibrate colour and white balance\n   - handle bright highlights\n   - limit how much the appearance model can change colour on geometry seen from few views\n\n   The judges think this alone could lift o3331's colour score to about 3.\n2. **Far-field smears and floaters.** In the late rows of o3331 and the second half of o3332, flame-like orange, pink or white streaks replace the colonnade and dome. There is also a bright blob at the vanishing point. Prune the far field and fill it with sky rather than leaving smeared splats.\n3. **People and props.**\n   - People at mid range, at the frame edge or in the distance often have no ghost. At 29 s in o3332 almost nobody is shown.\n   - In o3331 at 15 s, a passer-by who was not masked out is baked into the static scene.\n   - o3332 has solid boxes that are not in the video (a blue block, a green box and a brown box).\n\n   Fixes: mask passers-by before training, lower the person-detection size threshold, and check where props are placed.\n\n**Inherent to the footage**\n\n4. **Close-range geometry seen in one pass.** A single forward walk past plain stone and walls cannot resolve the near columns (o3331 at 15 s) or the wall texture (o3331 at 55 s). Ground seen at grazing angles comes out streaked. In o3332 the camera passes close to the bushes, so there are few clear views of the background behind them.\n\n**Overall verdict**\n\nNot yet. Seen from the recorded camera, the layout holds at every sampled moment. Paths, lawns, the colonnade, benches, the cart and the near walkers' ghosts are all in the right places, so the structure is there. Both clips fall short on colour, and in o3332 the background also breaks down from about 29 s. Fixing the colour cast is the cheapest and most effective change, and it would probably be enough for o3331 to pass. o3332 also needs the far-field cleanup and better tracking of people."
+}

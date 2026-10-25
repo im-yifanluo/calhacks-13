@@ -21,6 +21,13 @@ Oct 24, CalHacks 13. Built on branch `pipe/vision`; runbook in [pipeline/README.
   never get enough views (bathroom), the phone's auto-exposure changes frame to frame (now replayed in wearer's
   view), and people are only points, not trained splats. None of the 5 clips has a thrown object, so throws are
   tested only on the synthetic scene.
+- **Day 2 evening, the demo footage (Ray-Ban Meta glasses, 9 clips, 7 s to 60 s, indoors and out)**: all nine convert
+  end to end into walkable scenes with moving people ghosts; from the recorded camera they score 16–19 dB (best:
+  the colonnade walk 2 at 19.3, the rotunda at 18.7 with a real sky, the speaker at 18.3). The judge panel's verdict:
+  layout holds in every clip and camera alignment never slips; the two stage clips pass the bar, the outdoor clips fail
+  it on colour by 0.1–0.25 (a warm cast on walls and sandstone), the top thing to fix next. The viewer now opens a
+  memory in **follow mode** (ride the recorded walk, pause to roam). A parallel **real 4DGS** track reaches 30.5 dB
+  on the speaker clip with sharp moving people but is not yet a VR scene (details in §3).
 - **Day 2 in one line**: two silent failures found and fixed (the floor fit took a bed for the floor; removing the
   appearance model made every training collapse), depth supervision from ViPE added, colours calibrated against
   the frames, guided exploration and the render-vs-video scoring built, five rooms retrained four times.
@@ -155,16 +162,22 @@ of credits from ~7 PM, noun lists and prop descriptions came from hand-written t
 What the glasses scenes look like from the recorded camera (grids in `apps/web/public/memories/<id>/compare.jpg`):
 - **Stage, speaker at the podium (v59)**: the demo scene. The speaker stands as a moving point ghost at the podium in
   every sampled moment; bear, backdrop, stage and bag in place; the acrylic podium is only partly there; the far left
-  of the hall smears. PSNR 18.1 / SSIM 0.75.
+  of the hall smears. PSNR 18.3 / SSIM 0.75.
 - **Stage and the hall (v71)**: same stage, then the camera turns to the crowded hall: the speaker ghost holds, the
   hall is recognisable but blurry, seated people become a textured mass, 11 walking people are ghosts.
 - **Palace of Fine Arts, short (o3329)**: ground-level path, lawn, planters, sign and door right where they are; six
-  people as ghosts including the companion a metre away and the man with headphones; the sky and sunlit tree tops
-  wash into a yellow smear. 18 dB.
-- **Rotunda and colonnade (o3328)**: the rotunda, colonnade, exhibition wall and doors are clearly the place; the sky
-  is a blue smear with no geometry; people far down the paths were missing until the ghost depth limit was raised
-  from 8 m to 30 m.
-- The remaining five (hall walks v83 and v106, colonnade walks o3330 and o3331, garden o3332) are in the table.
+  people as ghosts including the companion a metre away and the man with headphones; the sunlit tree tops still
+  wash into a yellow smear. 17.9 dB.
+- **Rotunda and colonnade (o3328)**: the rotunda, colonnade, exhibition wall and doors are clearly the place, under a
+  smooth blue sky (a dome of Gaussians about 100 m out) with warm stone and pavement; the close-up of the columns
+  blurs; people far down the paths were missing until the ghost depth limit was raised from 8 m to 30 m. 18.7 dB,
+  up from 17.6 (sky dome, identity viewer gain) and from a black-sky 11.2 in between.
+- **Hall walks (v83, v106)**: the hall itself holds (roof trusses and light strips, banners, tables, chairs), the seated
+  crowd becomes a textured mass and walkers pixel mosaics; v106 (60 s, the crowd overflowing ViPE's instance ids,
+  so 2 s keyframes) is the weakest scene at 14.8 dB, with the companion's shoulder filling two of the six moments.
+- **Colonnade walks (o3330, o3331) and the garden (o3332)**: the path, lawns, lamp posts, bench and colonnade line up
+  in every moment and the walkers pass as ghosts; the sunlit stone comes out too orange and the near colonnade
+  smears on the single forward pass. 18.4, 19.3 (the best outdoor score) and 17.4 dB.
 
 Lessons from this footage: the capture viewport must match the clip's aspect (a 9:16 viewport on 3:4 footage
 stretched every render 1.33× and cost 3 dB in every score, found by the judge panel); crowds overflow ViPE's 255
@@ -175,12 +188,32 @@ until it did: its sky is about 7,900 opaque Gaussians of 1–5 m at 94 m); and a
 that helped indoors made these scenes slightly worse, so it is off by default.
 
 <!-- GLASSES-TABLE -->
+Scores from the recorded camera (six moments per clip, render vs video; PSNR in dB; colour = histogram match;
+centre = middle third), final pipeline of Oct 24, 9 PM PT. `pipeline/tools/results_table.py` regenerates this table.
+
+| clip | length | floor fit | scale | cam height | room Gaussians (pruned) | props | ghosts | lost tracking | PSNR | SSIM | colour | centre SSIM |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Stage: speaker at the podium (`v59`) | 18 s | found | 1.41 | 1.74 m | 415523 (84477) | 1 | 3 | 0 s in 0 | 18.3 | 0.749 | 0.724 | 0.622 |
+| Stage and the hall (`v71`) | 39 s | found | 1.0 | 1.51 m | 408415 (88102) | 3 | 11 | 0 s in 0 | 17.697 | 0.72 | 0.819 | 0.616 |
+| Hackathon hall walk (`v83`) | 45 s | found | 1.0 | 1.68 m | 403242 (96343) | 12 | 31 | 0 s in 0 | 16.055 | 0.576 | 0.626 | 0.528 |
+| Palace of Fine Arts: short (`o3329`) | 7 s | found | 1.0 | 1.84 m | 465104 (33996) | 1 | 7 | 0 s in 0 | 17.868 | 0.63 | 0.401 | 0.621 |
+| Palace of Fine Arts: rotunda and people (`o3328`) | 43 s | found | 0.68 | 1.73 m | 263874 (236126) | 0 | 14 | 0 s in 0 | 18.698 | 0.69 | 0.598 | 0.676 |
+| Palace of Fine Arts: colonnade walk (`o3330`) | 60 s | found | 1.0 | 1.81 m | 314620 (185380) | 4 | 13 | 0 s in 0 | 18.357 | 0.677 | 0.431 | 0.67 |
+| Palace of Fine Arts: colonnade walk 2 (`o3331`) | 60 s | found | 1.0 | 1.85 m | 296454 (203104) | 2 | 14 | 0 s in 0 | 19.283 | 0.699 | 0.577 | 0.714 |
+| Palace of Fine Arts: garden and people (`o3332`) | 50 s | found | 1.0 | 1.87 m | 362130 (137622) | 11 | 5 | 0 s in 0 | 17.405 | 0.558 | 0.869 | 0.547 |
+<!-- /GLASSES-TABLE -->
 
 ### Hands-on check (Oct 24, 3 PM PT)
 
 Walked through in the web viewer: the **room corner** works; the **hotel lobby**, **corridor** and **hotel room**
 work, kind of: you can walk them and recognise the place, with the smears, floaters and washed patches the judges
 list below. The night walk was not checked by hand.
+
+**9 PM PT, glasses scenes, in the viewer's new follow mode** (you ride the recorded walk at eye height and choose
+where to look; Space pauses everything and frees you to walk anywhere; Play glides you back): the **colonnade walk**
+(o3330) carries you along the path with the people ghosts walking past, and stepping off the path while paused
+shows the colonnade from the lawn; the **rotunda** (o3328) has a smooth blue sky and warm stone where the earlier
+render was blue-grey. Quest and phone are still untested.
 
 ### Independent judge panel
 
@@ -199,6 +232,31 @@ Claude Code's Workflow tool; the full verdicts, defect lists and skeptic notes a
 | Hotel room | 3.2 | 2.7 | 4 | fails: bathroom rows 2.5, floaters, cast | agrees (3.0 / 2.5) |
 | Night walk | 2.9 | 2.8 | 3 | fails: ground near the camera is mush, cars missing | agrees |
 <!-- /JUDGE-TABLE -->
+
+#### Glasses scenes, final pipeline (Oct 24, 9 PM PT)
+
+Same panel and bar (layout ≥ 3.5 and colour ≥ 3), run on the final renders (`docs/judge/run4_glasses_final_*.{json,md}`).
+
+<!-- GLASSES-JUDGE -->
+| clip | layout | colour | moving things | verdict | the skeptic |
+|---|---|---|---|---|---|
+| Stage: speaker at the podium (`v59`) | 3.60 | 3.20 | 4.0 | **passes**, narrowly | agrees |
+| Stage and the hall (`v71`) | 3.75 | 3.20 | 3.5 | **passes**, narrowly | agrees |
+| Hackathon hall walk (`v83`) | 3.25 | 2.90 | 2.6 | fails on layout and colour | agrees |
+| Palace of Fine Arts: rotunda and people (`o3328`) | 3.60 | 2.90 | 3.0 | fails on colour | agrees |
+| Palace of Fine Arts: short (`o3329`) | 3.70 | 2.90 | 3.4 | fails on colour | agrees |
+| Palace of Fine Arts: colonnade walk (`o3330`) | 3.50 | 2.75 | 2.5 | fails on colour | agrees |
+| Palace of Fine Arts: colonnade walk 2 (`o3331`) | 3.50 | 2.80 | 3.5 | fails on colour | corrected (stricter) |
+| Palace of Fine Arts: garden and people (`o3332`) | 3.40 | 2.80 | 3.0 | fails on layout and colour | agrees |
+<!-- /GLASSES-JUDGE -->
+
+The panel's summary, in substance: *geometry and camera alignment hold in every clip and layout passes in five of six;
+only the two stage clips pass on both counts, and only just. Colour decides the result*: grey walls come out peach,
+the teddy and the sandstone saturated orange, tan brick salmon, the short clip with a cyan cast. After colour: people
+baked into the static room as smears where they sat or passed (hall walk, colonnade), walkers missing or rendered as
+sparse mosaics, floaters (sky blobs, flame-like smears on distant buildings, needle streaks on pavement), the phantom
+tan box beside the podium. Inherent to the footage: the clear acrylic podium, fast pans, distant colonnades with no
+parallax, textureless walls and thin things.
 
 Their summary, verbatim in substance: *"From the recorded camera the geometry usually holds: the poses line up and
 every indoor room is recognisable. The scenes fall short mainly on colour and splat noise, both pipeline problems
@@ -359,19 +417,27 @@ In the order we hit it. Every fix is in the code and the runbook.
 
 ## 5. What to improve next (in order of value)
 
-1. **Record a clip made for this**: walk sideways while panning, phone at one height, someone tossing a ball and
+1. **Colour, in the viewer, once for every scene.** The bake already matches the trainer's own renders to the frames
+   (per-channel gain within 2–5 % of 1), yet what the viewer shows is warmer and brighter: the gap is in Spark's
+   compositing of the same Gaussians, and it is what the judges mark down on every outdoor clip. Measure it once (a
+   synthetic colour-chart splat rendered by gsplat and by Spark) and correct it in the viewer, instead of the per-clip
+   affine fit tried today, which flattened contrast and cost 0.3–1.5 dB.
+2. **People who sit or linger.** ViPE's people masks (dilated 12 px) keep walkers out of the room, but people who sit
+   or pass slowly get baked in as smears (hall walk, colonnade). Mask by motion as well as by class, or drop frames
+   where a person covers the same pixels for seconds; and give ghosts denser points on the upper body.
+3. **Record a clip made for this**: walk sideways while panning, phone at one height, someone tossing a ball and
    walking through. Then test real Ray-Ban Meta footage (ultrawide: undistort first; ViPE's depth assumes a pinhole).
-2. **Trained people** (the real "4D" step; the 4DGS track above shows the payoff, 25 dB on people pixels against 9):
+4. **Trained people** (the real "4D" step; the 4DGS track above shows the payoff, 25 dB on people pixels against 9):
    freeze the static room, then train moving Gaussians only on the people masks, with a few shared motion bases per person, supervised by the frames, ViPE's depth and 2D point tracks
    (CoTracker3, `setup.sh extras`). Methods: Shape of Motion, MoSca, RiGS (static/rigid/transient Gaussians; code
    available). Or fit an animatable body avatar for a full 360° person (a single camera never sees their back).
    Budget ~0.5–2 GPU-hours per clip; keep moving Gaussians ≲ 100–200k for the Quest.
-3. **Rotating props**: track points on each prop (CoTracker3), lift them with depth, fit a rotation per frame
+5. **Rotating props**: track points on each prop (CoTracker3), lift them with depth, fit a rotation per frame
    (Kabsch). Props then spin when thrown in the recording, not only slide.
-4. **Better camera paths** for hard clips: refine ViPE's poses with bundle adjustment on our frames (COLMAP/GLOMAP),
+6. **Better camera paths** for hard clips: refine ViPE's poses with bundle adjustment on our frames (COLMAP/GLOMAP),
    or try MegaSaM / MapAnything (the runbook's fallbacks); the splat's pose refinement already helps a little.
-5. **Sharper rooms**: 30k steps, more frames, depth supervision from ViPE; Spark's LoD for big scenes like the street.
-6. **Run the worker live** against SpacetimeDB and the bucket (written and unit-checked, not yet run end to end).
+7. **Sharper rooms**: 30k steps, more frames, depth supervision from ViPE; Spark's LoD for big scenes like the street.
+8. **Run the worker live** against SpacetimeDB and the bucket (written and unit-checked, not yet run end to end).
 
 ## 6. Costs and time
 
@@ -379,6 +445,10 @@ In the order we hit it. Every fix is in the code and the runbook.
   rounds (≈ 5 h). Day 2: a 2× H100 pod ($8/h) retrained all five rooms three times while the floor fit and the
   pose-refinement setting were sorted out (≈ 1.5 h, ≈ $12).
 - ViPE: about 2 frames/s on the H100 (11 s clip: 3.7 min; 2½ min clip: 34 min).
+- Oct 24 evening (the demo footage): pod A (2× H100, $7.99/h) from 5:30 PM and pod B (2× H200, $10.59/h, the 4DGS
+  track plus one pipeline worker) from 6:40 PM, both still running at 9:30 PM: about $70 for nine glasses scenes
+  (each retrained two to three times as the colour fix, the sky dome and the prune changes landed), two 4DGS runs
+  and the split retrain. One glasses clip: ViPE 3–8 min, room 17–20 min on a shared GPU, layers and merges 1 min.
 - Static room: 7–8 min per clip on one H100 (20k steps at ~50 it/s, 400 frames, 500k Gaussians); two rooms train
   side by side on two GPUs. Props layer + pose export + both memory files + verify: about 2 min.
 - S3–S5 on the pod's CPUs: 1–4 min per clip; all five in parallel in under 3 min.
