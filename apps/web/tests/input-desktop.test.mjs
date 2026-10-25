@@ -25,7 +25,7 @@ class FakeCanvas extends EventTarget {
 const pointer = (type, x, y) => Object.assign(new Event(type), { button: 0, pointerId: 1, clientX: x, clientY: y });
 
 /** A paused viewer with the ball at (0, 1, 0), straight ahead of a camera at (0, 1, 3): the canvas centre is on it. */
-function setup() {
+function setup(canGrab, canMoveCamera) {
   const frame = t => ({ t, p: [0, 1, 0], q: [0, 0, 0, 1] });
   const definition = { ...structuredClone(manifest.objects[0]), id: "ball", track: [frame(0), frame(6)] };
   const object = { definition, root: new Group(), track: definition.track };
@@ -36,7 +36,7 @@ function setup() {
   const camera = new PerspectiveCamera(65, 800 / 600, 0.05, 200);
   camera.position.set(0, 1, 3); camera.lookAt(0, 1, 0); camera.updateMatrixWorld();
   const canvas = new FakeCanvas(), controls = { enabled: true };
-  desktopInput(canvas, camera, controls, viewer);
+  desktopInput(canvas, camera, controls, viewer, canGrab, canMoveCamera);
   return { viewer, canvas, controls, ball: object.root };
 }
 
@@ -44,6 +44,25 @@ test("a press turns into a grab past 6 px of movement or after 150 ms held", () 
   assert.equal(pressStartsGrab(6, 0, 0), false); assert.equal(pressStartsGrab(3, 4, 149), false);
   assert.equal(pressStartsGrab(6.1, 0, 0), true); assert.equal(pressStartsGrab(-5, 5, 10), true);
   assert.equal(pressStartsGrab(0, 0, HOLD_START_MS), true);
+});
+
+test("scene-only viewing can suppress grabs so restoring controls cannot create a take", async () => {
+  let allowed = false;
+  const { viewer, canvas, controls } = setup(() => allowed);
+  try {
+    canvas.dispatchEvent(pointer("pointerdown", 400, 300));
+    await sleep(HOLD_START_MS + 30);
+    canvas.dispatchEvent(pointer("pointermove", 420, 300));
+    // The restore gesture changes the mode before its final pointerup reaches the canvas.
+    allowed = true;
+    canvas.dispatchEvent(pointer("pointerup", 420, 300));
+    assert.equal(viewer.held, null); assert.equal(viewer.timeline.branches.length, 1);
+    assert.equal(controls.enabled, true); assert.equal(canvas.captured.size, 0);
+    canvas.dispatchEvent(pointer("pointerdown", 400, 300));
+    await sleep(HOLD_START_MS + 30);
+    assert.equal(viewer.held?.definition.id, "ball", "grabbing resumes when controls are visible");
+    canvas.dispatchEvent(pointer("pointerup", 400, 300));
+  } finally { viewer.dispose(); }
 });
 
 test("drag-plane hits behind the camera or absurdly far away are ignored", () => {
@@ -82,6 +101,50 @@ test("a quick tap on a paused object does nothing: no grab, no take, the camera 
     assert.equal(viewer.held, null); assert.equal(viewer.busy, false);
     assert.equal(viewer.timeline.branches.length, 1); assert.deepEqual(events, []);
     assert.equal(controls.enabled, true); assert.equal(canvas.captured.size, 0);
+  } finally { viewer.dispose(); }
+});
+
+test("blur and object taps preserve a locked camera, and free look resumes after the mode changes", () => {
+  let freeLook = false;
+  const { viewer, canvas, controls } = setup(undefined, () => freeLook);
+  try {
+    controls.enabled = false;
+    window.dispatchEvent(new Event("blur"));
+    assert.equal(controls.enabled, false, "blur must not unlock the recorded camera");
+    canvas.dispatchEvent(pointer("pointerdown", 400, 300));
+    canvas.dispatchEvent(pointer("pointerup", 400, 300));
+    assert.equal(controls.enabled, false, "a tap must not unlock the recorded camera");
+    freeLook = true; controls.enabled = true;
+    canvas.dispatchEvent(pointer("pointerdown", 400, 300));
+    canvas.dispatchEvent(pointer("pointerup", 400, 300));
+    assert.equal(controls.enabled, true, "a free-look tap restores navigation");
+    canvas.dispatchEvent(pointer("pointerdown", 400, 300));
+    freeLook = false;
+    canvas.dispatchEvent(pointer("pointercancel", 400, 300));
+    assert.equal(controls.enabled, false, "switching modes during a grab uses the new mode");
+  } finally { viewer.dispose(); }
+});
+
+test("without a mode callback, an object tap restores the prior enabled state", () => {
+  const { viewer, canvas, controls } = setup();
+  try {
+    controls.enabled = false;
+    canvas.dispatchEvent(pointer("pointerdown", 400, 300));
+    canvas.dispatchEvent(pointer("pointerup", 400, 300));
+    assert.equal(controls.enabled, false);
+  } finally { viewer.dispose(); }
+});
+
+test("after playback ends, pressing an object leaves the gesture available for camera navigation", () => {
+  const { viewer, canvas, controls } = setup();
+  try {
+    viewer.seek(viewer.timeline.duration);
+    const down = pointer("pointerdown", 400, 300);
+    canvas.dispatchEvent(down);
+    assert.equal(controls.enabled, true);
+    assert.equal(canvas.captured.size, 0, "no grab capture can consume the camera gesture");
+    assert.equal(viewer.held, null);
+    assert.equal(viewer.timeline.branches.length, 1);
   } finally { viewer.dispose(); }
 });
 

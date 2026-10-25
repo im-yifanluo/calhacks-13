@@ -38,10 +38,12 @@ describe("personal key format and storage", () => {
     vi.stubGlobal("sessionStorage", storage());
     expect(savedAccount()).toEqual(account);
     sessionStorage.setItem("memreplay-token:memos-test", account.token);
+    localStorage.setItem("memreplay-library-token:memos-test", account.token);
     forgetAccount();
     expect(savedAccount()).toBeUndefined();
     expect(localStorage.getItem(accountStorageKey())).toBeNull();
     expect(sessionStorage.getItem("memreplay-token:memos-test")).toBeNull();
+    expect(localStorage.getItem("memreplay-library-token:memos-test")).toBeNull();
   });
   test("when persistent storage is blocked the key still works for this tab", () => {
     vi.stubGlobal("localStorage", { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); }, removeItem() {} });

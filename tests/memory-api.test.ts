@@ -13,7 +13,7 @@ test("phone memory listing exposes scene output and preserves owner filtering", 
   const db = databaseConfig({ STDB_HTTP_URL: "https://db.test", STDB_DATABASE: "test" });
   expect(await db.listMemories(identity, "Bearer test")).toEqual([{
     id: "4", title: "Kitchen", sourceUrl: "https://assets.test/clip.mov", status: "ready", durationUs: "17000000",
-    requestId: "request", pipelineIdentity: pipeline, manifestUrl: "https://assets.test/memory.json", progress: 1, error: "",
+    requestId: "request", pipelineIdentity: pipeline, pipeline: true, manifestUrl: "https://assets.test/memory.json", progress: 1, error: "",
   }]);
   await expect(db.listMemories("invalid' OR 1=1", "Bearer test")).rejects.toThrow("Invalid identity");
   expect(fetch).toHaveBeenCalledTimes(1);

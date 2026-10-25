@@ -5,6 +5,9 @@ Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves 
 - **How the pieces fit, and known issues:** [docs/INTEGRATION.md](docs/INTEGRATION.md). Agents should read [CLAUDE.md](CLAUDE.md) first.
 - **Full plan** (tracks, design, timeline, risks): [docs/PLAN.md](docs/PLAN.md)
 - **Viewer:** [docs/P3_VIEWER.md](docs/P3_VIEWER.md) · **Multiplayer and upload:** [docs/P4.md](docs/P4.md) · **Upload test:** [docs/CAPTURE_TEST.md](docs/CAPTURE_TEST.md)
+- **I3 / I4 / I5 / I7 connection checks:** [Access, setup and one-command test](docs/CONNECTIONS.md). Run `npm run test:connections` for an isolated live database/storage/worker-handoff/multiplayer test without a GPU.
+- **Integrated iPhone → Runpod pipeline:** [Setup and acceptance](docs/RUNPOD_INTEGRATION.md). `npm run test:pipeline` runs the actual Swift upload queue and worker transport against isolated SpacetimeDB/R2 with substituted reconstruction stages. `npm run test:pipeline:live -- --clip /absolute/clip.mp4` requires a configured GPU worker and passes only after a real scene is published and visible through the API and database subscription.
+- **Live phone upload API:** `https://memos.alightdell64.chatgpt.site` — [Account/upload contract and verification](docs/UPLOAD_API.md). Uses the website's Maincloud database and personal keys, with durable R2 storage. Public MP4 upload/playback verified; hosted clips are limited to 90 MiB. `npm run test:upload-api` checks real database/upload/restart behavior locally.
 - **Vision pipeline runbook:** [pipeline/README.md](pipeline/README.md); results on the 5 sample clips: [docs/VISION_PIPELINE_REPORT.md](docs/VISION_PIPELINE_REPORT.md)
 
 **Phone app:** open `apps/ios/SceneCaptureDemo.xcodeproj` for a native iPhone/Simulator demo with **On** and **Off**, automatic upload, database + SHA-256 verification, offline playback and retry. [Installation and test instructions](docs/PHONE_APP.md). The separate glasses SDK project requires Meta's supported Xcode toolchain. Web library: `/library.html` (name-based guest profile, upload, processing status and ready scene links). Diagnostics: `/capture.html`. [Frontend flow and identity details](docs/FRONTEND_FLOW.md).
@@ -171,6 +174,9 @@ The app, SpacetimeDB (`/stdb`) and the upload service (`/api`) share that one li
 | `npm run party:dev` | Start web + upload with matching party database/origin settings; publish first |
 | `npm run test:party` | Live party authority, presence, clock, handoff and worker-contract test |
 | `npm run test:integration` | Live multiplayer test against a running SpacetimeDB (`STDB_DATABASE`, `STDB_WS_URL` or `STDB_PORT`) |
+| `npm run test:connections -- --full` | Isolated live I3/I4/I5/I7 test plus multiplayer and party suites; creates and cleans up its own local database |
+| `npm run connections:check -- URL` | Authenticated read-only connection report for a running upload service |
+| `npm run worker:env:local` | Write a private local worker environment after starting `upload:local` |
 | `npm run tunnel` | Public HTTPS link for phones and judges |
 | `npm run stdb:start` | Local SpacetimeDB on port 3055 (`STDB_PORT` overrides) |
 | `npm run stdb:publish:local` | Publish the server module to it |

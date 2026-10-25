@@ -54,9 +54,10 @@ export class AutoHide {
   private last = 0;
 
   constructor(private body: HTMLElement, private ms = 3000) {
-    const wake = () => { this.last = performance.now(); this.body.classList.remove("idle"); };
-    for (const type of ["pointerdown", "pointermove", "keydown", "wheel"]) addEventListener(type, wake, { capture: true, passive: true });
+    for (const type of ["pointerdown", "pointermove", "keydown", "wheel"]) addEventListener(type, () => this.wake(), { capture: true, passive: true });
   }
+
+  wake(): void { this.last = performance.now(); this.body.classList.remove("idle"); }
 
   update(allowed: boolean): void {
     this.body.classList.toggle("idle", allowed && this.last > 0 && performance.now() - this.last > this.ms);

@@ -533,10 +533,10 @@ export class Multiplayer extends EventTarget {
     const r = this.room;
     return r ? this.connection?.db.memory.id.find(r.memoryId) : undefined;
   }
-  /** Library rows in id order, so the list keeps its order across reconnects. */
+  /** Personal library. A joined party reads its shared memory separately via `memory`. */
   get memories() {
-    return this.connection
-      ? [...this.connection.db.memory.iter()].sort((a, b) =>
+    return this.connection && this.identity
+      ? [...this.connection.db.memory.iter()].filter(m => m.owner.isEqual(this.identity!)).sort((a, b) =>
           a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
         )
       : [];

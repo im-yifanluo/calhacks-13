@@ -59,8 +59,12 @@ export function saveAccount(account: AccountKey): boolean {
 export function forgetAccount() {
   const key = accountStorageKey();
   sessionStorage.removeItem(key);
-  try { localStorage.removeItem(key); } catch { /* unavailable storage */ }
   // Registration may have promoted this tab's guest identity to a named account.
-  sessionStorage.removeItem(`memreplay-token:${databaseSettings().database}`);
+  const database = databaseSettings().database;
+  sessionStorage.removeItem(`memreplay-token:${database}`);
+  // The library persists its guest token separately. After promotion it is also an account credential.
+  try { localStorage.removeItem(`memreplay-library-token:${database}`); } catch { /* unavailable storage */ }
   sessionStorage.removeItem("memreplay-google-credential");
+  // Broadcast sign-out only after clearing guest credentials that other library tabs could reuse.
+  try { localStorage.removeItem(key); } catch { /* unavailable storage */ }
 }

@@ -1,7 +1,10 @@
+import { mountScenePublish } from "./scene-publish";
 import { Multiplayer, type Memory } from "./net";
 import { uploadPanel } from "./upload";
 import { httpURL, memoryPresentation, viewerLink } from "./library-state";
+import { mountAuth } from "./auth";
 import "./library.css";
+import { mountSceneImport } from "./scene-import";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const net = new Multiplayer(true);
@@ -57,26 +60,15 @@ async function copyLink(url: string, message: string) {
   catch { notice(`Copy this link: ${url}`); }
 }
 
-let profileBusy = false;
-let lastProfileKey = "";
-function renderProfile() {
+function renderUploadGate() {
   const profile = net.identity && net.connection?.db.profile.identity.find(net.identity);
-  const name = profile?.displayName || "";
-  const profileKey = `${net.identity?.toHexString()}:${name}`;
-  if (profileKey !== lastProfileKey) {
-    lastProfileKey = profileKey;
-    $("profile-summary").textContent = name ? `Welcome, ${name}. Your uploads belong to your unique user ID.` : "Enter your name to start uploading.";
-    $("profile-id").textContent = net.identity ? `User ID: ${net.identity.toHexString()}` : "";
-    $<HTMLInputElement>("display-name").value = name;
-    $("save-profile").textContent = name ? "Save name" : "Continue";
-  }
-  $<HTMLButtonElement>("save-profile").disabled = !net.ready || profileBusy;
+  const registered = net.ready && profile?.provider === "key" && !!profile.displayName;
   const fields = document.getElementById("upload-fields") as HTMLFieldSetElement | null;
-  if (fields) fields.disabled = !net.ready || !name;
-  $("upload-gate").hidden = !!name;
+  if (fields) fields.disabled = !registered;
+  $("upload-gate").hidden = registered;
 }
 function render() {
-  renderProfile();
+  renderUploadGate();
   $("connection").textContent = net.status;
   $("connection").classList.toggle("connected", net.ready);
   $("live-note").textContent = net.ready ? "● Live updates" : "Reconnecting · last known status";
@@ -118,33 +110,18 @@ function render() {
 uploadPanel(net, $("upload-panel"), request => {
   focusedRequest = request; signature = ""; search.value = ""; filter.value = "all";
   history.replaceState(null, "", `/library.html?request=${encodeURIComponent(request)}`);
-  notice("Video received. Its processing status will update here automatically."); render();
+  notice("Video saved. Use Watch original to play the stored recording. A 3D scene appears when reconstruction is available."); render();
   [...cards.values()].find(card => card.dataset.request === request)?.scrollIntoView({ behavior: "smooth", block: "center" });
 });
 // The existing uploader still uses the authenticated identity/token from this connection.
 const fields = document.createElement("fieldset"); fields.id = "upload-fields";
 while ($("upload-panel").firstChild) fields.append($("upload-panel").firstChild!);
 $("upload-panel").append(fields);
-const gate = element("p", "upload-gate", "Enter your name above to upload a video."); gate.id = "upload-gate";
+const gate = element("p", "upload-gate", "Sign in above with your name or personal key to upload a video."); gate.id = "upload-gate";
 $("upload-panel").prepend(gate);
-$("profile-form").onsubmit = async event => {
-  event.preventDefault();
-  if (!net.ready || !net.identity || profileBusy) return;
-  const displayName = $<HTMLInputElement>("display-name").value.trim();
-  if (!displayName || displayName.length > 40) { $("profile-message").textContent = "Use a name of 1–40 characters."; return; }
-  profileBusy = true; renderProfile();
-  try {
-    const response = await fetch(`${import.meta.env.VITE_UPLOAD_API || ""}/api/profile`, {
-      method: "POST", headers: { Authorization: `Bearer ${net.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ identity: net.identity.toHexString(), displayName }),
-      signal: AbortSignal.timeout(15000),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "Could not save your name");
-    $("profile-message").textContent = "Name saved. Your user ID stays the same when you rename it.";
-  } catch (error) { $("profile-message").textContent = error instanceof Error ? error.message : "Could not save your name"; }
-  finally { profileBusy = false; renderProfile(); }
-};
+mountAuth(net);
+mountSceneImport(net);
+mountScenePublish(net);
 search.oninput = render; filter.onchange = render;
 $("copy-library").onclick = () => copyLink(new URL("/library.html", location.origin).href, "Library link copied.");
 $("close-video").onclick = () => dialog.close();

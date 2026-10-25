@@ -366,6 +366,8 @@ export interface SessionHost {
   camera: THREE.PerspectiveCamera;
   /** The manifest main.ts loads, as written (?memory=, or the demo default). */
   manifestUrl: string;
+  /** Local assets are not reachable by other devices. */
+  localImport?: boolean;
   /** Shows a message in the viewer's status line. */
   showStatus(message: string): void;
 }
@@ -480,13 +482,13 @@ export class Session {
       if (event.key === "Escape") {
         event.stopPropagation();
         // A fresh visit shows the party-code field; invite links open the scene directly (stdb/jerry-p4).
-    this.expand(!this.urlRoom || innerWidth > 650);
+    this.expand(!host.localImport && (!this.urlRoom || innerWidth > 650));
         ui.toggle.focus();
       }
     });
     dragToClose(ui.panel, ui.panel.querySelector<HTMLElement>(".sheet-head") ?? ui.panel, () => this.expand(false));
     // A fresh visit shows the party-code field; invite links open the scene directly (stdb/jerry-p4).
-    this.expand(!this.urlRoom || innerWidth > 650);
+    this.expand(!host.localImport && (!this.urlRoom || innerWidth > 650));
     ui.create.onclick = () => void this.create();
     ui.attach.onclick = () => void this.attachScene();
     ui.cancel.onclick = () => void this.act("scene", "Could not cancel", () => this.net.connection!.reducers.attachPartyMemory({ memoryId: 0n }));
@@ -645,6 +647,7 @@ export class Session {
   }
 
   private async create(): Promise<void> {
+    if (this.host.localImport) return this.panel.show("This imported scene is stored only in this browser. Host its files and register the HTTPS memory.json link before creating a party.");
     if (this.busy) return;
     const selection = this.ui.memories.value;
     this.busy = true;
@@ -1068,8 +1071,8 @@ export class Session {
       );
     }
     const idle = net.ready && !this.busy && !this.navigating;
-    ui.create.disabled = this.busy || this.navigating;
-    ui.create.textContent = this.busy ? net.ready ? "Working…" : "Connecting…" : "Create party";
+    ui.create.disabled = this.busy || this.navigating || !!this.host.localImport;
+    ui.create.textContent = this.busy ? net.ready ? "Working…" : "Connecting…" : this.host.localImport ? "Local import · host files to share" : "Create party";
     ui.sceneActions.hidden = !net.party || !net.isLeader;
     ui.attach.disabled = !idle;
     ui.cancel.hidden = !net.pendingMemory;
@@ -1089,7 +1092,7 @@ export class Session {
     setText(ui.sceneStatus, pending
       ? `${pending.title} · ${pending.status} ${Math.round(pending.progress * 100)}%. ${pending.status === "uploaded" ? "Waiting for a reconstruction worker. " : ""}${pending.error || "The current scene stays available until the new one is ready."}`
       : net.party ? `Viewing ${net.memory?.title}. ${net.memory?.manifestUrl.includes("/demo/memory.json") ? "Synthetic demo; not reconstructed from video." : ""}`
-      : "Synthetic demo available. Create a party and share its link. No reconstruction worker is required to test multiplayer.");
+      : this.host.localImport ? "This imported scene is stored in this browser. Host its files and register memory.json to share it with a party." : "Synthetic demo available. Create a party and share its link. No reconstruction worker is required to test multiplayer.");
     ui.join.disabled = this.busy || this.navigating;
     ui.join.textContent = this.busy && !net.ready ? "Connecting…" : "Join party";
     ui.solo.hidden = !!this.room || !!this.urlRoom;

@@ -54,7 +54,7 @@ if "[fourd] dynamic" not in s:
     g.write_text(s.replace(old, new))
 r = root / "gaussian_renderer" / "__init__.py"
 s = r.read_text()
-old = """        means3D_final, scales_final, rotations_final, opacity_final, shs_final = pc._deformation(means3D, scales, 
+old = """        means3D_final, scales_final, rotations_final, opacity_final, shs_final = pc._deformation(means3D, scales,\x20
                                                                  rotations, opacity, shs,
                                                                  time)"""
 new = """        m = pc._deformation_table

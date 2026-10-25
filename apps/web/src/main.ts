@@ -6,6 +6,7 @@ import { initPhysics } from "./physics.js";
 import { Viewer } from "./viewer.js";
 import { XRInput } from "./input-xr.js";
 import { desktopInput } from "./input-desktop.js";
+import { wearerPose, releaseWearer } from "./camera-mode.js";
 import { sampleTrack } from "./tracks.js";
 import { mountAudio } from "./audio.js";
 import { mountAuth } from "./auth.js";
@@ -15,7 +16,9 @@ import { PathGuide } from "./guided.js";
 import { PathFollower, placeHead } from "./follow.js";
 import { applyExposure, clearExposure } from "./exposure.js";
 import { AutoHide, formatTime, mountVRButton, percentAt, popover, Toast } from "./ui.js";
+import { mountSceneOnly } from "./scene-only.js";
 import "./style.css";
+import { getImportedScene } from "./scene-store";
 
 declare global { interface Window { memoryReplay?: Viewer; __memreplay?: unknown; __memreplayScene?: unknown } }
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -23,16 +26,27 @@ const status = element("status"), loading = element("loading"), warning = elemen
 const play = element<HTMLButtonElement>("play"), scrub = element<HTMLInputElement>("scrub");
 const branches = element<HTMLSelectElement>("branches"), debug = element<HTMLInputElement>("debug");
 const eyes = element<HTMLInputElement>("eyes"), guided = element<HTMLInputElement>("guided");
+const cameraMode = element<HTMLButtonElement>("camera-mode");
 const follow = element<HTMLInputElement>("follow"), viewMode = element<HTMLButtonElement>("view-mode");
 let viewer: Viewer | undefined;
+let sceneOnly: ReturnType<typeof mountSceneOnly> | undefined;
 const showWarning = (message: string) => { warning.hidden = false; warning.textContent = message; };
 const toast = new Toast(element("toast"), status);
 
 async function main(): Promise<void> {
   const params = new URLSearchParams(location.search);
-  const manifestUrl = loadedManifest(location.href, sessionStorage);
+  const importId = params.get("import");
+  let importedSource: import("./loader").MemorySource & { dispose: () => void } | undefined;
+  if (importId) {
+    const stored = await getImportedScene(importId);
+    if (!stored) throw new Error('This import is not saved for your signed-in account on this browser. Sign in with its personal key in the library, or import the .memos.zip again.');
+    const { localSceneSource } = await import('./scene-bundle');
+    importedSource = localSceneSource(stored);
+    addEventListener('pagehide', () => importedSource?.dispose(), { once: true });
+  }
+  const manifestUrl = importedSource ? new URL(`/local-import/${encodeURIComponent(importId!)}/memory.json`, location.href).href : loadedManifest(location.href, sessionStorage);
   const sceneUrl = new URL(manifestUrl, location.href);
-  const demo = sceneUrl.origin === location.origin && sceneUrl.pathname === DEFAULT_MANIFEST;
+  const demo = !importedSource && sceneUrl.origin === location.origin && sceneUrl.pathname === DEFAULT_MANIFEST;
   // Dev only: ?xrPreview shows the headset panel on the desktop, worked with the mouse.
   const xrPreview = import.meta.env.DEV && params.has("xrPreview");
   document.body.classList.toggle("stats", params.has("stats"));
@@ -54,13 +68,21 @@ async function main(): Promise<void> {
   const rig = new THREE.Group(); scene.add(rig); rig.add(camera);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0.8, -1); controls.enableDamping = true; controls.maxDistance = 20; controls.minDistance = 0.4;
-  controls.maxPolarAngle = Math.PI * 0.49;
+  // Allow looking above and below the captured horizon while exploring a room.
+  controls.maxPolarAngle = Math.PI;
+  const updateCameraModeButton = () => {
+    cameraMode.textContent = eyes.checked ? "Camera: Wearer's view" : follow.checked ? "Camera: Follow walk" : "Camera: Free look";
+    cameraMode.setAttribute("aria-pressed", String(eyes.checked));
+    cameraMode.title = eyes.checked ? "Switch to free look: drag to explore and scroll or pinch to zoom"
+      : "Follow the recorded camera path";
+    cameraMode.disabled = eyes.disabled || xrPreview;
+  };
   // ?lod=0 draws every splat (the pipeline's render-vs-video captures use it).
   const spark = new SparkRenderer({ renderer, preUpdate: false, maxStdDev: Math.sqrt(5), lodSplatCount: 500_000,
     enableLod: params.get("lod") !== "0" });
   scene.add(spark);
   // Shared rooms (session.ts) connect while the memory loads. Without a room the viewer stays local.
-  const session = new Session({ renderer, scene, camera, manifestUrl, showStatus: message => { status.textContent = message; } });
+  const session = new Session({ renderer, scene, camera, manifestUrl, localImport: !!importedSource, showStatus: message => { status.textContent = message; } });
   mountAuth(session.net);
   addEventListener("pagehide", () => session.dispose(), { once: true });
   const joystick = new PhoneJoystick(element("joystick"), camera, controls);
@@ -70,6 +92,10 @@ async function main(): Promise<void> {
   const hud = element("hud");
   const hudSpace = () => document.documentElement.style.setProperty("--hud-space", `${Math.max(0, Math.round(innerHeight - hud.getBoundingClientRect().top))}px`);
   new ResizeObserver(hudSpace).observe(hud); addEventListener("resize", hudSpace); hudSpace();
+  // The top actions wrap on phones; status messages must stay below every row of buttons.
+  const topbar = element("topbar");
+  const topbarSpace = () => document.documentElement.style.setProperty("--topbar-height", `${Math.ceil(topbar.getBoundingClientRect().height)}px`);
+  new ResizeObserver(topbarSpace).observe(topbar); topbarSpace();
   // The canvas fills the stage; follow it as phone browser bars come and go.
   const resizeScene = () => {
     if (renderer.xr.isPresenting) return;
@@ -84,21 +110,24 @@ async function main(): Promise<void> {
     // Solo, VR starts from the beginning, paused, so there is time to look around and grab. In a room the clock is
     // shared, so only a memory that already played to its end (nothing left to grab) rewinds.
     if (viewer && (!session.adapter || viewer.timeline.time >= viewer.timeline.duration)) viewer.seek(0);
+    if (eyes.checked) { eyes.checked = false; eyes.dispatchEvent(new Event("change")); }
     savedCamera.copy(camera.position); savedTarget.copy(controls.target); controls.enabled = false;
     rig.position.set(vrSpawn.x, vrSpawn.y, vrSpawn.z); rig.rotation.set(0, vrSpawn.yaw, 0);
-    eyes.checked = false; eyes.disabled = true; document.body.classList.add("in-xr");
+    eyes.disabled = true; updateCameraModeButton(); document.body.classList.add("in-xr");
   });
   renderer.xr.addEventListener("sessionend", () => {
     rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0); camera.position.copy(savedCamera);
     controls.target.copy(savedTarget); controls.enabled = !xrPreview; eyes.disabled = false; document.body.classList.remove("in-xr");
+    updateCameraModeButton();
     resizeScene();
   });
   renderer.domElement.addEventListener("webglcontextlost", event => {
+    sceneOnly?.show();
     event.preventDefault(); renderer.setAnimationLoop(null); status.textContent = "Graphics context lost. Reload to recover.";
     element("reload").hidden = false;
   });
   await initPhysics();
-  const memory = await loadMemory(manifestUrl, demo, showWarning);
+  const memory = await loadMemory(manifestUrl, demo, showWarning, importedSource);
   const firstPose = memory.cameraTrack[0];
   vrSpawn = { x: firstPose.p[0], y: memory.manifest.world.floorY, z: firstPose.p[2],
     yaw: new THREE.Euler().setFromQuaternion(new THREE.Quaternion(...firstPose.q).normalize(), "YXZ").y };
@@ -113,7 +142,7 @@ async function main(): Promise<void> {
     if (renderer.xr.isPresenting || eyes.checked) return;
     const q = new THREE.Quaternion(...firstPose.q).normalize();
     camera.position.set(firstPose.p[0], firstPose.p[1], firstPose.p[2]);
-    controls.target.copy(camera.position).add(new THREE.Vector3(0, 0, -1).applyQuaternion(q).setY(0).normalize().multiplyScalar(1.5));
+    controls.target.copy(camera.position).add(new THREE.Vector3(0, 0, -1).applyQuaternion(q).multiplyScalar(1.5));
     controls.update();
   };
   // A recorded memory opens from the wearer's first spot, inside the room, instead of outside it.
@@ -122,7 +151,7 @@ async function main(): Promise<void> {
   guided.checked = mode === "guided";
   guide.setGuided(guided.checked);
   if (guided.checked) standOnPath();
-  // Follow mode (follow.ts), the default for a recorded memory (no ?mode=, or ?mode=follow): while it plays you walk
+  // Hosted recordings default to follow mode; local imports open free so scrolling works. While following you walk
   // the recorded path and look where you like; paused, you roam anywhere. ?mode=free and ?mode=guided leave it off.
   const follower = new PathFollower(memory.cameraTrack);
   const followPos = new THREE.Vector3(), eyePos = new THREE.Vector3(), shift = new THREE.Vector3();
@@ -130,21 +159,21 @@ async function main(): Promise<void> {
   // orbiting a point ahead, and you can look up as well as down. Off again, the orbit's limits come back.
   const followLook = (on: boolean) => {
     controls.rotateSpeed = on ? -0.35 : 1; controls.enableZoom = !on;
-    controls.minPolarAngle = on ? Math.PI * 0.05 : 0; controls.maxPolarAngle = Math.PI * (on ? 0.95 : 0.49);
-    // Back to orbiting: a target above the eyes would make the orbit's floor limit lift the camera, so level it.
-    const reach = camera.position.distanceTo(controls.target), drop = reach * Math.cos(Math.PI * 0.49);
-    if (!on && camera.position.y - controls.target.y < drop) controls.target.y = camera.position.y - drop;
+    controls.minPolarAngle = on ? Math.PI * 0.05 : 0;
+    controls.maxPolarAngle = on ? Math.PI * 0.95 : Math.PI;
   };
   let lookInPlace = false;
   const setFollow = (on: boolean) => {
     if (on !== lookInPlace) { lookInPlace = on; followLook(on); }
     follow.checked = on;
+    updateCameraModeButton();
     if (on && guided.checked) { guided.checked = false; guide.setGuided(false); }   // three modes: follow, free (guided), eyes
   };
-  setFollow(!demo && !xrPreview && (mode === null || mode === "follow"));
+  setFollow(!demo && !xrPreview && (mode === "follow" || (mode === null && !importedSource)));
   follow.onchange = () => {
-    setFollow(follow.checked);
-    if (follow.checked && eyes.checked) { eyes.checked = false; applyEyes(); }
+    const on = follow.checked;
+    if (on && eyes.checked) { eyes.checked = false; applyEyes(); }
+    setFollow(on);
   };
   guided.onchange = () => {
     if (guided.checked && follow.checked) setFollow(false);
@@ -161,18 +190,19 @@ async function main(): Promise<void> {
   window.__memreplayScene = { scene, grid, guide, camera, renderer };
   viewer = new Viewer(memory, message => { status.textContent = message; }); window.memoryReplay = viewer;
   const currentViewer = viewer;
-  desktopInput(renderer.domElement, camera, controls, viewer);
+  desktopInput(renderer.domElement, camera, controls, viewer, () => !document.body.classList.contains("scene-only"),
+    () => !eyes.checked && !xrPreview && !renderer.xr.isPresenting && !(follow.checked && currentViewer.timeline.playing));
   const duration = memory.manifest.timeline.durationSec;
   const title = demo ? "Practice room" : memory.manifest.title;
   element("title").textContent = title;
-  element("mode").textContent = demo ? "Sample scene" : "Recorded";
+  element("mode").textContent = importedSource ? "Local import" : demo ? "Sample scene" : "Recorded";
   const grabbable = memory.objects.filter(o => o.definition.grabbable).length;
   element("asset-info").textContent = `${formatTime(duration)} · ${grabbable} ${grabbable === 1 ? "object" : "objects"} to throw`;
   document.title = `${title} · memos`;
   status.textContent = follow.checked
     ? touch ? "Following the recorded walk. Pause to roam. Drag to look." : "Following the recorded walk. Space: pause to roam. Drag to look."
-    : touch ? "Pause, then drag an object where you want it. Play shows what happens."
-      : "Pause (Space), then drag an object where you want it. Play shows what happens.";
+    : touch ? "Free look: drag to explore, pinch to zoom, use WALK to move."
+      : "Free look: drag to explore, scroll to zoom, use WASD to move.";
   loading.hidden = true; element<HTMLFieldSetElement>("timeline-controls").disabled = false;
   element("time-total").textContent = formatTime(duration);
   // Lost-tracking stretches on the scrubber.
@@ -193,7 +223,7 @@ async function main(): Promise<void> {
   });
   // The clip's audio follows the timeline (play, pause, seek, takes, the room's clock); the first tap or key starts it.
   const audioUrl = memory.manifest.source?.audioUrl;
-  const audio = audioUrl ? mountAudio(new URL(audioUrl, new URL(manifestUrl, location.href)).href, element("more-toggles"), showWarning) : undefined;
+  const audio = audioUrl ? mountAudio(importedSource ? importedSource.resolveAsset(audioUrl) : new URL(audioUrl, new URL(manifestUrl, location.href)).href, element("more-toggles"), showWarning) : undefined;
   // The VR panel shows the same status line as the 2D overlay, and the room summary from the room panel.
   const xr = new XRInput(renderer, rig, camera, currentViewer, {
     status: () => status.textContent ?? "",
@@ -209,6 +239,8 @@ async function main(): Promise<void> {
   mountVRButton(renderer, element<HTMLButtonElement>("vr-entry"));
   const more = popover(element<HTMLButtonElement>("more-toggle"), element("more-sheet"));
   const autoHide = new AutoHide(document.body);
+  sceneOnly = mountSceneOnly(stage, element<HTMLButtonElement>("hide-ui"), () => autoHide.wake());
+  element<HTMLButtonElement>("hide-ui").disabled = false;
   let branchCount = 0;
   play.onclick = () => currentViewer.togglePlay();
   scrub.oninput = () => currentViewer.seek(Number(scrub.value) / 1000 * currentViewer.timeline.duration);
@@ -219,14 +251,21 @@ async function main(): Promise<void> {
     const a = document.createElement("a"); a.href = url; a.download = `${memory.manifest.id}-takes.json`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  const preEyesPosition = new THREE.Vector3(), preEyesTarget = new THREE.Vector3();
   function applyEyes() {
-    if (eyes.checked) { preEyesPosition.copy(camera.position); preEyesTarget.copy(controls.target); }
-    else { camera.position.copy(preEyesPosition); controls.target.copy(preEyesTarget); camera.fov = 65; camera.updateProjectionMatrix(); }
-    controls.enabled = !eyes.checked && !xrPreview;
+    // Both toggles start at the current recorded time; leaving never restores an old free camera.
+    setFollow(false);
+    wearerPose(camera, memory.cameraTrack, currentViewer.timeline.time, memory.manifest.camera.fovYDeg);
+    if (eyes.checked) applyExposure(renderer.domElement, memory.cameraTrack, currentViewer.timeline.time);
+    else { releaseWearer(camera, controls); clearExposure(renderer.domElement); }
+    controls.enabled = !eyes.checked && !xrPreview && !renderer.xr.isPresenting;
+    updateCameraModeButton();
+    status.textContent = eyes.checked ? "Following the recorded camera. Tap Camera to return to free look."
+      : touch ? "Free look: drag to explore, pinch to zoom, use WALK to move."
+      : "Free look: drag to explore, scroll to zoom, use WASD to move.";
   }
   eyes.onchange = applyEyes;
-  // The view chip on the dock says which mode you are in; a click goes follow → free → wearer's view → follow.
+  cameraMode.onclick = () => { eyes.checked = !eyes.checked; applyEyes(); };
+  updateCameraModeButton();
   viewMode.hidden = false;
   viewMode.onclick = () => {
     if (eyes.checked) { eyes.checked = false; applyEyes(); setFollow(true); }
@@ -252,8 +291,7 @@ async function main(): Promise<void> {
     // Follow mode: while the memory plays, the eyes are locked to the recorded path (wearer's view overrides it).
     const following = follow.checked && !eyes.checked, locked = following && currentViewer.timeline.playing;
     if (eyes.checked && !renderer.xr.isPresenting) {
-      sampleTrack(memory.cameraTrack, currentViewer.timeline.time, camera);
-      camera.fov = memory.manifest.camera.fovYDeg; camera.updateProjectionMatrix();
+      wearerPose(camera, memory.cameraTrack, currentViewer.timeline.time, memory.manifest.camera.fovYDeg);
       applyExposure(renderer.domElement, memory.cameraTrack, currentViewer.timeline.time);   // the recording's auto-exposure
       follower.step(false, 0, camera.position, dt, followPos);
     } else if (!renderer.xr.isPresenting) {
@@ -360,6 +398,7 @@ async function main(): Promise<void> {
   });
   document.addEventListener("visibilitychange", () => { previous = 0; if (document.hidden) currentViewer.release(); });
   addEventListener("pagehide", () => {
+    sceneOnly?.dispose();
     stageObserver.disconnect(); renderer.setAnimationLoop(null); xr.dispose(); audio?.dispose(); currentViewer.dispose(); spark.dispose(); renderer.dispose();
   }, { once: true });
   session.attach(currentViewer);
@@ -381,7 +420,8 @@ async function main(): Promise<void> {
 }
 element("reload").onclick = () => location.reload();
 main().catch(error => {
+  sceneOnly?.show();
   console.error(error); loading.hidden = true; element("reload").hidden = false;
   status.textContent = `Could not load this memory: ${error instanceof Error ? error.message : String(error)}`;
-  warning.hidden = false; warning.textContent = "Check the manifest URL, asset URLs, and CORS access. The sample scene works without pipeline assets.";
+  warning.hidden = false; warning.textContent = new URLSearchParams(location.search).has("import") ? "Open the library to import this scene again on this device." : "Check the manifest URL, asset URLs, and CORS access. The sample scene works without pipeline assets.";
 });

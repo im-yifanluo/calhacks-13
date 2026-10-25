@@ -19,8 +19,15 @@
     "stdb:publish:local": "spacetime publish -s http://127.0.0.1:${STDB_PORT:-3055} --module-path server/spacetime memory-replay",
     "stdb:generate": "spacetime generate --module-path server/spacetime --lang typescript --out-dir apps/web/src/module_bindings --yes",
     "test:integration": "tsx scripts/test-multiplayer.ts",
+    "test:connections": "tsx scripts/test-connections.ts",
+    "connections:check": "node scripts/check-connections.mjs",
+    "worker:env:local": "node scripts/local-worker-env.mjs",
     "test:video": "tsx scripts/test-video.ts",
     "upload:local": "node server/upload/local.mjs",
+    "upload:start": "node server/upload/start.mjs",
+    "test:upload-api": "tsx scripts/test-upload-api.ts",
+    "test:pipeline": "node scripts/test-pipeline.mjs",
+    "test:pipeline:live": "tsx scripts/test-pipeline-live.ts",
     "upload:dev": "node --env-file=server/upload/.env server/upload/service.mjs",
     "tunnel": "cloudflared tunnel --url https://localhost:5173 --no-tls-verify",
     "ios:generate": "python3 scripts/generate_xcode_project.py",
@@ -35,9 +42,11 @@
   "devDependencies": {
     "@types/node": "^22.20.5",
     "@types/ws": "^8.18.2",
+    "fake-indexeddb": "^6.2.6",
     "prettier": "3.6.2",
     "tsx": "^4.23.15",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "wrangler": "4.92.0"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1156.0",

@@ -399,6 +399,19 @@ test("S3 completion before the PUT reports a missing upload", async () => {
   }
 });
 
+test("deployment config rejects unsafe asset URLs and trims browser origins", () => {
+  const env = {
+    S3_BUCKET: "test-bucket", ASSET_BASE_URL: "https://assets.example", UPLOAD_SIGNING_SECRET: secret,
+    PIPELINE_IDENTITY: owner, STDB_HTTP_URL: "https://maincloud.example", STDB_DATABASE: "memos",
+    AWS_ACCESS_KEY_ID: "test", AWS_SECRET_ACCESS_KEY: "test", UPLOAD_ALLOWED_ORIGINS: " https://memos.example , ",
+  };
+  expect(productionConfig(env).allowedOrigins).toEqual(["https://memos.example"]);
+  expect(productionConfig(env).accountConfig).toEqual({ server: "https://maincloud.example", database: "memos" });
+  for (const url of ["file:///tmp/videos", "https://user:password@assets.example", "https://assets.example?secret=x"])
+    expect(() => productionConfig({ ...env, ASSET_BASE_URL: url })).toThrow();
+  expect(() => productionConfig({ ...env, S3_ENDPOINT: "ftp://storage.example" })).toThrow();
+});
+
 test("profile API binds names to a verified token and rejects another user's ID", async () => {
   let displayName = "";
   const server = createServer(makeHandler({
