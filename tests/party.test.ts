@@ -1,4 +1,4 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { beforeEach, expect, test } from "vitest";
 import {
   createModuleTestHarness,
   TestAuth,
@@ -6,11 +6,6 @@ import {
 } from "spacetimedb/server/test-utils";
 import { ConnectionId, Timestamp, TimeDuration } from "spacetimedb";
 import db, * as mod from "../server/spacetime/src/index";
-import { validateCredential } from "../apps/web/src/auth";
-vi.mock("../server/spacetime/src/google-config", () => ({
-  GOOGLE_CLIENT_ID: "123-test.apps.googleusercontent.com",
-}));
-const clientId = "123-test.apps.googleusercontent.com";
 const auth = (name: string, id: bigint, claims = {}) =>
   TestAuth.fromJwtPayload(
     JSON.stringify({
@@ -202,75 +197,41 @@ test("cancelled or replaced reconstruction cannot override the selected scene", 
   );
 });
 
-test("Google profiles come from verified issuer claims; audience and expiration apply to reducer calls too", () => {
-  const google = auth("google-sub", 10n, {
-    iss: "https://accounts.google.com",
-    aud: clientId,
-    exp: 3600,
-    name: "Google Person",
-    email: "private@example.com",
-  });
-  call(google, mod.onConnect);
-  expect(h.db.profile.identity.find(identity(google))).toMatchObject({
-    provider: "google",
-    displayName: "Google Person",
-  });
-  expect(
-    JSON.stringify(
-      h.db.profile.identity.find(identity(google)),
-      (_key, value) => (typeof value === "bigint" ? String(value) : value),
-    ),
-  ).not.toContain("private@example.com");
-  const wrong = auth("google-sub", 11n, {
-    iss: "https://accounts.google.com",
-    aud: "other-app",
-    exp: 3600,
-  });
-  expect(() => call(wrong, mod.onConnect)).toThrow(/different app/);
-  expect(() => call(wrong, mod.sampleClock, { clientSentUs: 1n })).toThrow(
-    /different app/,
-  );
-  h.clock.advance(new TimeDuration(3_600_000_000n));
-  expect(() => call(google, mod.sampleClock, { clientSentUs: 1n })).toThrow(
-    /expired/,
-  );
-  const impostor = auth("google-sub", 12n, {
-    name: "Google Person",
-    provider: "google",
-  });
-  call(impostor, mod.onConnect);
-  expect(h.db.profile.identity.find(identity(impostor))?.provider).toBe(
-    "guest",
-  );
-  expect(identity(impostor).isEqual(identity(google))).toBe(false);
+test("registered names survive reconnects and joining cannot replace them", () => {
+  call(a, mod.onConnect);
+  call(a, mod.registerAccount, { name: "  Alice  " });
+  expect(h.db.profile.identity.find(identity(a))).toMatchObject({ provider: "key", displayName: "Alice" });
+  call(a, mod.onDisconnect);
+  call(a, mod.onConnect);
+  expect(h.db.profile.identity.find(identity(a))?.displayName).toBe("Alice");
+  const id = memory().id;
+  call(a, mod.createParty, { memoryId: id, name: "Spoofed name", device: "desktop" });
+  expect(h.db.player.identity.find(identity(a))?.name).toBe("Alice");
+  call(a, mod.registerAccount, { name: "Alice" }); // retry is idempotent
+  expect(() => call(a, mod.registerAccount, { name: "Impostor" })).toThrow(/already belongs/);
 });
 
-test("browser callback rejects wrong nonce, issuer, audience and expired credentials before connecting", () => {
-  const claims = {
-    iss: "https://accounts.google.com",
-    sub: "test",
-    aud: clientId,
-    exp: 3600,
-    nonce: "nonce",
-  };
-  const token = (c: object) =>
-    `header.${Buffer.from(JSON.stringify(c)).toString("base64url")}.signature`;
-  expect(validateCredential(token(claims), "nonce", clientId, 1).sub).toBe(
-    "test",
-  );
-  for (const changed of [
-    { nonce: "wrong" },
-    { iss: "https://impostor.example" },
-    { aud: "other" },
-    { exp: 1 },
-    { azp: "other" },
-  ])
-    expect(() =>
-      validateCredential(
-        token({ ...claims, ...changed }),
-        "nonce",
-        clientId,
-        2,
-      ),
-    ).toThrow();
+test("same display name does not give another identity access to the leader account", () => {
+  call(a, mod.registerAccount, { name: "Alice" });
+  call(b, mod.registerAccount, { name: "Alice" });
+  const id = memory().id;
+  call(a, mod.createParty, { memoryId: id, name: "Alice", device: "desktop" });
+  join(b);
+  expect(identity(a).isEqual(identity(b))).toBe(false);
+  expect(() => call(b, mod.setPaused, { paused: false })).toThrow(/leader/);
+  expect(h.db.profile.identity.find(identity(a))?.displayName).toBe("Alice");
+  expect(h.db.profile.identity.find(identity(b))?.displayName).toBe("Alice");
+});
+
+test("account registration validates names and never puts keys in public profiles", () => {
+  for (const name of ["", "   ", "x".repeat(41)])
+    expect(() => call(a, mod.registerAccount, { name })).toThrow(/text length/);
+  call(a, mod.registerAccount, { name: "Alice" });
+  expect(Object.keys(h.db.profile.identity.find(identity(a))!).sort()).toEqual(["displayName", "identity", "provider"]);
+});
+
+test("legacy Google credentials are rejected instead of accepted without audience checks", () => {
+  const google = auth("legacy", 10n, { iss: "https://accounts.google.com", aud: "any-app" });
+  expect(() => call(google, mod.onConnect)).toThrow(/replaced/);
+  expect(() => call(google, mod.registerAccount, { name: "Alice" })).toThrow(/replaced/);
 });

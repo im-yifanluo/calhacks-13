@@ -11,7 +11,7 @@ There are two native iPhone projects, with shared recording, upload, library and
 
 The demo's `[SIMULATION]` clips presign with `pipeline: false` and verify that the returned database row belongs to the uploader's test queue. They never request reconstruction. An imported real MP4 is a normal upload, even from the demo app. Neither app implements reconstruction; uploads remain `uploaded` until a separate worker processes them.
 
-The **Party** tab opens the shared viewer using the saved server address. Create a party or enter a seven-character invite code; Google sign-in and leader-controlled playback run in the system browser. See [PARTIES.md](PARTIES.md) for setup and testing. Finish recording/upload before switching to the browser.
+The **Party** tab opens the shared viewer using the saved server address. Create a party or enter a seven-character invite code; name-and-key sign-in and leader-controlled playback run in the system browser. See [PARTIES.md](PARTIES.md) for setup and testing. Finish recording/upload before switching to the browser.
 
 ## Fast demo on your Mac
 

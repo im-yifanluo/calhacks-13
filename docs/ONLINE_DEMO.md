@@ -20,7 +20,13 @@ Production hosting must serve `index.html` for room paths, including refreshes. 
 4. Play, pause, seek, and change playback speed on the Mac. The phone should follow; its playback controls should be disabled while the Mac is leader.
 5. Keep the leader tab open. Closing or reloading it can transfer leadership to another connected member. The hosted app itself remains available when the Mac sleeps or shuts down.
 
-Each device still needs working internet. A slow first download or a disconnected client is possible, but the phone no longer depends on the Mac's outbound tunnel. This is a public synthetic demo. Google sign-in is not configured, and the hosted copy hides capture/upload controls because no hosted upload service is connected. Existing local recordings were not copied to the cloud.
+Each device still needs working internet. A slow first download or a disconnected client is possible, but the phone no longer depends on the Mac's outbound tunnel. This is a public synthetic demo. Sign in with a name to get a personal key, or use a saved key to restore your account. The hosted copy hides capture/upload controls because no hosted upload service is connected. Existing local recordings were not copied to the cloud.
+
+For the name-and-key login workflow and its security/recovery limits, see [PARTIES.md](PARTIES.md#name-and-personal-key-sign-in). Personal keys and party invitation codes are different.
+
+### Personal-key verification
+
+On 24 October 2026, 120 Vitest tests and 75 viewer tests passed (two Web Locks cases skipped), and the production build passed. Browser checks against the shared cloud database verified registration by name, rejection of an invalid key, restoration of the same public identity and name on a separate browser origin, sign-out surviving a refresh, and a guest joining the registered leader with playback controls disabled. The new key flow has not yet been tested on a physical iPhone.
 
 ### Connection recovery
 
@@ -29,13 +35,13 @@ The site connects to the shared cloud database automatically. The owner does not
 - If a connection drops, the app retries automatically. Returning to the page or restoring internet checks the connection again; an unanswered clock sample replaces a stale socket.
 - **Create party** and **Join party** show **Connecting…** while waiting up to 15 seconds for a usable connection. If internet is still unavailable, the app explains that and lets you try again. **Reconnect** also appears beside the connection status.
 - A resumed party keeps its code and resynchronizes with the shared database. Leadership can still transfer while a participant is disconnected.
-- A reducer is retried only if the SDK confirms it was never sent. Calls whose result is unknown are not replayed, avoiding duplicate party creation. Expired or rejected Google credentials still require signing in again; the app never silently replaces a Google identity with a guest.
+- A reducer is retried only if the SDK confirms it was never sent. Calls whose result is unknown are not replayed, avoiding duplicate party creation. Rejected personal keys require explicit sign-out and a valid key; the app never silently replaces a saved identity with a guest.
 
 Verification: all 109 runnable Vitest tests and 75 viewer tests passed (two Node Web Locks cases skipped), including connection loss, stalled handshakes, delayed subscription readiness, rejected authentication, safe retry, timeout, and disposal. A browser connected through a temporary local fault proxy to Maincloud verified that creating a party while offline waits and completes after reconnection, and that an existing party returns to **Connected** at the same room path after another disconnect. The test proxy was isolated from the public site. Physical iPhone sleep/wake recovery has not yet been tested.
 
 ### Party-code checks
 
-- The code field starts blank and appears at the top of the party panel, including a fresh phone visit. **Join party** or the keyboard's Enter/Go submits it. Guests do not need Google sign-in.
+- The code field starts blank and appears at the top of the party panel, including a fresh phone visit. **Join party** or the keyboard's Enter/Go submits it. Guests do not need an account.
 - The host sees a large **Your party code** with **Copy code**. Creating another party produces a different code; any existing party in this database can be joined through the same field.
 - Try an empty/short code: the app should explain the 7-character format. Try a nonexistent 7-character code: it should show an error without removing you from your current party. Enter a valid code afterward: it should join and clear the error.
 - While joined, open **PARTY** and enter another host's code to switch parties. The target party's scene and leader-controlled timeline load together.
@@ -86,4 +92,4 @@ STDB_WS_URL=wss://maincloud.spacetimedb.com npm run test:party
 
 This checks presence, shared time/speed, late joins, rejection of guest playback changes, leader transfer, disconnect election, and synthetic worker-status handoff. Two browser clients also showed the same paused time of 2.4 seconds at 0.5×, with guest playback controls disabled.
 
-On 24 October 2026, the user confirmed that physical iPhone Safari loaded the hosted scene and displayed **Connected** on the original network. Its `Guest (phone)` participant appeared in the party after the old Mac-hosted tunnel services were stopped. Real glasses recording, Google consent, GPU reconstruction, and physical phone interaction beyond loading/joining remain unverified.
+On 24 October 2026, the user confirmed that physical iPhone Safari loaded the hosted scene and displayed **Connected** on the original network. Its `Guest (phone)` participant appeared in the party after the old Mac-hosted tunnel services were stopped. Real glasses recording, GPU reconstruction, and physical phone interaction beyond loading/joining remain unverified.

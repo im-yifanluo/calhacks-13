@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { computeReconnectDelayMs, DisconnectedError, Identity, resolveReconnectPolicy, UnknownCallResultError } from "spacetimedb";
+import { accountStorageKey, databaseSettings, encodeAccountKey } from "../apps/web/src/account-key";
 import { DbConnection } from "../apps/web/src/module_bindings";
 import {
   claimStoredToken,
@@ -121,6 +122,7 @@ function tab(database: string, entries: Record<string, string> = {}) {
   vi.stubEnv("VITE_STDB_DATABASE", database);
   vi.stubGlobal("location", { protocol: "http:", host: "127.0.0.1:5184" });
   vi.stubGlobal("sessionStorage", session);
+  vi.stubGlobal("localStorage", storage({}));
   return session;
 }
 const nets: Multiplayer[] = [];
@@ -140,10 +142,11 @@ afterEach(() => {
 });
 
 describe("connection", () => {
-  test("Google credentials survive reconnect without becoming guest tokens; rejection never silently changes identity", () => {
-    const credential = `header.${Buffer.from(JSON.stringify({ exp: Date.now() / 1000 + 3600 })).toString("base64url")}.signature`;
+  test("personal credentials survive reconnect without becoming guest tokens; rejection never silently changes identity", () => {
+    const credential = "header.payload.signature";
     const builds = recordBuilds();
-    const session = tab("google", { "memreplay-google-credential": credential, "memreplay-token:google": "saved-guest" });
+    const session = tab("account", { "memreplay-token:account": "saved-guest" });
+    session.setItem(accountStorageKey(), encodeAccountKey({ ...databaseSettings(), identity: new Identity(9n).toHexString(), token: credential }));
     const net = multiplayer(undefined);
     net.connect();
     expect(builds[0].token).toBe(credential);
@@ -151,16 +154,16 @@ describe("connection", () => {
     on.onConnect(conn, new Identity(9n), "transport-token");
     conn.applied();
     on.onAutomaticReconnect(conn, new Identity(9n), "new-transport-token");
-    expect(session.getItem("memreplay-google-credential")).toBe(credential);
-    expect(session.getItem("memreplay-token:google")).toBe("saved-guest");
+    expect(session.getItem(accountStorageKey())).toContain("memos1.");
+    expect(session.getItem("memreplay-token:account")).toBe("saved-guest");
     net.dispose();
     const next = multiplayer(undefined);
     next.connect();
     const rejected = Object.assign(new Error("Rejected"), { name: "WebSocketTokenError", status: 401 });
     builds[1].on.onConnectError({}, rejected);
-    expect(next.status).toContain("Google sign-in rejected");
+    expect(next.status).toContain("Personal key rejected");
     expect(builds).toHaveLength(2);
-    expect(session.getItem("memreplay-google-credential")).toBe(credential);
+    expect(session.getItem(accountStorageKey())).toContain("memos1.");
   });
 
   test("only a 401 token exchange counts as a rejected token", () => {
@@ -315,19 +318,19 @@ describe("connection recovery", () => {
     expect(builds).toHaveLength(3);
   });
 
-  test("rejected Google authentication never retries as a guest", async () => {
+  test("rejected personal keys never retry as a guest", async () => {
     const { builds, net } = setup();
     net.dispose();
-    const credential = `header.${Buffer.from(JSON.stringify({ exp: Date.now() / 1000 + 3600 })).toString("base64url")}.signature`;
-    sessionStorage.setItem("memreplay-google-credential", credential);
+    const credential = "header.payload.signature";
+    sessionStorage.setItem(accountStorageKey(), encodeAccountKey({ ...databaseSettings(), identity: new Identity(9n).toHexString(), token: credential }));
     const signedIn = multiplayer(undefined);
     signedIn.connect();
     builds[1].on.onConnectError({}, Object.assign(new Error("Rejected"), { name: "WebSocketTokenError", status: 401 }));
     signedIn.reconnect();
     await vi.advanceTimersByTimeAsync(60000);
     expect(builds).toHaveLength(2);
-    await expect(signedIn.callConnected(async () => {})).rejects.toThrow("Google sign-in rejected");
-    expect(sessionStorage.getItem("memreplay-google-credential")).toBe(credential);
+    await expect(signedIn.callConnected(async () => {})).rejects.toThrow("Personal key rejected");
+    expect(sessionStorage.getItem(accountStorageKey())).toContain("memos1.");
   });
 });
 

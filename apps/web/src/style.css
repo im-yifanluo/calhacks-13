@@ -109,6 +109,9 @@ kbd { font: inherit; background: #263944; padding: 1px 4px; border-radius: 3px; 
 #room-panel a { color: #a2e8d6; }
 #room-message { overflow-wrap: anywhere; }
 #room-panel #room-error, #room-panel #library-errors { color: #ffad9e; white-space: pre-wrap; overflow-wrap: anywhere; }
+#auth-notice.error { color: #ffad9e; }
+#account-id { font-family: ui-monospace, monospace; }
+#account-key-input { font-family: ui-monospace, monospace; }
 #upload-panel { border-bottom: 1px solid #293d49; padding-bottom: 10px; }
 #upload-panel h2 { font-size: 13px; margin: 12px 0 4px; }
 #upload-panel video { display: block; width: 100%; max-height: 180px; margin: 8px 0; border-radius: 8px; background: #000; }

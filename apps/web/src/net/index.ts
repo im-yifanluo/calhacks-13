@@ -1,4 +1,4 @@
-import { googleCredential, credentialExpired } from "../auth";
+import { databaseSettings, savedAccount } from "../account-key";
 import { DbConnection, tables } from "../module_bindings";
 import { DisconnectedError, type Identity } from "spacetimedb";
 import type {
@@ -206,11 +206,8 @@ export class Multiplayer extends EventTarget {
     this.heartbeat = undefined;
     this.watchConnection();
     const key = (this.key = `memreplay-token:${import.meta.env.VITE_STDB_DATABASE || "memory-replay"}`);
-    const google = googleCredential();
-    if (google) {
-      if (credentialExpired(google)) { this.blockAuth("Google session expired — sign in again"); return; }
-      return this.open(key, google);
-    }
+    const account = savedAccount();
+    if (account) return this.open(key, account.token);
     const storage = sessionStorage;
     const stored = storage.getItem(key) || undefined;
     if (!stored || this.held?.token === stored) return this.open(key, stored);
@@ -272,12 +269,10 @@ export class Multiplayer extends EventTarget {
   }
   private open(key: string, storedToken: string | undefined) {
     let connected = false;
+    const settings = databaseSettings();
     const connection: DbConnection = DbConnection.builder()
-      .withUri(
-        import.meta.env.VITE_STDB_URL ||
-          `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/stdb/`,
-      )
-      .withDatabaseName(import.meta.env.VITE_STDB_DATABASE || "memory-replay")
+      .withUri(settings.uri)
+      .withDatabaseName(settings.database)
       .withToken(storedToken)
       .withAutomaticReconnect({ maxDelayMs: RECONNECT_MAX_DELAY_MS })
       .onConnect((conn, identity, token) => {
@@ -288,8 +283,14 @@ export class Multiplayer extends EventTarget {
         this.bestRtt = Infinity;
         this.identity = identity;
         this.token = token;
+        const account = savedAccount();
+        if (account && account.identity !== identity.toHexString()) {
+          this.blockAuth("This personal key could not be verified. Sign out and use your saved key.");
+          conn.disconnect();
+          return;
+        }
         // Lock before storing: a tab duplicated from now on copies the token and must find it taken.
-        if (!googleCredential()) { this.hold(token); sessionStorage.setItem(key, token); }
+        if (!account) { this.hold(token); sessionStorage.setItem(key, token); }
         const changed = this.changed;
         for (const table of [
           conn.db.memory,
@@ -348,7 +349,7 @@ export class Multiplayer extends EventTarget {
         this.token = token;
         this.bestRtt = Infinity;
         this.status = "Resynchronizing…";
-        if (!googleCredential()) { this.hold(token); sessionStorage.setItem(key, token); }
+        if (!savedAccount()) { this.hold(token); sessionStorage.setItem(key, token); }
         this.changed();
       })
       // The SDK passes the next attempt number only when it will retry (automatic reconnect
@@ -369,8 +370,8 @@ export class Multiplayer extends EventTarget {
         if (this.connection !== connection || this.disposed) return;
         this.ready = false;
         this.connecting = false;
-        if (googleCredential() && storedToken && tokenRejected(error)) {
-          this.blockAuth("Google sign-in rejected — sign in again");
+        if (savedAccount() && storedToken && tokenRejected(error)) {
+          this.blockAuth("Personal key rejected — sign out and use a valid saved key");
         } else if (error.name === "IdentityChangedError") {
           this.blockAuth("Your identity changed — reload to sign in again");
         } else if (nextAttempt !== undefined) {
@@ -394,12 +395,6 @@ export class Multiplayer extends EventTarget {
     this.connection = connection;
   }
   private syncClock() {
-    const credential = googleCredential();
-    if (credential && credentialExpired(credential)) {
-      this.blockAuth("Google session expired — sign in again");
-      this.connection?.disconnect();
-      return;
-    }
     const connection = this.connection;
     if (!this.ready || !connection || this.heartbeat) return;
     // A suspended phone can leave a socket looking open. An acknowledged

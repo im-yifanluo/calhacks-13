@@ -1048,7 +1048,7 @@ export class Session {
             item.append(transfer);
           }
           const profile = net.connection?.db.profile.identity.find(p.identity);
-          if (profile?.provider === "google") item.append(" · Google");
+          if (profile?.provider === "key") item.append(" · saved identity");
           return item;
         }),
       );
