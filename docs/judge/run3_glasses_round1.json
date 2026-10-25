@@ -1,0 +1,535 @@
+{
+ "results": [
+  {
+   "id": "o3329",
+   "title": "Palace of Fine Arts: short",
+   "first": {
+    "layout": 3.5,
+    "colour": 2.7,
+    "dynamic": 3.3,
+    "lost_rows_score": 0,
+    "fade_justified": true,
+    "largely_matches": false,
+    "defects": [
+     {
+      "t": 6.2,
+      "what": "Every row is stretched sideways by about 1.3x (close to 4/3) compared with the video, while vertical positions match. At 6.2 s the green door is 93 px wide in the render against 70 px in the video, and its top and bottom sit at the same y. The person, bench and lamppost are all pushed outward from the centre by the same factor, so the render shows only the middle ~75% of the video's width. This looks like an intrinsics or aspect mismatch, for example an fx meant for a 3:4 sensor frame used on a 9:16 video.",
+      "fixable": "yes: camera intrinsics or render aspect in the pipeline/eval"
+     },
+     {
+      "t": 5.1,
+      "what": "Every row has a blue/cyan cast: pavement looks blue-grey where the video shows neutral grey, and at 6.2 s the white T-shirt comes out light cyan. This is the main reason the hist metric is low on otherwise good rows (0.215 at 5.1 s).",
+      "fixable": "yes: colour calibration / white balance of baked colours"
+     },
+     {
+      "t": 0.6,
+      "what": "The top-right sky and the Palace rotunda facade are replaced by a large orange/yellow/white fire-like smear next to a cyan patch, where the video has blue sky and a beige building. The left-side trees and columns are dark, blurry smears. The Corinthian column at the right edge is missing because the stretch pushes it out of frame.",
+      "fixable": "partly: sky/background handling and floater pruning; distant sky is inherently weak from 7 s of footage"
+     },
+     {
+      "t": 0.6,
+      "what": "People walking on the left of the path show as dot ghosts squeezed toward the left, plus a blue/magenta motion streak baked into the static path at mid-left. The transient people were not fully removed from the static splat.",
+      "fixable": "yes: mask people out of static training / prune transient splats"
+     },
+     {
+      "t": 1.7,
+      "what": "The same orange/yellow blob fills the sky and building area at upper right. The family shows as dotted ghosts in roughly the right place but squeezed left. A whitish smear in the centre of the path marks where people walked.",
+      "fixable": "partly: sky handling and transient masking"
+     },
+     {
+      "t": 2.8,
+      "what": "The lawn is over-saturated blue-green and lacks the warm yellow-green sunlight of the video. A pink/magenta blob sits at bottom-left where the wearer's own hand appears, so the hand was baked in as a floater. The drain grate is pushed to the right edge by the stretch. The columns at the top are blurry.",
+      "fixable": "yes: mask the wearer's hand, colour calibration, intrinsics"
+     },
+     {
+      "t": 4,
+      "what": "The close-up person (black hoodie, beige trousers, white shoes) is a translucent smeared figure: the hoodie is teal, the trousers are almost transparent and the shoes are ghost outlines. The second person's blue jeans on the left come out as an iridescent rainbow smear over the left half of the frame.",
+      "fixable": "partly: better dynamic-person handling and pruning; the very close, fast, motion-blurred subject is partly inherent to the footage"
+     },
+     {
+      "t": 5.1,
+      "what": "The foreground person in jeans at the right edge is almost entirely missing (only a sliver of one shoe at bottom-right), and the object or person at the left edge is gone; both are cropped off by the horizontal stretch. Only one of the two distant walkers is visible.",
+      "fixable": "yes: fixing the intrinsics stretch would bring them back into frame"
+     },
+     {
+      "t": 6.2,
+      "what": "The man in sunglasses behind the bench and the white sign at the left edge are cropped out by the stretch. The wall is too pink/orange, the T-shirt is cyan, and there is slight smearing at the hands and phone. Otherwise geometry and the person are very good, and the lamp even glows.",
+      "fixable": "yes: intrinsics and colour calibration"
+     }
+    ],
+    "summary": "Per-row scores (layout/colour/dynamic): 0.6 s 3/2.5/3, 1.7 s 3/2.5/3, 2.8 s 4/3/4, 4.0 s 3/2/3, 5.1 s 4/3/3, 6.2 s 4/3.5/4, giving averages of 3.5 / 2.7 / 3.3. No rows are marked tracking lost and none needs fading, since all rows are roughly aligned, so lost_rows_score 0 means not applicable. The ground-level scene is recognisably right in every row: path, lawn, mulch beds, lamppost, green door, bench and wall, with people present in roughly the right places. The 6.2 s person is especially good. The biggest problem is systematic and fixable: the render is stretched about 1.3x horizontally but not vertically compared with the video. That is almost certainly an intrinsics or aspect mismatch (fx \u2248 4/3 too large), and it shifts and resizes everything and crops edge content (the 5.1 s foreground person, the 6.2 s sign and the man behind the bench). There is also a global blue/cyan cast. On top of that: a fire-coloured sky and facade smear at 0.6 and 1.7 s, motion streaks from people baked into the path, the wearer's hand baked in as a pink blob at 2.8 s, and a rainbow-smeared close-up person at 4.0 s. Layout only just reaches 3.5 and colour fails its threshold (2.7 < 3), so the verdict is false. Fixing the intrinsics and colour calibration would likely lift this clip over the bar."
+   },
+   "check": {
+    "agree": false,
+    "reason": "I agree with the verdict (false), the colour score (2.7), the diagnosis of a horizontal stretch from intrinsics, and almost every defect. I disagree on layout. The first judge gave 4 to the 2.8 s, 5.1 s and 6.2 s rows, but the rubric reserves 4 for \"small blur or colour shifts\". I measured the stretch in two rows and it is consistent:\n- At 6.2 s the door is about 68 px wide in the video and 91 px in the render, and the lamppost and bench sit 1.27\u20131.31x further from the centre.\n- At 5.1 s the lamppost is +87 px from the centre in the video and +113 px in the render, and the sign is +15 px against +20 px.\n- Vertical positions match in both rows (door top and bottom, sign top, lamppost base).\n\nThat 1.3x sideways distortion pushes people and objects out of frame, so it is an obvious layout error, not a small one. Those rows deserve 3.5, which brings layout to 3.25. Layout then also misses the 3.5 bar, not just colour. Dynamic is slightly generous: the close person at 4.0 s is half-transparent, so I give 2.5 rather than 3, and the overall is 3.2 rather than 3.3. The first judge also missed a few defects: a black smudge on the sign at 5.1 s, a bike wheel missing at the left edge at 5.1 s, smeared columns and a yellow corner smear at 2.8 s, and a see-through ghost strip beside the person at 6.2 s.",
+    "corrected": {
+     "layout": 3.25,
+     "colour": 2.7,
+     "dynamic": 3.2,
+     "lost_rows_score": 0,
+     "fade_justified": true,
+     "largely_matches": false,
+     "defects": [
+      {
+       "t": 6.2,
+       "what": "Every row is stretched sideways by about 1.3x while vertical positions match. At 6.2 s the door is about 68 px wide in the video and about 91 px in the render, with the same top and bottom y. The lamppost, person and bench all sit 1.27\u20131.31x further from the centre. At 5.1 s the lamppost is +87 px from the centre in the video and +113 px in the render, and the sign is +15 px against +20 px. The render shows only the middle ~75% of the video's width. This looks like an fx or aspect error, for example fx for a 3:4 frame used on 9:16 video.",
+       "fixable": "yes: camera intrinsics / render aspect in pipeline or eval"
+      },
+      {
+       "t": 5.1,
+       "what": "Every row has a blue/cyan cast. The pavement is blue-grey where the video shows neutral grey (5.1 s hist 0.215), the white T-shirt turns light cyan at 6.2 s, and the wall at 6.2 s is too pink/orange.",
+       "fixable": "yes: colour calibration / white balance of baked colours"
+      },
+      {
+       "t": 0.6,
+       "what": "The top right shows a large orange/yellow/white fire-like smear next to a cyan patch, where the video has blue sky and the beige rotunda facade. The left trees and colonnade are dark, streaky smears. The Corinthian column at the right edge is gone.",
+       "fixable": "partly: sky/background handling and floater pruning (the column comes back with the intrinsics fix); distant sky is inherently weak from ~7 s of footage"
+      },
+      {
+       "t": 0.6,
+       "what": "The walking family appears as dotted, see-through ghosts at the stretched positions, with blue/magenta motion streaks across the middle-left of the path.",
+       "fixable": "yes: mask transients out of the static training / prune transient splats"
+      },
+      {
+       "t": 1.7,
+       "what": "The same fire-coloured smear fills the sky and facade at upper right. People are dotted ghosts, and a whitish smear in the middle of the path marks where people walked.",
+       "fixable": "partly: sky handling and transient masking"
+      },
+      {
+       "t": 2.8,
+       "what": "The lawn is a saturated blue/teal-green and lacks the warm yellow-green sun patches of the video, and the pavement is blue. A pink/magenta blob sits at the bottom left where the wearer's hand is. The drain grate is pushed to the right edge. The top-right columns are blurred into vertical streaks with a yellow smear in the corner.",
+       "fixable": "yes: mask the wearer's hand, colour calibration, intrinsics; the column blur is partly inherent to the motion"
+      },
+      {
+       "t": 4,
+       "what": "The close person is a translucent smear: the hoodie is teal, the beige trousers are nearly transparent and the white shoes are ghost outlines. The second person's jeans at left are an iridescent rainbow smear over the left half of the frame.",
+       "fixable": "partly: better dynamic-person handling and pruning; the very close, motion-blurred subject is partly inherent to the footage"
+      },
+      {
+       "t": 5.1,
+       "what": "The foreground person in jeans at the right edge is reduced to a sliver of one shoe, the bike wheel at the left edge is missing, and only one of the two distant walkers is clearly visible (all due to the stretch cropping). The white sign has a dark smudge on its face. The pavement is cyan-tinted.",
+       "fixable": "yes: the intrinsics fix restores the edge content; prune or regularise the smudge on the sign"
+      },
+      {
+       "t": 6.2,
+       "what": "The man in sunglasses behind the bench and the white sign at the left edge are cropped out by the stretch. The T-shirt is cyan, the wall is too pink, and the lamp head is red-tinted. A see-through ghost strip runs along the person's right side, and the hands and phone are smeared. Otherwise this is the best row: the person, door, bench and lamppost are all good.",
+       "fixable": "yes: intrinsics and colour calibration; the ghost strip comes from dynamic-splat handling"
+      }
+     ],
+     "summary": "Per-row scores (layout/colour/dynamic): 0.6 s 3/2.5/3, 1.7 s 3/2.5/3, 2.8 s 3.5/3/3.5, 4.0 s 3/2/2.5, 5.1 s 3.5/3/3, 6.2 s 3.5/3/4. Averages are 3.25 / 2.7 / 3.2. No rows are marked as lost tracking, and none needs fading because every row is aligned apart from the systematic stretch. The ground-level scene is recognisable in every row (path, lawn, mulch beds, door, bench, lamppost, people in the right stretched places), and the 6.2 s person is good. But the render is stretched about 1.3x sideways and not vertically (measured at 5.1 s and 6.2 s), which crops about 25% of each frame's edge content. That is too large an error for layout 4 under this rubric, so the best rows get 3.5. There is also a global cyan cast, a fire-coloured smear over the sky and facade at 0.6 s and 1.7 s, ghost streaks from people baked into the path, the wearer's hand baked in as a pink blob, and a rainbow-smeared close person at 4.0 s. Both layout (3.25 < 3.5) and colour (2.7 < 3) miss the bar, so largely_matches is false. The intrinsics fix and colour calibration are the clear first steps and could bring this clip close to passing."
+    }
+   }
+  },
+  {
+   "id": "v71",
+   "title": "Stage and the hall",
+   "first": {
+    "layout": 3.2,
+    "colour": 3,
+    "dynamic": 3,
+    "lost_rows_score": 0,
+    "fade_justified": true,
+    "largely_matches": false,
+    "defects": [
+     {
+      "t": 3.2,
+      "what": "The teddy bear behind the speaker renders as a large, very saturated orange smear, stretched to the right (about x 130\u2013400 against 160\u2013350 in the video). The real bear is tan or beige.",
+      "fixable": "fixable: colour calibration or baking of the carved prop splat, and its placement or scale"
+     },
+     {
+      "t": 3.2,
+      "what": "The plastic bags and handbag in the lower left are missing; only a faint grey smear remains. The stage floor and the black front drop in the bottom 40% are streaky blur.",
+      "fixable": "partly: the near-camera floor is under-observed (partly inherent); pruning and depth supervision near the camera could help"
+     },
+     {
+      "t": 3.2,
+      "what": "The white wall and ceiling at upper left are a warm beige with a dark grey wedge across the top centre, where the video shows a light grey wall and ceiling.",
+      "fixable": "fixable: colour and exposure calibration of low-texture white surfaces"
+     },
+     {
+      "t": 9.7,
+      "what": "The upper 35% (ceiling and wall) has a warm beige or peach horizontal band and grey smears that are not in the video.",
+      "fixable": "fixable: colour and appearance calibration"
+     },
+     {
+      "t": 9.7,
+      "what": "The teddy bear on the right is saturated orange instead of tan, sits slightly too high, and its paw is missing. The backdrop's left edge is about 45 px too far left while the 'HACKS' text is about 20 px too far right, so the scale does not match.",
+      "fixable": "fixable: prop colour and placement; the slight scale or alignment error comes from pose or intrinsics"
+     },
+     {
+      "t": 9.7,
+      "what": "A bright floater blob sits at the bottom centre (around y 760) on the black stage front, and the front drop is grey and smeared.",
+      "fixable": "fixable: pruning of floaters"
+     },
+     {
+      "t": 16.2,
+      "what": "The bear paw in the lower right, clearly visible in the video, is almost entirely missing: only a sliver shows at the right edge.",
+      "fixable": "fixable: carving or placement of the prop"
+     },
+     {
+      "t": 16.2,
+      "what": "The white upper wall is a peach or beige smear. The 'Cal H' backdrop text is shifted about 45 px (10%) to the right. The speaker tower at the far left is barely visible.",
+      "fixable": "fixable: colour calibration and pose alignment"
+     },
+     {
+      "t": 22.6,
+      "what": "Worst layout row. The backdrop panel with the star on the right (the right 20% of the video frame) is replaced by a pale beige smear plus a narrow blue strip, and the star is missing.",
+      "fixable": "partly: near-camera geometry seen from few views; alignment and depth may help"
+     },
+     {
+      "t": 22.6,
+      "what": "An orange floater blob at the bottom edge (around x 90\u2013150, y 690\u2013800) has no counterpart in the video. It is likely the bear prop or a floater near the camera.",
+      "fixable": "fixable: pruning, or prop placement and visibility"
+     },
+     {
+      "t": 22.6,
+      "what": "The acrylic podium on the left is nearly invisible, and the floor and equipment cases are heavily blurred.",
+      "fixable": "podium: inherent (transparent acrylic); floor blur: partly fixable"
+     },
+     {
+      "t": 29.1,
+      "what": "Worst row overall (centre SSIM 0.31, centre PSNR 10.9). Behind the foreground person's ghost, a white vertical smear and a dark blob show the person's shirt and body baked into the static splat in the middle of the hall.",
+      "fixable": "fixable: person masking or carving out of the static room"
+     },
+     {
+      "t": 29.1,
+      "what": "The bright skylight and arch area at upper left renders as pinkish, blown-out smears, and the far doorway in the centre is dark orange.",
+      "fixable": "partly inherent (blown highlights in the footage); colour calibration could help"
+     },
+     {
+      "t": 29.1,
+      "what": "The plastic bag on the right is shifted about 40 px to the right. The crowd and tables are recognisable but blurred, and the foreground person's ghost is very sparse and barely reads as the large dark-sweater figure.",
+      "fixable": "alignment: fixable; ghost density: fixable; crowd blur: largely inherent (many small moving people)"
+     },
+     {
+      "t": 35.6,
+      "what": "The upper-left white wall is a peach or beige blotchy smear with dark patches. The bear in the lower left is only partly present (orange fragment). The black monitor wedge is shifted slightly right.",
+      "fixable": "fixable: colour calibration and prop placement"
+     }
+    ],
+    "summary": "The scene is recognisable throughout, but it does not very largely match the video. Layout scores by row: 3.2 s = 3, 9.7 s = 3.5, 16.2 s = 3.5, 22.6 s = 2.5, 29.1 s = 3, 35.6 s = 3.5. That averages about 3.2, below the 3.5 bar. Colour is about 3 in every row, so it only just meets its bar.\n\n**What works**\n- The stage backdrop with readable 'Cal HACKS' and 'HACKS 13.0' text, the podium position, the hanging banners and the hall are in the right places.\n- The ceiling light rows and pillars in the hall (29.1 s and 35.6 s) line up well.\n- The crowd and tables are present, though blurred.\n- The speaker ghost is present at the correct spot in all six rows.\n\n**Systematic problems**\n- **Colour cast:** white walls and ceilings are tinted warm beige or peach in most rows.\n- **Bear prop:** it is baked saturated orange instead of tan, mis-sized at 3.2 s and missing at 16.2 s. An orange floater with no counterpart in the video appears at 22.6 s.\n- **Near-camera geometry:** the floor and stage front are smeared streaks in every row, and small objects such as the plastic bags are lost.\n- **Misalignment:** horizontal offsets of about 10% at 9.7 s and 16.2 s, and about 40 px at 29.1 s.\n- **Worst rows:**\n  - 22.6 s: the backdrop panel and star on the right are replaced by a beige smear.\n  - 29.1 s: the person's body is baked into the static hall as a white and dark smear behind the sparse ghost (centre SSIM 0.31).\n\n**Metrics:** mean PSNR 14.1, SSIM 0.56, histogram match 0.82; centre third SSIM 0.47.\n\n**Dynamic (3):** ghosts appear where the video has people. The bear prop is misplaced or missing at 16.2 s and 22.6 s, and a person is baked into the static room at 29.1 s.\n\n**Verdict:** largely_matches = false, because layout averages about 3.2 against the 3.5 required. No row is below 2 on layout.\n\n**Tracking lost:** no rows are flagged. Every row stays roughly aligned, so no fade is needed and the lack of one is justified. lost_rows_score = 0 means not applicable.\n\n**Most fixable in the pipeline:** colour calibration of white surfaces and the carved prop, pruning floaters near the camera, masking people out of the static room, and pose alignment. **Largely inherent to the footage:** the transparent acrylic podium, blown skylights, and blur in the crowd of many small moving people."
+   },
+   "check": {
+    "agree": false,
+    "reason": "I agree with the verdict: largely_matches = false. The colour score of 3 and the absence of tracking-lost rows also check out. I disagree on two points: the layout and dynamic scores are a little generous, and the diagnosis of the defects is substantially wrong.\n\nThe biggest problem in every row is one systematic camera error that the first judge missed. The render is stretched horizontally about 1.33 times around the frame centre, while the vertical position is correct. I measured this five ways:\n- 29.1 s: the spacing between ceiling lights is about 71 px in the video and about 95 px in the render.\n- 9.7 s: the backdrop's left edge is at x 95 in the video and x 50 in the render, while 'HACKS' moves from about 325 to about 355.\n- 3.2 s: the hanging banners spread out by about 1.35\u00d7.\n- 35.6 s: the podium is 135 px wide in the video and 175 px in the render.\n- 22.6 s: the speaker tower moves from x 90 to x 40.\n\nA 1.33 ratio is exactly 4:3 against 16:9. That suggests the render camera's horizontal focal length or aspect ratio is wrong, either in the pipeline's camera intrinsics or in how the comparison harness renders.\n\nSeveral defects the first judge blamed on prop carving or placement are explained by this stretch alone:\n- the bear 'stretched to x 130\u2013400' at 3.2 s (exactly 160\u2013350 \u00d7 1.33);\n- the missing bear paw at 9.7 s and 16.2 s (pushed out of frame);\n- the missing star and the 'narrow blue strip' at 22.6 s (the panel starts at video x 360, which maps to 405, so the star leaves the frame);\n- the 'Cal H' text shifted 45 px at 16.2 s;\n- the bag shifted 40 px at 29.1 s;\n- the speaker tower 'barely visible' at 16.2 s (out of frame).\n\nThe first judge also has one row wrong. At 3.2 s the 'dark grey wedge across the top centre' matches the video's dark ceiling. The real error there is the warm beige cast on the light grey wall.\n\nWith a constant one-third error in horizontal size, I would score layout at about 3 in most rows and 2.5 at 22.6 s, averaging about 3.0 rather than 3.2. The verdict stays false.",
+    "corrected": {
+     "layout": 3,
+     "colour": 3,
+     "dynamic": 2.5,
+     "lost_rows_score": 0,
+     "fade_justified": true,
+     "largely_matches": false,
+     "defects": [
+      {
+       "t": 0,
+       "what": "In every row the render is about 1.33\u00d7 too wide horizontally around the frame centre, with the vertical position correct. Content at video x below about 56 or above about 394 falls out of the render frame. Measurements: at 29.1 s the gap between ceiling lights is 71 px in the video and 95 px in the render; at 9.7 s the backdrop's left edge moves from 95 to 50 while 'HACKS' moves from 325 to 355; at 35.6 s the podium is 135 px wide in the video and 175 px in the render; at 22.6 s the speaker tower moves from x 90 to x 40. The 4:3-against-16:9 ratio points to a horizontal focal length or aspect-ratio error in the render camera.",
+       "fixable": "fixable: render-camera intrinsics (fx and aspect) in the pipeline or the eval harness. This one fix would also explain the bear size at 3.2 s, the missing paw at 9.7 s and 16.2 s, the missing star and panel at 22.6 s, and the 40\u201345 px offsets at 16.2 s and 29.1 s."
+      },
+      {
+       "t": 3.2,
+       "what": "The teddy bear is a saturated orange where the real bear is tan or beige. Its size and position match the video once the horizontal stretch is allowed for.",
+       "fixable": "fixable: colour baking or calibration of the carved prop splat"
+      },
+      {
+       "t": 3.2,
+       "what": "The light grey wall at right and centre, below the dark ceiling, renders a warm beige or peach. The dark ceiling wedge itself is correct.",
+       "fixable": "fixable: colour and exposure calibration of low-texture white surfaces"
+      },
+      {
+       "t": 3.2,
+       "what": "The bottom 35\u201340% (stage floor and black front drop) is streaky grey blur. The handbag and plastic bags in the lower left are missing apart from a faint grey smear.",
+       "fixable": "partly: the area near the camera is seen from few views (inherent); depth supervision and pruning near the camera could help"
+      },
+      {
+       "t": 9.7,
+       "what": "A peach or beige horizontal band runs across the upper wall (y about 150\u2013240), where the video shows an even light grey.",
+       "fixable": "fixable: colour and appearance calibration"
+      },
+      {
+       "t": 9.7,
+       "what": "The black stage front is a grey smear, with a bright floater blob at the bottom centre (about x 200, y 760).",
+       "fixable": "fixable: pruning floaters"
+      },
+      {
+       "t": 9.7,
+       "what": "The bear is saturated orange instead of tan. Its missing paw is out of frame because of the stretch, not a carving error.",
+       "fixable": "fixable: prop colour; the paw follows from the intrinsics fix"
+      },
+      {
+       "t": 16.2,
+       "what": "The upper white wall is a peach or beige smear. The floor and stage front are blurred.",
+       "fixable": "fixable: colour calibration; the floor blur is partly inherent"
+      },
+      {
+       "t": 22.6,
+       "what": "The grey concrete wall at upper right renders as a pale beige smear.",
+       "fixable": "fixable: colour calibration"
+      },
+      {
+       "t": 22.6,
+       "what": "An orange floater blob at the bottom left (x about 30\u2013150, y 690\u2013800) has no counterpart in the video. It is probably bear fur or a near-camera floater.",
+       "fixable": "fixable: pruning and prop placement"
+      },
+      {
+       "t": 22.6,
+       "what": "The acrylic podium is nearly invisible, and the floor and equipment cases are heavily blurred.",
+       "fixable": "podium: inherent (transparent acrylic); blur: partly fixable"
+      },
+      {
+       "t": 29.1,
+       "what": "A white vertical figure-shaped smear (x about 128\u2013186, y 212\u2013360) is baked into the static hall right where the foreground person's dark head and back should be. The person's ghost is a sparse dot cloud and does not read as the large dark-sweater figure that fills about 25% of the frame.",
+       "fixable": "fixable: mask or carve people out of the static room, and make the ghost denser"
+      },
+      {
+       "t": 29.1,
+       "what": "The skylight arches at upper left and the far doorway render as pinkish-orange blown blobs. The ceiling lights are tinted pink.",
+       "fixable": "partly inherent (blown highlights); colour calibration could help"
+      },
+      {
+       "t": 29.1,
+       "what": "The crowd, tables and chairs are present but blurred.",
+       "fixable": "largely inherent (many small moving people)"
+      },
+      {
+       "t": 35.6,
+       "what": "The upper-left white wall (the top 30% of the left half) is a beige or peach blotchy smear with dark patches.",
+       "fixable": "fixable: colour calibration and pruning"
+      },
+      {
+       "t": 35.6,
+       "what": "An orange bear fragment reaches x about 120. The video's tan bear sits at x 0\u201385, which should map to about 0\u201340 after the stretch, so this is a genuine prop misplacement plus the orange colour.",
+       "fixable": "fixable: prop placement and colour"
+      },
+      {
+       "t": 35.6,
+       "what": "The foreground speaker is only a sparse dot-cloud ghost, while the podium, stage edge and crowd line up once the stretch is allowed for.",
+       "fixable": "fixable: ghost density"
+      }
+     ],
+     "summary": "The scene is recognisable in every row, but it does not very largely match the video. My layout scores by row are 3.2 s = 3, 9.7 s = 3, 16.2 s = 3, 22.6 s = 2.5, 29.1 s = 3, 35.6 s = 3, which average 3.0 against the 3.5 bar. Colour is 3 and dynamic is 2.5. Mean PSNR is 14.1, SSIM 0.56, histogram match 0.82, and centre-third SSIM 0.47.\n\n**Biggest issue, which the first judge missed:** every render is about 1.33\u00d7 too wide horizontally around the frame centre, with the vertical position correct. That ratio is 4:3 against 16:9, which points to a wrong horizontal focal length or aspect ratio in the render camera. It accounts for most of the 'mis-sized bear', 'missing paw', 'missing star or backdrop panel' and '40\u201345 px offsets' defects. One intrinsics fix, in the pipeline or the eval harness, would probably raise SSIM a lot.\n\n**What works**\n- The 'Cal HACKS' and 'HACKS 13.0' backdrops, the banners, the ceiling trusses and light rows, the pillars, the equipment cases, the hall crowd and the chairs are all present and placed consistently, apart from the stretch.\n\n**Genuine reconstruction errors**\n- White and grey walls are tinted warm beige or peach in 5 of 6 rows.\n- The bear is saturated orange instead of tan.\n- The floor and stage front close to the camera are streaky blur, and small bags are lost.\n- Floaters: a bright blob at 9.7 s and an orange blob at 22.6 s.\n- A white figure smear is baked into the static hall at 29.1 s, the worst row (centre SSIM 0.31).\n- The bear is misplaced at 35.6 s.\n- Pink and orange blown skylights at 29.1 s.\n\n**Dynamic (2.5):** the speaker appears in the right place in every row, but only as a sparse dot cloud. It reads poorly where the person fills 25\u201330% of the frame (29.1 s and 35.6 s), and there is an extra baked person at 29.1 s.\n\n**Tracking lost:** no rows are flagged, and none needs a fade, because the misalignment is a constant intrinsics error rather than lost tracking. lost_rows_score = 0 means not applicable.\n\n**Verdict:** largely_matches = false.\n\n**Fixable in the pipeline:** render intrinsics first, then colour calibration of white surfaces and the prop, floater pruning, carving people out of the static room, and ghost density. **Inherent to the footage:** the acrylic podium, blown skylights, the crowd blur, and part of the floor blur near the camera."
+    }
+   }
+  },
+  {
+   "id": "o3328",
+   "title": "Palace of Fine Arts: rotunda and people",
+   "first": {
+    "layout": 3.25,
+    "colour": 2.5,
+    "dynamic": 1.5,
+    "lost_rows_score": 0,
+    "fade_justified": true,
+    "largely_matches": false,
+    "defects": [
+     {
+      "t": 3.6,
+      "what": "About 10 people walking on the path (the couple holding hands, the yellow shirt, the group on the right) have no ghost at all. The render shows an empty road, and the diff shows every person at full strength.",
+      "fixable": "fixable: person detection or ghost generation is missing these walkers"
+     },
+     {
+      "t": 3.6,
+      "what": "Upper-left sky is blotchy cyan with dark floater streaks running into the top of the colonnade tower.",
+      "fixable": "fixable: sky masking or a sky dome, plus floater pruning"
+     },
+     {
+      "t": 3.6,
+      "what": "The peristyle colonnade and lawn on the left are replaced by a dark grey block. The tall exhibition-hall wall on the far right is mostly lost behind smeared trees.",
+      "fixable": "partly fixable (densification and coverage); partly inherent, because this area is distant and only seen briefly"
+     },
+     {
+      "t": 3.6,
+      "what": "Asphalt is bluish-grey and smeared into streaks; the tyre-mark texture is gone.",
+      "fixable": "colour cast is fixable; smearing is largely inherent (low texture plus motion blur)"
+     },
+     {
+      "t": 10.8,
+      "what": "Worst row (PSNR 11.4, centre SSIM 0.35). Rotunda columns are smeared into vertical streaks. The right-hand column group and urns sit 30-50 px (about 7-10%) right of the video, which looks like a horizontal stretch, and the diff doubles edges across the whole structure.",
+      "fixable": "fixable: pose or FOV alignment refinement for this stretch, more training on the close-up views"
+     },
+     {
+      "t": 10.8,
+      "what": "Rotunda colours are oversaturated orange and red. The sky is deep cyan, with a dark smear at top right and dark blobs inside the arch opening.",
+      "fixable": "fixable: colour calibration and floater pruning"
+     },
+     {
+      "t": 10.8,
+      "what": "The man walking in the left foreground appears only as a sparse speckle strip at the frame edge, not at his body position. The background walkers under the arch are missing.",
+      "fixable": "fixable: ghost placement and density"
+     },
+     {
+      "t": 18,
+      "what": "Most of the sky in the upper half is covered with large dark streak and blob floaters.",
+      "fixable": "fixable: sky mask or floater pruning"
+     },
+     {
+      "t": 18,
+      "what": "The free-standing colonnade tower sits about 30 px left of the video, is too wide, and its column detail is mush. The rotunda column on the right is thinner than in the video.",
+      "fixable": "fixable: alignment and densification"
+     },
+     {
+      "t": 18,
+      "what": "About 8 people on the path (pink-shirt woman, white-top woman with phone, two dark-clothed men) have no ghosts. The render path is empty.",
+      "fixable": "fixable: ghost generation"
+     },
+     {
+      "t": 25.2,
+      "what": "The green lattice door at the left is a dark brown recess. The tan stone wall renders salmon pink.",
+      "fixable": "colour is fixable; the door is partly a coverage or appearance-model issue (fixable)"
+     },
+     {
+      "t": 25.2,
+      "what": "The woman in the red jacket in the foreground is only a sparse dot ghost, cut off at the right edge and shifted 30-40 px right. The man behind her, the crouching person and the cyclist are missing as ghosts.",
+      "fixable": "fixable: ghost placement and detection of small figures"
+     },
+     {
+      "t": 25.2,
+      "what": "Deciduous-tree foliage bleeds into the wall. Floaters in the top-right sky. The ground is streaky.",
+      "fixable": "partly fixable (pruning); ground streaking largely inherent"
+     },
+     {
+      "t": 32.4,
+      "what": "The beige wall renders strongly salmon or pink, and brown smear blobs cover the wall left of the first door.",
+      "fixable": "fixable: colour calibration and pruning"
+     },
+     {
+      "t": 32.4,
+      "what": "The right double door is shifted about 40 px right and cut off, and the lamppost about 50 px. The diff doubles both door outlines. The tall tree trunk at the left edge is missing. Blotchy sky at top.",
+      "fixable": "fixable: alignment, FOV or distortion check"
+     },
+     {
+      "t": 32.4,
+      "what": "The person at the left edge of the frame is missing.",
+      "fixable": "fixable: ghost generation"
+     },
+     {
+      "t": 39.5,
+      "what": "The girl in the white sweater and jeans in the right foreground has no ghost. The distant walkers on the path (about 6) are missing.",
+      "fixable": "fixable: ghost generation"
+     },
+     {
+      "t": 39.5,
+      "what": "The green door at the right is gone (pink or dark recess). The wall is pink instead of tan. The ground shows radial smear streaks.",
+      "fixable": "colour fixable; door and ground partly inherent (motion blur, low texture)"
+     }
+    ],
+    "summary": "Verdict: does not largely match. It fails on layout (non-lost rows average about 3.25, below the 3.5 bar) and on colour (about 2.5, below 3); no row falls below 2 on layout. Per-row layout: 3.6 s = 3, 10.8 s = 3, 18.0 s = 3, 25.2 s = 3.5, 32.4 s = 3.5, 39.5 s = 3.5.\n\nLayout: the scene is clearly the Palace of Fine Arts in every row, with the rotunda, free-standing colonnade, exhibition-hall wall, doors, trees, lampposts and path roughly where they should be. The rotunda views are the weakest. At 10.8 s (PSNR 11.4, centre SSIM 0.35) the columns are smeared and stretched 30-50 px off, and at 18.0 s the tower is shifted and the sky is full of dark floaters. At 3.6 s the left colonnade is a dark block. The wall rows (25-40 s) are better aligned, but doors and lampposts are off by 40-50 px at 32.4 s and the green doors vanish at 25.2 s and 39.5 s.\n\nColour: there is a systematic warm, saturated cast. Tan stone renders salmon pink in half the frames, the sky is too cyan and blotchy, the rotunda is oversaturated, and the asphalt is bluish.\n\nMoving things: people are almost entirely missing. There are no ghosts at 3.6 s, 18.0 s, 32.4 s or 39.5 s, even though the video shows many walkers and a foreground person at 39.5 s. The only ghosts are a sparse, edge-clipped one at 10.8 s and another at 25.2 s.\n\nNo rows are flagged tracking lost, so there is no lost-row score (0 means N/A), and fading nothing is correct: the alignment, while imperfect, is plausible in every row. fade_justified=true means no fade was needed.\n\nMost likely fixes in the pipeline:\n- ghost generation for walkers\n- colour calibration for the pink and cyan cast\n- sky masking and floater pruning\n- pose or FOV refinement around the rotunda (10-18 s)\n\nInherent to the footage: ground smearing and some distant-structure loss, from low texture and motion blur."
+   },
+   "check": {
+    "agree": true,
+    "reason": "I agree with the verdict (does not largely match) and the numbers: layout about 3.25, colour about 2.5 (below the bar of 3), dynamic 1.5, and no rows with lost tracking. I disagree with much of the defect diagnosis. Most of the \"misalignment\" the first judge reported comes from a bug in the comparison script, not from the reconstruction.\n\nThe clip is 962x1280, which is 3:4 (checked with ffprobe on data/work/o3328/input/clip.mp4). pipeline/memreplay/compare.py frame_at() resizes it straight to the 450x800 (9:16) screenshot, so the video column is squeezed horizontally to 0.75. I searched for the scale that best aligns the edges of render and video. In all 6 rows the best fit is 1.325-1.35 horizontally and 1.00 vertically. That raises the edge correlation from 0.24-0.32 to 0.54-0.71. So the render has the same vertical view as the video, but it only covers the middle 75% of the video's width, shown at true proportions.\n\nThese first-judge items are caused by that squeeze, and the fixes it proposed (pose or FOV refinement) won't help:\n- 10.8 s: the \"horizontal stretch\", the columns and urns 30-50 px off, and the doubled edges.\n- 18 s: the tower \"30 px left and too wide\".\n- 32.4 s: the door and lamppost shifts.\n- 10.8 s and 25.2 s: the ghosts \"at the edge or shifted right\". Both sit exactly where the squeeze predicts, so they are placed correctly; they are just too sparse.\n\nSeveral things the first judge called \"missing\" lie outside the area the render can show:\n- 25.2 s and 39.5 s: the green doors.\n- 32.4 s: the tree trunk and the person at the left edge.\n- 39.5 s: the girl in white.\n- 18 s: the pink-shirt woman.\n- 3.6 s: most of the exhibition-hall wall on the far right.\n\nFix the comparison script first: crop the centre of the video frame to 720x1280 before resizing, or capture at a 3:4 viewport. Then score again; PSNR and SSIM are currently pushed down by the misalignment.\n\nEven after correcting for the squeeze, the scores barely change:\n- Layout stays near 3.25 because of the sky floaters (3.6 s, 18 s), the dark block in place of the colonnade (3.6 s) and the smeared columns (10.8 s).\n- Colour fails on its own: the stone is pink or salmon, the rotunda is oversaturated orange, and the sky is cyan.\n- People in view are still missing at 3.6 s, 10.8 s, 18 s, 25.2 s and 39.5 s.\n\nThe verdict holds. My corrected object below keeps the same scores, with the defect list fixed.",
+    "corrected": {
+     "layout": 3.25,
+     "colour": 2.5,
+     "dynamic": 1.5,
+     "lost_rows_score": 0,
+     "fade_justified": true,
+     "largely_matches": false,
+     "defects": [
+      {
+       "t": 0,
+       "what": "All rows (comparison script, not the scene): compare.frame_at squeezes the 962x1280 (3:4) video frame to the 450x800 (9:16) render size. The render shows the middle ~75% of the width at true proportions, so everything in it looks 1.33x wider and pushed outward from the centre. Best-fit scale is 1.325-1.35 horizontally and 1.00 vertically in every row (edge correlation rises from 0.24-0.32 to 0.54-0.71). This causes the 'stretched', 'shifted 30-50 px', 'too wide' and 'doubled edges' errors, and pushes PSNR and SSIM down.",
+       "fixable": "fixable in the evaluation script: crop the centre of the video frame to 720x1280 before resizing, or capture at a 3:4 viewport. Do not chase this with pose or FOV refinement in the pipeline."
+      },
+      {
+       "t": 3.6,
+       "what": "About 8 walkers who are within the render's view (the couple holding hands, the yellow shirt, the group on the right) have no ghost at all. The render path is empty.",
+       "fixable": "fixable: person detection / ghost generation"
+      },
+      {
+       "t": 3.6,
+       "what": "A big cyan-white sky floater blob covers about the upper-left quarter of the frame and runs into the top of the colonnade tower.",
+       "fixable": "fixable: sky mask or sky dome, plus floater pruning"
+      },
+      {
+       "t": 3.6,
+       "what": "The rotunda edge and colonnade left of the tower are a dark grey block.",
+       "fixable": "partly fixable (coverage, densification); partly inherent (distant, seen briefly)"
+      },
+      {
+       "t": 3.6,
+       "what": "Asphalt is bluish-grey and streaky; the tyre-mark texture is gone.",
+       "fixable": "cast fixable (colour); streaking largely inherent (low texture, motion blur)"
+      },
+      {
+       "t": 10.8,
+       "what": "The right-hand rotunda columns are smeared into vertical streaks, with dark blobs inside the arch opening and a dark streak in the top-right sky. Once the squeeze is accounted for, the structure is in the right place.",
+       "fixable": "fixable: floater pruning, more training on close-up views"
+      },
+      {
+       "t": 10.8,
+       "what": "The rotunda is oversaturated orange-red and the sky is deep cyan.",
+       "fixable": "fixable: colour calibration"
+      },
+      {
+       "t": 10.8,
+       "what": "The man in the left foreground is only a sparse speckle strip at the left edge. Its position is correct for the narrower render view, but the ghost is far too sparse. The walkers in the background under the arch have no ghosts.",
+       "fixable": "fixable: ghost density, detection of small figures"
+      },
+      {
+       "t": 18,
+       "what": "Large dark streak and blob floaters cover most of the sky (about the upper 40% of the frame).",
+       "fixable": "fixable: sky mask / floater pruning"
+      },
+      {
+       "t": 18,
+       "what": "The colonnade behind the free-standing tower is dark mush, and the tower's column detail is soft.",
+       "fixable": "partly fixable (densification); partly inherent (distance)"
+      },
+      {
+       "t": 18,
+       "what": "The white-top woman with a phone and the two dark-clothed men, all within the render's view, have no ghosts. (The pink-shirt woman at the far left is outside the render's view.)",
+       "fixable": "fixable: ghost generation"
+      },
+      {
+       "t": 18,
+       "what": "Sky is too deep blue-cyan, rotunda pinkish.",
+       "fixable": "fixable: colour calibration"
+      },
+      {
+       "t": 25.2,
+       "what": "The tan stone wall renders salmon pink.",
+       "fixable": "fixable: colour calibration"
+      },
+      {
+       "t": 25.2,
+       "what": "The woman in the red jacket is only a sparse dot ghost at the right edge; its position matches the crop. The cyclist, the crouching person and the man behind her have no ghosts, though all are within the render's view.",
+       "fixable": "fixable: ghost density and detection"
+      },
+      {
+       "t": 25.2,
+       "what": "Foliage of the deciduous tree smears over the wall, there are floaters in the top-right sky, and the ground is streaky. (The green door is mostly outside the render's view, so it is not a defect here.)",
+       "fixable": "pruning fixable; ground streaks largely inherent"
+      },
+      {
+       "t": 32.4,
+       "what": "The wall is strongly salmon pink, brown smear blobs sit on the wall left of the small door, and the sky at the top is blotchy. Doors, lamppost and shrubs are in the right places once the squeeze is accounted for. (The tree trunk and the person at the left edge are outside the render's view.)",
+       "fixable": "fixable: colour calibration, pruning"
+      },
+      {
+       "t": 32.4,
+       "what": "Asphalt shows radial smear streaks.",
+       "fixable": "largely inherent (low texture, motion blur)"
+      },
+      {
+       "t": 39.5,
+       "what": "The wall is pink instead of tan, and the jamb of the doorway recess is dark or pink. (The green door and the girl in white are outside the render's view.)",
+       "fixable": "fixable: colour calibration"
+      },
+      {
+       "t": 39.5,
+       "what": "The distant walkers on the path, who are within the render's view, are missing or appear as faint smudges.",
+       "fixable": "fixable: ghost generation for small, distant figures"
+      },
+      {
+       "t": 39.5,
+       "what": "Ground is smeared into streaks.",
+       "fixable": "largely inherent"
+      }
+     ],
+     "summary": "Verdict: does not largely match. Layout is about 3.25 (per row: 3.6 s = 3, 10.8 s = 3, 18 s = 3, 25.2 s = 3.5, 32.4 s = 3.5, 39.5 s = 3.5); no row is below 2. Colour is about 2.5 (below 3) and dynamic is 1.5.\n\nThe main correction is that most of the apparent misalignment comes from the comparison script. compare.py resizes the 962x1280 (3:4) clip to 450x800 (9:16), squeezing the video to 0.75 width. The best-fit scale between render and video is 1.33 horizontally and 1.00 vertically in every row. So the 'stretched / shifted 30-50 px / too wide' errors, and the 'ghost at the edge or shifted', are effects of the script. Several things called 'missing' (the green doors at 25.2 s and 39.5 s, the tree trunk and person at 32.4 s, the girl in white at 39.5 s, the pink-shirt woman at 18 s) are outside the render's view.\n\nFix the script first (crop the centre of the video frame to 720x1280, or capture at 3:4), then score again.\n\nThe real reconstruction defects are:\n- Sky floaters: a big blob at 3.6 s, dark streaks over most of the sky at 18 s.\n- A dark block in place of the colonnade at 3.6 s.\n- Smeared rotunda columns at 10.8 s.\n- A systematic warm colour cast: tan stone renders salmon or pink, the rotunda is oversaturated orange, the sky is cyan, the asphalt is bluish.\n- Almost no ghosts for walkers who are within the render's view. The two ghosts that exist (10.8 s, 25.2 s) are placed correctly but are only sparse speckle.\n\nNo rows have lost tracking, so nothing was faded, and that is correct.\n\nFixable in the pipeline: ghost generation and density, colour calibration, sky masking and floater pruning. Inherent to the footage: ground smearing and the soft distant colonnade."
+    }
+   }
+  }
+ ],
+ "report": "# Judging report: video \u2192 3D scenes\n\nScores are layout / colour / dynamic, out of 5. To pass, layout must be at least 3.5 and colour at least 3.\n\n- **o3329, Palace of Fine Arts: short:** 3.25 / 2.7 / 3.2. Does not match.\n- **v71, Stage and the hall:** 3.0 / 3.0 / 2.5. Does not match.\n- **o3328, Palace of Fine Arts: rotunda and people:** 3.25 / 2.5 / 1.5. Does not match.\n\nNo clip lost tracking, so no fades were needed.\n\n## Fixable in the pipeline\n\n1. **Fix the aspect bug in the comparison first.** In every row the render looks about 1.33\u00d7 too wide, while vertical positions are correct. On o3328 the cause is `compare.py` `frame_at()`, which squeezes the 3:4 video into the 9:16 screenshot. The other two clips show the same ratio, so the cause is probably the same. Because of this bug, objects at the edges look \"missing\", and layout, PSNR and SSIM are scored too low. Crop the video to 9:16 or capture at 3:4, then score again.\n2. **Colour casts.** o3329 is blue/cyan throughout. v71 tints white walls peach and turns the tan teddy bear bright orange. o3328 renders tan stone salmon pink and the sky cyan. The baked colours need white balancing.\n3. **People.** In o3328 most of the walkers in view have no ghost at all. In the other clips the ghosts are sparse dot clouds. Passers-by and the wearer's hand are baked into the static scene as streaks and blobs (o3329; v71 at 29.1 s). Mask them out of static training and make the ghosts denser.\n4. **Sky and floaters.** o3329 has a fire-coloured smear over the sky and facade, o3328 has dark streaks across the sky, and v71 has stray blobs near the camera. Add a sky mask and prune floaters.\n\n## Inherent to the footage\n\n- Streaky ground and floors, caused by low texture, motion blur, and floor near the camera that is seen from few views.\n- Distant sky and colonnade seen only briefly, blown-out skylights, a transparent acrylic podium, and a very close passer-by blurred by motion.\n\n## Verdict\n\nNot yet. Every row is clearly the right place and tracking holds throughout. Still, none of the three scenes largely matches its video from the recorded camera. Layout is below 3.5 in every clip, and colour is at or below its bar. Part of the layout gap comes from the comparison bug, not from the scenes. Fix the aspect handling and colour calibration, then score again. o3329 is closest to passing."
+}

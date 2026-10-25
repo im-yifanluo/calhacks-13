@@ -108,7 +108,7 @@ _TYPICAL = {   # label -> (shape, density kg/m3)
 
 
 def fallback_spec(label: str, observed_size_m: tuple[float, float, float], color: str) -> ObjectSpec:
-    shape, density = _TYPICAL.get(label, ("box", 400))
+    shape, density = _TYPICAL.get(label, ("box", 120))      # unknown things: light; their box is mostly air
     x, y, z = (max(0.03, s) for s in observed_size_m)
     if shape == "sphere":
         x = y = z = max(x, y, z)

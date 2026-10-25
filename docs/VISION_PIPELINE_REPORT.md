@@ -138,6 +138,41 @@ What the grids show (`apps/web/public/memories/<id>/compare.jpg`, also linked fr
   forward motion with no depth constraint, plus ViPE's path along texture-poor walls. The clip that needs the depth
   supervision described in §4.
 
+### The demo footage: Ray-Ban Meta glasses, evening of Oct 24
+
+Nine clips recorded with the glasses (portrait ~1500×2000, 30 fps, HLG; 7 s to 60 s): four indoors at the
+hackathon (a speaker at a podium on a stage, the stage and the hall, two walks through the hall with the crowd)
+and five outdoors at the Palace of Fine Arts (rotunda, colonnade walks, a garden, many people walking). What
+changed for them: ViPE estimates the wide lens itself (59° × 74° at the normalized size), no undistortion step was
+needed; the floor fit prefers the plane that puts the camera at the glasses' eye height (1.75 m; the stage top had
+been taken for the floor); people standing on a stage or step are kept as ghosts (their "floating" test is now
+against the room collider under them), mask bleed onto walls no longer stretches a ghost (points trimmed to 1 m
+around the person); worn and carried things (lanyards, shoes, bags, phones, cameras) are no longer carved out as
+props; the HLG→SDR curve was refitted (reference white had been 4× too bright); and with the Anthropic API key out
+of credits from ~7 PM, noun lists and prop descriptions came from hand-written tables
+(`objects/manual_specs.json`) instead of Claude.
+
+What the glasses scenes look like from the recorded camera (grids in `apps/web/public/memories/<id>/compare.jpg`):
+- **Stage, speaker at the podium (v59)**: the demo scene. The speaker stands as a moving point ghost at the podium in
+  every sampled moment; bear, backdrop, stage and bag in place; the acrylic podium is only partly there; the far left
+  of the hall smears. PSNR 18.1 / SSIM 0.75.
+- **Stage and the hall (v71)**: same stage, then the camera turns to the crowded hall: the speaker ghost holds, the
+  hall is recognisable but blurry, seated people become a textured mass, 11 walking people are ghosts.
+- **Palace of Fine Arts, short (o3329)**: ground-level path, lawn, planters, sign and door right where they are; six
+  people as ghosts including the companion a metre away and the man with headphones; the sky and sunlit tree tops
+  wash into a yellow smear. 18 dB.
+- **Rotunda and colonnade (o3328)**: the rotunda, colonnade, exhibition wall and doors are clearly the place; the sky
+  is a blue smear with no geometry; people far down the paths were missing until the ghost depth limit was raised
+  from 8 m to 30 m.
+- The remaining five (hall walks v83 and v106, colonnade walks o3330 and o3331, garden o3332) are in the table.
+
+Lessons from this footage: the capture viewport must match the clip's aspect (a 9:16 viewport on 3:4 footage
+stretched every render 1.33× and cost 3 dB in every score, found by the judge panel); crowds overflow ViPE's 255
+instance ids (capped at 250); sky needs its own handling outdoors (a smear today); and a per-clip viewer colour
+correction that helped indoors made these scenes slightly worse, so it is off by default.
+
+<!-- GLASSES-TABLE -->
+
 ### Hands-on check (Oct 24, 3 PM PT)
 
 Walked through in the web viewer: the **room corner** works; the **hotel lobby**, **corridor** and **hotel room**

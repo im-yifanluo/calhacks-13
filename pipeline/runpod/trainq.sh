@@ -5,10 +5,12 @@ source /workspace/memory-replay/pipeline/runpod/env.sh
 GPU=$1; N=$2
 LOG=/workspace/logs/static_run.log; POST=/workspace/logs/post_run.log; Q=/workspace/logs/train_queue
 say() { echo "$(date +%T) $*" | tee -a $LOG; }
-done_list=" "; n=0
+CLAIMS=/workspace/logs/claims; mkdir -p $CLAIMS                 # several workers (pods/GPUs) share the queue
+n=0
 while [ $n -lt $N ]; do
-  c=""; for x in $(cat $Q 2>/dev/null); do case "$done_list" in *" $x "*) ;; *) c=$x; break;; esac; done
-  if [ -z "$c" ]; then sleep 20; continue; fi
+  c=""; for x in $(cat $Q 2>/dev/null); do [ -d $CLAIMS/$x ] && continue; mkdir $CLAIMS/$x 2>/dev/null && { c=$x; break; }; done
+  if [ -z "$c" ]; then [ $(ls $CLAIMS | wc -l) -ge $N ] && break; sleep 20; continue; fi
+  say "$c claimed by $(hostname) gpu$GPU"
   W=$WORK/$c; t0=$SECONDS
   # colours first: the HLG->SDR curve was refitted after these clips were normalized, so re-encode the frames
   # (ViPE's geometry is unaffected) and rebuild the room points + ghosts, whose colours come from the frames
@@ -26,6 +28,6 @@ while [ $n -lt $N ]; do
     memreplay verify $W > $W/logs/verify.log 2>&1 || echo "$c verify FAILED" >> $POST
     echo "$c $(grep -h '^\[layers\]' $W/logs/layers.log | cut -c1-300)" >> $POST
     echo "$(date +%T) $c READY (run)" >> $POST )
-  done_list="$done_list$c "; n=$((n+1))
+  n=$((n+1))
 done
 say "TRAIN QUEUE DONE ($n clips)"

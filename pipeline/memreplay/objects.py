@@ -323,9 +323,17 @@ class Support:
 MAX_PROP = 1.0      # m; bigger things stay part of the room
 
 
+# Labels that are clothing or carried by a person: they belong to the moving person (the ghost), and as "props"
+# they would slide around the room on their own.
+WORN = ("lanyard", "badge", "shoe", "sneaker", "boot", "hat", "cap", "glasses", "headphone", "earbud", "watch",
+        "phone", "backpack", "bag", "purse", "jacket", "hoodie", "shirt", "mask", "cable", "wire", "cord", "hand", "camera")
+
+
 def select(work: Path, use_claude: bool | None = None) -> list[dict]:
     """Group sightings into objects and decide which become grabbable props (Claude or the fallback table).
     Runs before S4 so that only kept props (and people) are cut out of the room. objects/selection.json"""
+    mfile = work / "objects" / "manual_specs.json"
+    manual = json.loads(mfile.read_text()) if mfile.exists() else {}
     from . import claude
 
     work = Path(work)
@@ -346,13 +354,22 @@ def select(work: Path, use_claude: bool | None = None) -> list[dict]:
         if max(seen) > MAX_EXTENT:
             out.append({**entry, "keep": False, "reason": f"too big ({max(seen):.1f} m)"})
             continue
+        if any(w in g["label"].lower() for w in WORN):          # things on people move with the person, not as props
+            out.append({**entry, "keep": False, "reason": "worn or held"})
+            continue
         crop, color = best_crop(work, g, work / "objects" / "crops" / f"{oid}.jpg")
         bottom = float(np.median([o["pos"][1] - o["ext"][1] / 2 for o in g["obs"]]))
         entry["bottom_above_floor_m"] = bottom
         source, spec = "fallback", claude.fallback_spec(g["label"], seen, color)
         if bottom > 2.0:                                    # nothing rests 2 m up: mounted
             spec.movable = False
-        if use_claude:
+        # objects/manual_specs.json: {label or id: {shape, size_m, density_kg_m3, grabbable, movable}} written by a
+        # person (or Claude in chat) when the API is unavailable; wins over the API
+        man = manual.get(oid) or manual.get(g["label"])
+        if man:
+            spec, source = spec.model_copy(update={k: (tuple(v) if k == "size_m" else v) for k, v in man.items()
+                                                   if k in ObjectSpec.model_fields}), "manual"
+        elif use_claude:
             try:
                 spec, source = claude.describe(crop, g["label"], seen, bottom), "claude"
             except Exception as e:  # network, quota, refusal: keep the fallback
@@ -435,7 +452,9 @@ def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
                 P[k, 1] = floor + half_h
                 if V[k, 1] < 0 and np.linalg.norm(V[k]) < 1.0:
                     V[k, 1] = 0.0
-        mass = max(0.01, spec.density_kg_m3 * volume(spec))
+        # density x box volume runs away on things whose box is mostly air (a cable across a stage came out at
+        # 125 kg, a lanyard at 16 kg): nothing a hand picks up weighs more than ~15 kg, nothing less than 10 g
+        mass = float(np.clip(spec.density_kg_m3 * volume(spec), 0.01, 15.0))
         result.append(DynamicObject(
             id=oid, label=spec.label or g["label"],
             visual={"kind": "primitive", "shape": spec.shape, "size": spec.size_m, "color": spec.color},

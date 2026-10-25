@@ -25,6 +25,10 @@ INIT_POINTS = 150_000
 # Gaussians of a forward walk (corridor) stretch along the walking direction. MEMREPLAY_DEPTH_LOSS=0 turns it off.
 DEPTH_LOSS = os.environ.get("MEMREPLAY_DEPTH_LOSS", "1") == "1"
 DEPTH_LAMBDA = 1e-2
+# Outdoors the sky used to be masked out of the loss (no depth), and nearby Gaussians smeared across it. Now sky
+# pixels stay in the loss and are seeded on a dome SKY_DISTANCE metres out, so the trainer puts sky colour there.
+SKY_DOME = os.environ.get("MEMREPLAY_SKY_DOME", "1") == "1"
+SKY_DISTANCE = 150.0
 CAP = 300_000
 # static mode: the walk-through room. Only people/hands are masked (props stay in the room), more frames and
 # Gaussians (Spark's default budget on Quest is 500k), longer training, camera poses refined, PSNR on held-out frames.
@@ -80,9 +84,11 @@ def prepare(work: Path, static: bool = False) -> Path:
     reader = Frames(work / "input" / "clip.mp4")
     from .objects import scene_static_ids
     from .vipe_io import HAND_PHRASES, PEOPLE_PHRASES
-    if static:   # everything but people and hands belongs to the room
+    if static:   # everything but people and hands belongs to the room, the sky included (SKY_DOME below)
         movers = set(v.ids_with(PEOPLE_PHRASES | HAND_PHRASES))
         keep_in_room = [i for i in v.phrases if i > 0 and i not in movers]
+        if SKY_DOME:
+            keep_in_room += [i for i in v.sky_ids if i not in keep_in_room]
     else:
         keep_in_room = scene_static_ids(work)
     c0 = chosen[0]
@@ -103,7 +109,7 @@ def prepare(work: Path, static: bool = False) -> Path:
         name = f"{c.idx:05d}"
         rgb = reader.get(c.idx)
         cv2.imwrite(str(col / "images" / f"{name}.jpg"), cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 95])
-        static = v.static_mask(c.idx, margin_px=5, extra_static=keep_in_room)
+        static = v.static_mask(c.idx, margin_px=12, extra_static=keep_in_room)   # wider: passers-by were leaving streaks in the room
         if static is None:
             static = np.ones(rgb.shape[:2], bool)
         cv2.imwrite(str(col / "masks" / f"{name}.png"), static.astype(np.uint8) * 255)
@@ -156,6 +162,15 @@ def depth_points(work: Path, v, chosen: list, reader) -> tuple[np.ndarray, np.nd
             p, vv, uu = backproject(d, v.K(c.idx), np.isfinite(d) & (d > 0), stride=stride)
         if len(p) == 0:
             continue
+        if SKY_DOME and v.sky_ids:
+            # the sky has no depth: seed it far away along the rays (a dome) so the trainer fits sky colour there
+            # instead of smearing nearby Gaussians across it; the depth loss then also holds it at that distance
+            m = v.mask(c.idx)
+            sky = np.isin(m, v.sky_ids) & ~(d < 20.0) if m is not None else None
+            if sky is not None and sky.any():
+                ps, vs, us = backproject(np.full_like(d, SKY_DISTANCE), v.K(c.idx), sky, stride=stride * 2)
+                if len(ps):
+                    p = np.concatenate([p, ps]); vv = np.concatenate([vv, vs]); uu = np.concatenate([uu, us])
         pts.append(transform(wp.c2w(c.idx), p))
         cols.append(rgb[vv, uu])
         ids.append(np.full(len(p), i, np.int32))
