@@ -13,8 +13,8 @@ export function mountSceneImport(net: Multiplayer) {
   const signedIn = () => !!savedAccount() && net.ready && net.identity?.toHexString() === savedAccount()?.identity && net.connection?.db.profile.identity.find(net.identity!)?.provider === 'key';
   const gate = () => {
     zip.disabled = folder.disabled = choice.disabled = busy || !signedIn();
-    if (!signedIn()) { open.disabled = true; show('Sign in above to import and view your memories. Older imports without an account must be imported again.'); }
-    else if (!busy && !pkg) show('Choose a scene package to add it to your account on this browser.');
+    if (!signedIn()) { open.disabled = true; show('Sign in to import.'); }
+    else if (!busy && !pkg) show('Choose a scene to import.');
   };
   const lock = (value: boolean) => { busy = value; gate(); };
   const list = async () => {

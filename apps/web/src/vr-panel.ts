@@ -10,8 +10,13 @@ import * as THREE from "three";
  * Layout, hit testing and the follow rule are plain functions, so they can be tested without a headset.
  */
 
-/** Canvas size in pixels and the plane's width in metres; the height keeps the canvas aspect. */
+/** Canvas size in layout pixels and the plane's width in metres; the height keeps the canvas aspect. */
 export const PANEL = { width: 1024, height: 512, metersWide: 0.74 } as const;
+/**
+ * The canvas is drawn at 1.5× its layout size (1536 × 768, about 2,000 px per metre): sharper text on the Quest's
+ * lenses, while a redraw still uploads only 4.5 MB. Layout and hit testing stay in layout pixels.
+ */
+const SUPERSAMPLE = 1.5;
 export const PANEL_METERS_HIGH = PANEL.metersWide * PANEL.height / PANEL.width;
 
 export type PanelAction = "play" | "back" | "forward" | "scrub" | "prev-take" | "next-take" | "original" | "help" | "hide" | "show" | "exit" | "summon";
@@ -122,13 +127,19 @@ export interface PanelState {
   holding: boolean;
 }
 
-/** Dark glass, from the design brief: never pure white text, and a fill of 0.78 so text stays above 4.5:1 over white. */
+/**
+ * The web's frosted glass (glass.css), redrawn for a headset. There is no blur here, so the fill is denser: 0.78 at the
+ * top to 0.86 at the bottom keeps text, quiet text included, above 4.5:1 over a white splat. Text is off-white (#EDEDF0, not #FFF) and the
+ * primary fill no lighter than #DCDCE0 at rest (#E8E8EC on hover), so bright shapes do not glare through the lenses. White is the one primary
+ * action, as on the web; colour only for meaning.
+ */
 const COLOR = {
-  fill: "rgba(14, 22, 30, 0.78)", text: "#f2f5f7", quiet: "#b8c7cf", accent: "#8ce5dd", accentHover: "#b4f3ec",
-  onAccent: "#0d1a22", chip: "rgba(255, 255, 255, 0.10)", chipHover: "rgba(255, 255, 255, 0.20)",
-  track: "rgba(255, 255, 255, 0.18)", fork: "#ffd27a", gap: "rgba(255, 150, 130, 0.75)",
+  fillTop: "rgba(22, 22, 28, 0.78)", fillBottom: "rgba(22, 22, 28, 0.86)", text: "#ededf0", quiet: "rgba(237, 237, 240, 0.82)",
+  primary: "#dcdce0", primaryHover: "#e8e8ec", primaryPressed: "#c4c4ca", onPrimary: "#121216", ring: "rgba(237, 237, 240, 0.9)",
+  chip: "rgba(255, 255, 255, 0.12)", chipHover: "rgba(255, 255, 255, 0.18)", chipPressed: "rgba(255, 255, 255, 0.24)",
+  track: "rgba(255, 255, 255, 0.2)", progress: "#ededf0", live: "#34d27b", fork: "#ffd27a", gap: "rgba(255, 150, 130, 0.8)",
 };
-const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+const FONT = "-apple-system, BlinkMacSystemFont, Inter, system-ui, 'Segoe UI', Roboto, sans-serif";
 /** The grab bar under the panel: drawn size and (larger, invisible) ray target, metres. */
 /** The bar sits just under the plane, about 2 cm below the glass edge (the canvas keeps a 24 px clear margin). */
 const BAR = { width: 0.12, height: 0.012, hitWidth: 0.26, hitHeight: 0.06, drop: 0.004 } as const;
@@ -170,7 +181,7 @@ export class VRPanel {
   private rotation = new THREE.Quaternion();
 
   constructor(parent: THREE.Object3D, anisotropy = 1) {
-    this.canvas.width = PANEL.width; this.canvas.height = PANEL.height;
+    this.canvas.width = PANEL.width * SUPERSAMPLE; this.canvas.height = PANEL.height * SUPERSAMPLE;
     this.context = this.canvas.getContext("2d")!;
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace; this.texture.anisotropy = anisotropy;
@@ -188,8 +199,9 @@ export class VRPanel {
     this.barTarget.position.set(0, barY, 0);
     this.mesh.add(this.bar, this.barTarget);
     parent.add(this.mesh);
-    this.summonCanvas.width = 512; this.summonCanvas.height = 128;
+    this.summonCanvas.width = 512 * SUPERSAMPLE; this.summonCanvas.height = 128 * SUPERSAMPLE;
     this.summonTexture = new THREE.CanvasTexture(this.summonCanvas); this.summonTexture.colorSpace = THREE.SRGBColorSpace;
+    this.summonTexture.anisotropy = anisotropy;
     this.summon = new THREE.Mesh(new THREE.PlaneGeometry(SUMMON.metersWide, SUMMON.metersWide / 4), new THREE.MeshBasicMaterial({
       map: this.summonTexture, transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
     }));
@@ -313,11 +325,12 @@ export class VRPanel {
     this.summonDrawn = key;
     const ctx = this.summonCanvas.getContext("2d");
     if (!ctx) return;
+    ctx.setTransform(SUPERSAMPLE, 0, 0, SUPERSAMPLE, 0, 0);
     ctx.clearRect(0, 0, 512, 128);
     glass(ctx, 12, 12, 488, 104, 52);
-    if (hover) { roundRect(ctx, 12, 12, 488, 104, 52); ctx.lineWidth = 4; ctx.strokeStyle = COLOR.accent; ctx.stroke(); }
+    if (hover) { roundRect(ctx, 12, 12, 488, 104, 52); ctx.fillStyle = COLOR.chipHover; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = COLOR.ring; ctx.stroke(); }
     ctx.textAlign = "center";
-    text(ctx, "Bring controls here", 256, 64, `600 40px ${FONT}`, hover ? COLOR.accent : COLOR.text);
+    text(ctx, "Bring controls here", 256, 64, `600 40px ${FONT}`, COLOR.text);
     ctx.textAlign = "left";
     this.summonTexture.needsUpdate = true;
   }
@@ -326,14 +339,16 @@ export class VRPanel {
   draw(state: PanelState): void {
     const ratio = state.duration > 0 ? Math.min(1, Math.max(0, state.time / state.duration)) : 0;
     const knob = Math.round(TRACK.x0 + ratio * (TRACK.x1 - TRACK.x0));
-    const key = JSON.stringify([this.mode, this.hover, this.pressed, state.title, state.playing, knob, timeText(state),
-      state.take, state.takeIndex, state.takeCount, state.forks, state.gaps, state.status, state.room, state.holding]);
+    // Keyed on the 0.1 s clock text, not the knob's pixel: during playback it redraws at most 10 times a second.
+    const key = JSON.stringify([this.mode, this.hover, this.pressed, state.title, state.playing, timeText(state),
+      state.take, state.takeIndex, state.takeCount, state.forks, state.gaps, state.status, state.room]);
     this.bar.material.opacity = this.hover === "bar" || this.dragging ? 0.95 : 0.55;
     this.bar.scale.x = this.hover === "bar" || this.dragging ? 1.25 : 1;
     this.bar.visible = this.mode !== "compact";
     if (key === this.drawn) return;
     this.drawn = key;
     const ctx = this.context;
+    ctx.setTransform(SUPERSAMPLE, 0, 0, SUPERSAMPLE, 0, 0);
     ctx.clearRect(0, 0, PANEL.width, PANEL.height);
     if (this.mode === "compact") {
       const pill = COMPACT_REGIONS[0];
@@ -366,14 +381,16 @@ export class VRPanel {
     const at = (t: number) => TRACK.x0 + Math.min(1, Math.max(0, state.duration > 0 ? t / state.duration : 0)) * (TRACK.x1 - TRACK.x0);
     ctx.lineCap = "round"; ctx.lineWidth = 10;
     line(ctx, TRACK.x0, TRACK.x1, TRACK.y, COLOR.track);
-    line(ctx, TRACK.x0, TRACK.x0 + ratio * (TRACK.x1 - TRACK.x0), TRACK.y, COLOR.accent);
+    line(ctx, TRACK.x0, TRACK.x0 + ratio * (TRACK.x1 - TRACK.x0), TRACK.y, COLOR.progress);
     ctx.lineCap = "butt";
     for (const [from, to] of state.gaps) line(ctx, at(from), Math.max(at(to), at(from) + 4), TRACK.y, COLOR.gap);
     ctx.fillStyle = COLOR.fork;
     for (const fork of state.forks) { roundRect(ctx, at(fork) - 3, TRACK.y - 30, 6, 28, 3); ctx.fill(); }
     ctx.beginPath(); ctx.arc(knobX, TRACK.y, this.pressed === "scrub" ? 21 : 18, 0, Math.PI * 2);
-    ctx.fillStyle = COLOR.text; ctx.fill();
-    if (active) { ctx.lineWidth = 4; ctx.strokeStyle = COLOR.accent; ctx.stroke(); }
+    // Canvas shadows ignore the transform, so they are scaled by hand.
+    ctx.save(); ctx.shadowColor = "rgba(0, 0, 0, 0.45)"; ctx.shadowBlur = 8 * SUPERSAMPLE; ctx.shadowOffsetY = 2 * SUPERSAMPLE;
+    ctx.fillStyle = COLOR.text; ctx.fill(); ctx.restore();
+    if (active) { ctx.lineWidth = 4; ctx.strokeStyle = COLOR.ring; ctx.stroke(); }
     // Takes: ‹ name › and Original.
     const single = state.takeCount < 2;
     this.chip(REGIONS[6], "", { icon: "left", disabled: single });
@@ -389,7 +406,9 @@ export class VRPanel {
     ctx.font = roomFont; const roomWidth = ctx.measureText(room).width;
     ctx.textAlign = "left";
     const statusFont = `600 26px ${FONT}`;
-    text(ctx, fit(ctx, state.status, 928 - roomWidth - 24, statusFont), 56, 456, statusFont, state.holding ? COLOR.accent : COLOR.text);
+    // A small dot says whether time runs (green) or is frozen (amber), next to the status line.
+    ctx.beginPath(); ctx.arc(64, 456, 7, 0, Math.PI * 2); ctx.fillStyle = state.playing ? COLOR.live : COLOR.fork; ctx.fill();
+    text(ctx, fit(ctx, state.status, 928 - roomWidth - 48, statusFont), 80, 456, statusFont, COLOR.text);
   }
 
   private drawHelp(): void {
@@ -414,11 +433,16 @@ export class VRPanel {
     ctx.save();
     ctx.globalAlpha = options.disabled ? 0.35 : 1;
     roundRect(ctx, r.x + inset, r.y + inset, r.w - inset * 2, r.h - inset * 2, Math.min(24, (r.h - inset * 2) / 2));
-    const filled = options.primary || pressed;
-    ctx.fillStyle = filled ? (pressed ? COLOR.accent : hover ? COLOR.accentHover : COLOR.accent) : hover ? COLOR.chipHover : COLOR.chip;
+    const filled = !!options.primary;
+    ctx.fillStyle = filled ? (pressed ? COLOR.primaryPressed : hover ? COLOR.primaryHover : COLOR.primary) : pressed ? COLOR.chipPressed : hover ? COLOR.chipHover : COLOR.chip;
     ctx.fill();
-    if (hover && !filled) { ctx.lineWidth = 3; ctx.strokeStyle = COLOR.accent; ctx.stroke(); }
-    const ink = filled ? COLOR.onAccent : COLOR.text;
+    if (hover && filled) {
+      // On the light fill a ring reads only outside it.
+      const out = 5, rr = Math.min(24, (r.h - inset * 2) / 2) + out;
+      roundRect(ctx, r.x + inset - out, r.y + inset - out, r.w - (inset - out) * 2, r.h - (inset - out) * 2, rr);
+      ctx.lineWidth = 3; ctx.strokeStyle = COLOR.ring; ctx.stroke();
+    } else if (hover) { ctx.lineWidth = 3; ctx.strokeStyle = COLOR.ring; ctx.stroke(); }
+    const ink = filled ? COLOR.onPrimary : COLOR.text;
     const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
     const font = `600 ${options.size ?? 30}px ${FONT}`;
     if (options.icon === "left" || options.icon === "right") {
@@ -449,22 +473,24 @@ export class VRPanel {
 function timeText(state: PanelState): string { return `${state.time.toFixed(1)} / ${state.duration.toFixed(1)} s`; }
 
 /**
- * Faux glass (a real blur costs an extra scene render per eye): a soft shadow outside the shape only, a dark 0.78 fill,
- * a sheen over the top half and a rim that is brighter at the top.
+ * Faux glass (a real blur costs an extra scene render per eye): a soft shadow outside the shape only, a dark fill that
+ * deepens towards the bottom, a sheen over the top half and a 2 px rim that is brighter at the top.
  */
 function glass(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   ctx.save();
-  ctx.shadowColor = "rgba(0, 0, 0, 0.45)"; ctx.shadowBlur = 32; ctx.shadowOffsetY = 6;
+  ctx.shadowColor = "rgba(0, 0, 0, 0.45)"; ctx.shadowBlur = 32 * SUPERSAMPLE; ctx.shadowOffsetY = 6 * SUPERSAMPLE;
   roundRect(ctx, x, y, w, h, r); ctx.fillStyle = "#000"; ctx.fill();
   ctx.restore();
   // Cut the shape (and the shadow under it) back out, so the fill keeps its own translucency.
   ctx.save(); ctx.globalCompositeOperation = "destination-out"; roundRect(ctx, x, y, w, h, r); ctx.fill(); ctx.restore();
-  roundRect(ctx, x, y, w, h, r); ctx.fillStyle = COLOR.fill; ctx.fill();
+  const fill = ctx.createLinearGradient(0, y, 0, y + h);
+  fill.addColorStop(0, COLOR.fillTop); fill.addColorStop(1, COLOR.fillBottom);
+  roundRect(ctx, x, y, w, h, r); ctx.fillStyle = fill; ctx.fill();
   const sheen = ctx.createLinearGradient(0, y, 0, y + h / 2);
-  sheen.addColorStop(0, "rgba(255, 255, 255, 0.12)"); sheen.addColorStop(1, "rgba(255, 255, 255, 0)");
+  sheen.addColorStop(0, "rgba(255, 255, 255, 0.06)"); sheen.addColorStop(1, "rgba(255, 255, 255, 0)");
   ctx.fillStyle = sheen; ctx.fill();
   const rim = ctx.createLinearGradient(0, y, 0, y + h);
-  rim.addColorStop(0, "rgba(255, 255, 255, 0.45)"); rim.addColorStop(1, "rgba(255, 255, 255, 0.10)");
+  rim.addColorStop(0, "rgba(255, 255, 255, 0.42)"); rim.addColorStop(1, "rgba(255, 255, 255, 0.14)");
   roundRect(ctx, x + 1.5, y + 1.5, w - 3, h - 3, r - 1.5); ctx.lineWidth = 3; ctx.strokeStyle = rim; ctx.stroke();
 }
 
@@ -493,7 +519,7 @@ function glyph(ctx: CanvasRenderingContext2D, icon: "play" | "pause", x: number,
 function pillTexture(): THREE.Texture {
   const canvas = document.createElement("canvas"); canvas.width = 256; canvas.height = 32;
   const ctx = canvas.getContext("2d");
-  if (ctx) { roundRect(ctx, 2, 2, 252, 28, 14); ctx.fillStyle = "#f2f5f7"; ctx.fill(); }
+  if (ctx) { roundRect(ctx, 2, 2, 252, 28, 14); ctx.fillStyle = COLOR.text; ctx.fill(); }
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }

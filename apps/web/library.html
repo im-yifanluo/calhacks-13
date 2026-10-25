@@ -3,89 +3,94 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#101918" />
+    <meta name="theme-color" content="#0a0a0f" />
     <title>memos · Your memories</title>
   </head>
   <body>
     <header class="navigation">
-      <a class="brand" href="/library.html"><span aria-hidden="true">◌</span> memos</a>
+      <a class="brand" href="/library.html"><span class="brand-mark" aria-hidden="true"></span>memos</a>
       <nav aria-label="Main navigation"><a href="/">Explore demo ↗</a><span id="connection" role="status">Connecting…</span></nav>
     </header>
     <main>
+      <!-- Hero: the pitch on the left; your account, then the three steps, on the right. -->
       <section class="hero">
-        <div><p class="eyebrow">FROM YOUR GLASSES. BACK INTO THE MOMENT.</p><h1>Keep the moment.<br /><em>Step back inside.</em></h1><p class="intro">Capture on your iPhone with Meta glasses. Follow your video's progress here, then explore the finished scene on the web or in VR.</p></div>
-        <ol class="journey" aria-label="How it works"><li><span>01</span><div><strong>Capture</strong><p>Record through the iPhone app.</p></div></li><li><span>02</span><div><strong>Send</strong><p>Stop recording. The app uploads.</p></div></li><li><span>03</span><div><strong>Step inside</strong><p>Open your scene when processing finishes.</p></div></li></ol>
+        <div class="hero-text">
+          <h1>Step back<br /><em>inside the moment.</em></h1>
+          <p class="intro">Record with Meta glasses. Relive it here or in VR.</p>
+        </div>
+        <div class="hero-side">
+          <section id="auth-bar" class="account-panel" aria-labelledby="account-heading">
+            <div class="account-row"><h2 id="account-heading">Account</h2><span id="auth-status" role="status">Guest</span><button id="auth-signout" type="button" hidden>Sign out</button></div>
+            <div id="account-signed-out">
+              <form id="account-create" novalidate>
+                <label for="account-name" class="sr-only">Your name</label>
+                <div class="row"><input id="account-name" maxlength="40" autocomplete="nickname" placeholder="Your name" /><button type="submit" data-account-action="create">Sign in</button></div>
+              </form>
+              <details><summary>I have a six-digit password</summary>
+                <form id="account-login" novalidate>
+                  <label for="account-key-input">Password</label>
+                  <input id="account-key-input" type="password" inputmode="numeric" pattern="[0-9]{6}" autocomplete="current-password" spellcheck="false" maxlength="6" minlength="6" placeholder="6-digit password" />
+                  <button type="submit" data-account-action="login">Sign in with password</button>
+                </form>
+              </details>
+              <details><summary>Restore an older saved account</summary>
+                <form id="account-legacy-login" novalidate>
+                  <label for="account-legacy-input">Old saved credential</label>
+                  <input id="account-legacy-input" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="16384" placeholder="Paste your old memos1. credential" />
+                  <button type="submit" data-account-action="restore">Restore account</button>
+                  <p>After signing in, choose Copy password to get your six-digit password.</p>
+                </form>
+              </details>
+            </div>
+            <div id="account-signed-in" hidden>
+              <p id="account-id"></p>
+              <div class="row"><button id="account-copy-key" type="button">Copy password</button><button id="account-save-key" type="button">Save password file</button></div>
+              <p>Your six-digit password signs you in on other devices. Keep it private.</p>
+            </div>
+            <p id="auth-notice" role="status" aria-live="polite"></p>
+          </section>
+          <ol class="journey" aria-label="How it works"><li><span>1</span><div><strong>Record</strong><p>With your glasses and the iPhone app.</p></div></li><li><span>2</span><div><strong>Upload</strong><p>Stop recording. It sends itself.</p></div></li><li><span>3</span><div><strong>Step inside</strong><p>Open it here or on Quest.</p></div></li></ol>
+        </div>
       </section>
-      <section id="auth-bar" class="account-panel" aria-labelledby="account-heading">
-          <div class="account-intro"><h2 id="account-heading">Your memos account</h2><p>Use the same name and password in the library and the viewer. Signing in here also signs you in on the main page.</p></div>
-          <div class="account-row"><span id="auth-status" role="status">Guest · sign in to keep your name</span><button id="auth-signout" type="button" hidden>Sign out</button></div>
-          <div id="account-signed-out">
-            <form id="account-create" novalidate>
-              <label for="account-name">Sign-in name</label>
-              <div class="row"><input id="account-name" maxlength="40" autocomplete="nickname" placeholder="Your name" /><button type="submit" data-account-action="create">Sign in with name</button></div>
-              <p>Get a generated six-digit password to keep this identity and sign in on another device.</p>
-            </form>
-            <details><summary>I have a six-digit password</summary>
-              <form id="account-login" novalidate>
-                <label for="account-key-input">Password</label>
-                <input id="account-key-input" type="password" inputmode="numeric" pattern="[0-9]{6}" autocomplete="current-password" spellcheck="false" maxlength="6" minlength="6" placeholder="6-digit password" />
-                <button type="submit" data-account-action="login">Sign in with password</button>
-              </form>
-            </details>
-            <details><summary>Restore an older saved account</summary>
-              <form id="account-legacy-login" novalidate>
-                <label for="account-legacy-input">Old saved credential</label>
-                <input id="account-legacy-input" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="16384" placeholder="Paste your old memos1. credential" />
-                <button type="submit" data-account-action="restore">Restore account</button>
-                <p>After signing in, choose Copy password to get your six-digit password.</p>
-              </form>
-            </details>
-          </div>
-          <div id="account-signed-in" hidden>
-            <p id="account-id"></p>
-            <div class="row"><button id="account-copy-key" type="button">Copy password</button><button id="account-save-key" type="button">Save password file</button></div>
-            <p>Keep your password private. Anyone with it can sign in as you. A lost password cannot be recovered by name.</p>
-          </div>
-          <p id="auth-notice" role="status" aria-live="polite"></p>
-          <p class="account-help">You can explore the shared demo library as a guest.</p>
+      <div id="notice" class="notice" role="status" hidden></div>
+      <p id="error" role="alert" hidden></p>
+      <div class="workspace">
+        <section class="memories" aria-labelledby="library-heading">
+          <div class="section-heading"><h2 id="library-heading">Memories <span id="memory-count">0</span></h2><span id="live-note">Waiting for connection</span></div>
+          <div class="filters"><label class="sr-only" for="search">Search memories</label><input id="search" type="search" placeholder="Search" /><select id="filter" hidden aria-hidden="true" tabindex="-1"><option value="all">All memories</option><option value="ready">Ready to explore</option><option value="pending">In progress</option><option value="failed">Needs attention</option><option value="test">Test recordings</option></select></div>
+          <div id="filter-chips" class="filter-chips" role="radiogroup" aria-label="Show"><button type="button" role="radio" aria-checked="true" data-filter="all">All</button><button type="button" role="radio" aria-checked="false" data-filter="ready">Ready</button><button type="button" role="radio" aria-checked="false" data-filter="pending">In progress</button><button type="button" role="radio" aria-checked="false" data-filter="failed">Needs attention</button><button type="button" role="radio" aria-checked="false" data-filter="test">Tests</button></div>
+          <div id="memory-grid" class="memory-grid"></div>
+          <div id="empty" class="empty"><span aria-hidden="true">◌</span><h3>No memories yet.</h3><p>Record with your glasses, or upload a video.</p><button id="seed-local" type="button" class="secondary" hidden>Load local memories</button></div>
         </section>
-      <section class="account-panel import-panel" aria-labelledby="publish-heading">
-        <h2 id="publish-heading">Publish rendered scenes</h2>
-        <p>Upload a reconstructed scene folder to your account for phone, desktop, and Quest sharing. Scene links can be opened by anyone you share them with.</p>
-        <label>Publish scene folder<input id="publish-folder" type="file" webkitdirectory multiple /></label>
-        <button id="publish-scenes" class="primary" disabled>Publish scenes</button>
-        <p id="publish-status" role="status">Sign in above, then choose a folder containing memory.json and its assets.</p>
-      </section>
+        <aside>
+          <section class="panel capture-guide"><p class="eyebrow">CAPTURE</p><h2>Record. Stop. Sent.</h2><p>Record in the iPhone app. Stopping uploads the clip.</p><button id="copy-library" class="secondary">Copy library link</button><p class="small">Sign in with the same password on your phone.</p></section>
+          <section class="panel upload-card"><div id="upload-panel"></div><p id="upload-health" role="status">Checking upload service…</p></section>
+          <a class="diagnostics" href="/capture.html">Capture diagnostics ↗</a>
+        </aside>
+      </div>
+      <div class="manage">
       <section id="import-scene" class="account-panel import-panel" aria-labelledby="import-heading">
-        <p class="eyebrow">ALREADY RECONSTRUCTED?</p><h2 id="import-heading">Import a 3D memory</h2>
-        <p>Choose one <strong>.memos.zip</strong> package or a scene folder containing <strong>memory.json</strong> and its assets. The timeline, camera path, splats, objects, and audio open together. A video or .spz alone does not contain the full time series.</p>
+        <h2 id="import-heading">Import a 3D memory</h2>
+        <p>A <strong>.memos.zip</strong> or a folder with <strong>memory.json</strong>. Imports stay in this browser.</p>
         <div class="import-inputs">
           <label>Scene ZIP<input id="scene-zip" type="file" accept=".zip,application/zip" /></label>
           <label>Or scene folder<input id="scene-folder" type="file" webkitdirectory multiple /></label>
         </div>
         <div id="scene-import-details" hidden><label for="scene-manifest">Scene manifest</label><select id="scene-manifest"></select><button id="scene-import-open" type="button" disabled>Import and open in 3D</button></div>
         <p id="scene-import-status" role="status" aria-live="polite"></p>
-        <p>Imports belong to your signed-in account and stay on this browser. They are not uploaded or shared with a party. To share across devices, host the scene files and add the HTTPS memory.json URL in the viewer’s party panel.</p>
-        <div id="local-scenes-section" hidden><h3>Your imports on this device</h3><ul id="local-scenes"></ul></div>
+        <div id="local-scenes-section" hidden><h3>On this device</h3><ul id="local-scenes"></ul></div>
       </section>
-      <div id="notice" class="notice" role="status" hidden></div>
-      <p id="error" role="alert" hidden></p>
-      <div class="workspace">
-        <section class="memories" aria-labelledby="library-heading">
-          <div class="section-heading"><div><p class="eyebrow">YOUR ACCOUNT LIBRARY</p><h2 id="library-heading">Memories <span id="memory-count">0</span></h2></div><span id="live-note">Waiting for connection</span></div>
-          <div class="filters"><label class="sr-only" for="search">Search memories</label><input id="search" type="search" placeholder="Find a moment…" /><label class="sr-only" for="filter">Filter memories</label><select id="filter"><option value="all">All memories</option><option value="ready">Ready to explore</option><option value="pending">In progress</option><option value="failed">Needs attention</option><option value="test">Test recordings</option></select></div>
-          <div id="memory-grid" class="memory-grid"></div>
-          <div id="empty" class="empty"><span aria-hidden="true">◌</span><h3>Your next memory starts here.</h3><p>Connect the iPhone app to this backend, or upload an exported video. It will appear here automatically.</p></div>
-        </section>
-        <aside>
-          <section class="panel capture-guide"><p class="eyebrow">CAPTURE WITH META GLASSES</p><h2>Record. Stop. Sent.</h2><p>In the iPhone app, connect with Meta AI, start your camera preview, and record. Stopping saves and uploads the clip automatically.</p><p class="muted">Keep the app open through upload. The browser displays results; glasses capture uses the native Meta SDK app.</p><button id="copy-library" class="secondary">Copy this library link</button><p class="small">Sign in with the same password on your phone and this page to see your recordings.</p></section>
-          <section class="panel upload-card"><p class="eyebrow">ALREADY HAVE A CLIP?</p><div id="upload-panel"></div><p id="upload-health" role="status">Checking upload service…</p></section>
-          <a class="diagnostics" href="/capture.html">Capture diagnostics ↗</a>
-        </aside>
+      <section class="account-panel import-panel" aria-labelledby="publish-heading">
+        <h2 id="publish-heading">Publish scenes</h2>
+        <p>Upload a scene folder; anyone with its link can open it.</p>
+        <label>Scene folder<input id="publish-folder" type="file" webkitdirectory multiple /></label>
+        <button id="publish-scenes" class="primary" disabled>Publish</button>
+        <p id="publish-status" role="status">Sign in, then choose a folder with memory.json.</p>
+      </section>
       </div>
-      <footer><span>memos / Cal Hacks</span><span>A video becomes a scene only after reconstruction completes.</span></footer>
+      <footer><span>memos · Cal Hacks 13</span></footer>
     </main>
-    <dialog id="video-dialog"><div class="dialog-heading"><h2 id="video-title">Original recording</h2><button id="close-video" aria-label="Close recording">✕</button></div><video id="source-video" controls playsinline preload="metadata"></video><p>This is the original recording. Open in 3D when the scene is ready.</p></dialog>
+    <dialog id="video-dialog"><div class="dialog-heading"><h2 id="video-title">Original recording</h2><button id="close-video" aria-label="Close recording">✕</button></div><video id="source-video" controls playsinline preload="metadata"></video></dialog>
     <script type="module" src="/src/library.ts"></script>
   </body>
 </html>

@@ -4,7 +4,7 @@ export function uploadPanel(
   root: HTMLElement,
   onComplete?: (requestId: string) => void,
 ) {
-  root.innerHTML = `<h2>Upload a memory</h2><p>Export your glasses video from Meta AI to your camera roll, then select it here.</p>
+  root.innerHTML = `<h2>Upload a video</h2><p>Pick a clip exported from Meta AI.</p>
   <label>Title<input id="upload-title" maxlength="120" required placeholder="Saturday at the park"></label>
   <label>Video<input id="upload-file" type="file" accept="video/mp4,video/quicktime,.mp4,.mov"></label>
   <video id="upload-preview" controls playsinline preload="metadata" hidden aria-label="Selected video preview"></video>

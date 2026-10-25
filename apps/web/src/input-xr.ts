@@ -68,7 +68,7 @@ const ASSIST_DEG = 3;
 /** How long a new status message stays on the panel before the contextual hint comes back. */
 const MESSAGE_MS = 6000;
 /** Ray colours, the short idle beam and how far rays reach, m (the design brief: 0.35 m beam, 10 m hit test). */
-const RAY = { idle: 0x8ce5dd, panel: 0xf2f5f7, object: 0xffd27a, short: 0.35, reach: 10 };
+const RAY = { idle: 0xededf0, panel: 0xffffff, object: 0xffd27a, short: 0.35, reach: 10 };
 /** Controller buzzes, [intensity, ms]: hover is a tick, a grab has weight, a release is the grab at lower strength. */
 const HAPTIC = {
   hover: [0.15, 10], grabbable: [0.2, 12], press: [0.5, 25], grab: [0.8, 40], release: [0.35, 20],

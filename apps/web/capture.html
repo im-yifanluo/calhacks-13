@@ -3,20 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#0a0a0f" />
     <title>memos · Capture test</title>
   </head>
   <body>
     <main>
       <header>
-        <a href="/">memos</a
+        <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>memos</a
         ><span id="connection" role="status">Connecting…</span>
       </header>
       <h1>See what you recorded.</h1>
-      <p class="intro">
-        Try <strong>On → Off → automatic upload</strong> here first. The
-        sample scene below simulates the camera. Video storage and database
-        verification use your real local services.
-      </p>
+      <p class="intro">Test <strong>On → Off → upload</strong> with a simulated camera. Storage and the database are real.</p>
       <div class="columns">
         <section class="card" aria-labelledby="sim-heading">
           <div class="sim-heading">
@@ -42,12 +39,7 @@
             <button id="sim-on" disabled aria-keyshortcuts="O">On</button>
             <button id="sim-off" disabled aria-keyshortcuts="F">Off</button>
           </div>
-          <p class="sim-note">
-            Click On, wait 3–5 seconds, then click Off. You can click the buttons
-            or use O/F on your keyboard outside text fields. Off automatically saves,
-            uploads and verifies the clip. Simulated clips are test uploads: the
-            3D pipeline never processes them.
-          </p>
+          <p class="sim-note">Click On, wait a few seconds, then Off (or press O / F). Off saves, uploads and verifies the clip. Test clips are never turned into 3D.</p>
           <p id="sim-status" role="status">
             Ready when the database is connected.
           </p>
@@ -58,10 +50,7 @@
         </section>
         <section class="card">
           <h2>Stored recordings</h2>
-          <p>
-            These rows come from SpacetimeDB. Select one, then play the video
-            fetched from its stored URL.
-          </p>
+          <p>Pick a recording to play it from storage.</p>
           <label for="recordings">Database recordings</label
           ><select id="recordings">
             <option value="">No uploaded videos yet</option>
@@ -89,21 +78,12 @@
         </section>
       </div>
       <details class="card import-card">
-        <summary>Test a real Wayfarer video instead</summary>
-        <p>
-          This browser simulation does not connect to the glasses. Record on the
-          glasses (1080p, 30 fps, stabilization off), import through Meta AI,
-          then upload the exported video here. Unlike the simulation, a clip
-          uploaded here is queued for the 3D pipeline.
-        </p>
+        <summary>Test a real glasses video</summary>
+        <p>Record on the glasses (1080p, 30 fps, stabilization off), export from Meta AI, and upload it here. Unlike the simulation, it goes to the 3D pipeline.</p>
         <section id="upload-panel"></section>
       </details>
       <p id="error" role="alert"></p>
-      <footer>
-        Video bytes live in storage; SpacetimeDB stores the record and URL.
-        “Uploaded” confirms ingestion, not a finished 3D reconstruction. This
-        demo library uses public database rows.
-      </footer>
+      <footer>“Uploaded” means stored, not yet a 3D scene.</footer>
     </main>
     <script type="module" src="/src/capture.ts"></script>
   </body>
