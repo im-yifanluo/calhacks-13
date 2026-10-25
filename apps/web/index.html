@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b1118" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%238ce5dd' stroke-width='4'/%3E%3C/svg%3E" />
+    <meta name="theme-color" content="#0a0a0f" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%23ffffff' stroke-width='4'/%3E%3C/svg%3E" />
     <title>memos</title>
     <meta name="application-name" content="memos" />
     <meta name="apple-mobile-web-app-title" content="memos" />
@@ -23,8 +23,8 @@
       </div>
       <div class="top-actions">
         <button id="camera-mode" class="glass pill" disabled aria-pressed="false" title="Follow the recorded camera path">Camera: Free look</button>
-        <button id="hide-ui" class="glass pill" disabled aria-describedby="hide-ui-help" title="Hide controls, leaving a faint Show UI button. H / Escape or a double-tap also restores them.">Hide UI</button>
-        <a href="/library.html" class="glass pill" aria-label="Memory library">Memories</a>
+        <button id="hide-ui" class="glass pill" disabled aria-describedby="hide-ui-help" title="Hide controls, leaving a faint Show UI button. H / Escape or a double-tap also restores them."><svg class="i-hide" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12s3-6 8.5-6c1.6 0 3 .5 4.2 1.2M20.5 12s-3 6-8.5 6c-1.6 0-3-.5-4.2-1.2" /><path d="M9.9 14.1a3 3 0 0 1 4.2-4.2" /><path d="M4.5 19.5 19.5 4.5" /></svg><svg class="i-show" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12s3-6 8.5-6 8.5 6 8.5 6-3 6-8.5 6-8.5-6-8.5-6z" /><circle cx="12" cy="12" r="2.8" /></svg><span class="label">Hide UI</span></button>
+        <a href="/library.html" class="glass pill"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.6" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6" /></svg><span>Memories</span></a>
         <button id="vr-entry" class="glass pill accent" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.6C3 8.2 4.1 7 5.6 7h12.8C19.9 7 21 8.2 21 9.6v3.9c0 1.4-1.1 2.5-2.6 2.5h-3.1l-1.9-2.4h-2.8L8.7 16H5.6C4.1 16 3 14.9 3 13.5z" /></svg>
           <span>Enter VR</span>
@@ -75,7 +75,7 @@
     </section>
 
     <!-- View options, above the dock. -->
-    <section id="more-sheet" class="glass popover" aria-label="View options" hidden>
+    <section id="more-sheet" class="glass strong popover" aria-label="View options" hidden>
       <div id="more-toggles">
         <label class="toggle" title="While it plays, walk the recorded path and look anywhere; pause to roam"><input id="follow" type="checkbox" role="switch" /> <span>Follow the walk</span></label>
         <label class="toggle" title="See the memory through the glasses, as it was recorded"><input id="eyes" type="checkbox" role="switch" /> <span>Wearer's view</span></label>
@@ -95,7 +95,6 @@
           <li>Follow the walk (the default for hosted recordings): while it plays you move along the recorded path and drag to look anywhere. Pause<span class="pointer-fine"> (<kbd>Space</kbd>)</span> to roam freely; Play glides you back onto the path. The chip above the dock switches to a free camera or the wearer's view.</li>
           <li class="pointer-fine">Drag to look around, scroll to zoom. <kbd>Space</kbd> plays or pauses, <kbd>←</kbd> <kbd>→</kbd> step, <kbd>[</kbd> <kbd>]</kbd> switch takes.</li>
           <li class="pointer-coarse">Drag the scene to look around, pinch to zoom, and use the pad to walk.</li>
-          <li>The Camera button switches between free look and following the recorded wearer's view.</li>
           <li>Pause, then drag an object and let go: it stays there, frozen with everything else, until you press Play. Each change makes a new take; the original is always kept.</li>
           <li>On a Quest: Enter VR, point and pull the trigger to use the panel, and hold grip to grab. Drag the bar under the panel to move it; B or Y hides it.</li>
         </ul>
@@ -103,10 +102,10 @@
     </section>
 
     <!-- The shared room: a sheet that leaves the memory visible behind it. -->
-    <dialog id="room-panel" class="glass sheet" aria-labelledby="room-heading">
+    <dialog id="room-panel" class="glass strong sheet" aria-labelledby="room-heading">
       <div class="sheet-head">
         <span class="grabber" aria-hidden="true"></span>
-        <div class="sheet-title"><h2 id="room-heading">Watch together</h2><p id="room-connection" role="status">Connecting…</p></div>
+        <div class="sheet-title"><h2 id="room-heading" tabindex="-1" autofocus>Watch together</h2><p id="room-connection" role="status">Connecting…</p></div>
         <button id="room-reconnect" type="button" title="Retry this device's connection to the shared server" hidden>Reconnect</button>
         <button id="room-close" class="icon" aria-label="Close">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" /></svg>
@@ -149,6 +148,13 @@
           </div>
           <p id="auth-notice" role="status" aria-live="polite"></p>
         </section>
+        <!-- Your memories as cards: a tap opens one to explore (it replaced a dropdown). -->
+        <section class="group" aria-labelledby="my-memories-heading">
+          <div class="group-head"><h3 id="my-memories-heading">Your memories</h3><a href="/library.html">Library</a></div>
+          <ul id="memory-cards" class="memory-cards" aria-labelledby="my-memories-heading"></ul>
+          <!-- The party's scene; the cards drive it. -->
+          <select id="room-memories" hidden aria-hidden="true" tabindex="-1"></select>
+        </section>
         <section class="group">
           <strong id="room-label">Explore solo or join a party</strong>
           <p id="party-role" role="status"></p>
@@ -161,9 +167,9 @@
         </section>
         <section class="group">
           <label class="field">Your name<input id="player-name" maxlength="40" autocomplete="nickname" /></label>
-          <label class="field">Scene or video<select id="room-memories" aria-label="Memory library"></select></label>
+          <p id="party-scene-choice"></p>
           <button id="room-create" class="primary wide" disabled>Create a party</button>
-          <div id="party-scene-actions" class="row" hidden><button id="party-attach">Use selected scene / video</button><button id="party-cancel" hidden>Cancel pending scene</button></div>
+          <div id="party-scene-actions" class="row" hidden><button id="party-attach">Use the selected memory</button><button id="party-cancel" hidden>Cancel pending scene</button></div>
         </section>
         <details class="group" id="library-details">
           <summary>Add a memory</summary>

@@ -42,7 +42,7 @@ function memoryCard(memory: Memory) {
   const actions = element("div", "card-actions");
   const scene = viewerLink(memory, location.origin);
   if (scene) {
-    const open = element("a", "primary", "Open in 3D ↗"); open.href = scene; actions.append(open);
+    const open = element("a", "primary", "Explore in 3D"); open.href = scene; actions.append(open);
     const copy = element("button", "secondary", "Copy scene link");
     copy.onclick = () => copyLink(scene, "Scene link copied. Open it in Quest Browser to enter VR."); actions.append(copy);
   }
@@ -108,7 +108,7 @@ function render() {
 }
 
 uploadPanel(net, $("upload-panel"), request => {
-  focusedRequest = request; signature = ""; search.value = ""; filter.value = "all";
+  focusedRequest = request; signature = ""; search.value = ""; filter.value = "all"; syncChips();
   history.replaceState(null, "", `/library.html?request=${encodeURIComponent(request)}`);
   notice("Video saved. Use Watch original to play the stored recording. A 3D scene appears when reconstruction is available."); render();
   [...cards.values()].find(card => card.dataset.request === request)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -123,6 +123,19 @@ mountAuth(net);
 mountSceneImport(net);
 mountScenePublish(net);
 search.oninput = render; filter.onchange = render;
+// Filter chips (they replaced a dropdown) drive the hidden select; arrow keys move between them, as in a radio group.
+const chips = Array.from(document.querySelectorAll<HTMLButtonElement>("#filter-chips [data-filter]"));
+function syncChips() { for (const chip of chips) { const on = chip.dataset.filter === filter.value; chip.setAttribute("aria-checked", String(on)); chip.tabIndex = on ? 0 : -1; } }
+chips.forEach((chip, i) => {
+  chip.onclick = () => { filter.value = chip.dataset.filter ?? "all"; syncChips(); render(); };
+  chip.onkeydown = (event: KeyboardEvent) => {
+    const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
+    if (!step) return;
+    event.preventDefault();
+    const next = chips[(i + step + chips.length) % chips.length]; next.focus(); next.click();
+  };
+});
+syncChips();
 $("copy-library").onclick = () => copyLink(new URL("/library.html", location.origin).href, "Library link copied.");
 $("close-video").onclick = () => dialog.close();
 dialog.onclose = () => { video.pause(); video.removeAttribute("src"); video.load(); };

@@ -14,7 +14,8 @@ Turn a Ray-Ban Meta glasses video into a 3D memory that people relive together i
 apps/web/            viewer (three.js + Spark splats + Rapier), one URL for Quest, phone and desktop
   src/viewer.ts      engine: grab, throw, record, replay (nikko); timeline.ts, tracks.ts, loader.ts, physics.ts
   src/net/           SpacetimeDB client (index.ts) and the viewer↔server adapter (adapter.ts)
-  src/session.ts     room panel: rooms, library, upload, players, avatars
+  src/session.ts     room panel: rooms, "Your memories" cards, upload, players, avatars
+  src/glass.css      shared design tokens (frosted glass, white text) for viewer, library and capture; vr-panel.ts mirrors them
   capture.html       upload and stored-video test page
 server/spacetime/    SpacetimeDB 2.13 TypeScript module: memories, rooms, players, shared clock, takes, grabbing
 server/upload/       upload signing (S3/R2) and local-disk upload service

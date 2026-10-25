@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#101918" />
+    <meta name="theme-color" content="#0a0a0f" />
     <title>memos · Your memories</title>
   </head>
   <body>
     <header class="navigation">
-      <a class="brand" href="/library.html"><span aria-hidden="true">◌</span> memos</a>
+      <a class="brand" href="/library.html"><span class="brand-mark" aria-hidden="true"></span>memos</a>
       <nav aria-label="Main navigation"><a href="/">Explore demo ↗</a><span id="connection" role="status">Connecting…</span></nav>
     </header>
     <main>
@@ -16,7 +16,18 @@
         <div><p class="eyebrow">FROM YOUR GLASSES. BACK INTO THE MOMENT.</p><h1>Keep the moment.<br /><em>Step back inside.</em></h1><p class="intro">Capture on your iPhone with Meta glasses. Follow your video's progress here, then explore the finished scene on the web or in VR.</p></div>
         <ol class="journey" aria-label="How it works"><li><span>01</span><div><strong>Capture</strong><p>Record through the iPhone app.</p></div></li><li><span>02</span><div><strong>Send</strong><p>Stop recording. The app uploads.</p></div></li><li><span>03</span><div><strong>Step inside</strong><p>Open your scene when processing finishes.</p></div></li></ol>
       </section>
-      <section id="auth-bar" class="account-panel" aria-labelledby="account-heading">
+      <div id="notice" class="notice" role="status" hidden></div>
+      <p id="error" role="alert" hidden></p>
+      <div class="workspace">
+        <section class="memories" aria-labelledby="library-heading">
+          <div class="section-heading"><div><p class="eyebrow">YOUR ACCOUNT LIBRARY</p><h2 id="library-heading">Memories <span id="memory-count">0</span></h2></div><span id="live-note">Waiting for connection</span></div>
+          <div class="filters"><label class="sr-only" for="search">Search memories</label><input id="search" type="search" placeholder="Find a moment…" /><select id="filter" hidden aria-hidden="true" tabindex="-1"><option value="all">All memories</option><option value="ready">Ready to explore</option><option value="pending">In progress</option><option value="failed">Needs attention</option><option value="test">Test recordings</option></select></div>
+          <div id="filter-chips" class="filter-chips" role="radiogroup" aria-label="Show"><button type="button" role="radio" aria-checked="true" data-filter="all">All</button><button type="button" role="radio" aria-checked="false" data-filter="ready">Ready to explore</button><button type="button" role="radio" aria-checked="false" data-filter="pending">In progress</button><button type="button" role="radio" aria-checked="false" data-filter="failed">Needs attention</button><button type="button" role="radio" aria-checked="false" data-filter="test">Tests</button></div>
+          <div id="memory-grid" class="memory-grid"></div>
+          <div id="empty" class="empty"><span aria-hidden="true">◌</span><h3>Your next memory starts here.</h3><p>Connect the iPhone app to this backend, or upload an exported video. It will appear here automatically.</p></div>
+        </section>
+        <aside>
+          <section id="auth-bar" class="account-panel" aria-labelledby="account-heading">
           <div class="account-intro"><h2 id="account-heading">Your memos account</h2><p>Use the same name and personal key in the library and the viewer. Signing in here also signs you in on the main page.</p></div>
           <div class="account-row"><span id="auth-status" role="status">Guest · sign in to keep your name</span><button id="auth-signout" type="button" hidden>Sign out</button></div>
           <div id="account-signed-out">
@@ -41,13 +52,12 @@
           <p id="auth-notice" role="status" aria-live="polite"></p>
           <p class="account-help">You can explore the shared demo library as a guest.</p>
         </section>
-      <section class="account-panel import-panel" aria-labelledby="publish-heading">
-        <h2 id="publish-heading">Publish rendered scenes</h2>
-        <p>Upload a reconstructed scene folder to your account for phone, desktop, and Quest sharing. Scene links can be opened by anyone you share them with.</p>
-        <label>Publish scene folder<input id="publish-folder" type="file" webkitdirectory multiple /></label>
-        <button id="publish-scenes" class="primary" disabled>Publish scenes</button>
-        <p id="publish-status" role="status">Sign in above, then choose a folder containing memory.json and its assets.</p>
-      </section>
+          <section class="panel capture-guide"><p class="eyebrow">CAPTURE WITH META GLASSES</p><h2>Record. Stop. Sent.</h2><p>In the iPhone app, connect with Meta AI, start your camera preview, and record. Stopping saves and uploads the clip automatically.</p><p class="muted">Keep the app open through upload. The browser displays results; glasses capture uses the native Meta SDK app.</p><button id="copy-library" class="secondary">Copy this library link</button><p class="small">Sign in with the same personal key on your phone and this page to see your recordings.</p></section>
+          <section class="panel upload-card"><p class="eyebrow">ALREADY HAVE A CLIP?</p><div id="upload-panel"></div><p id="upload-health" role="status">Checking upload service…</p></section>
+          <a class="diagnostics" href="/capture.html">Capture diagnostics ↗</a>
+        </aside>
+      </div>
+      <div class="manage">
       <section id="import-scene" class="account-panel import-panel" aria-labelledby="import-heading">
         <p class="eyebrow">ALREADY RECONSTRUCTED?</p><h2 id="import-heading">Import a 3D memory</h2>
         <p>Choose one <strong>.memos.zip</strong> package or a scene folder containing <strong>memory.json</strong> and its assets. The timeline, camera path, splats, objects, and audio open together. A video or .spz alone does not contain the full time series.</p>
@@ -60,20 +70,13 @@
         <p>Imports belong to your signed-in account and stay on this browser. They are not uploaded or shared with a party. To share across devices, host the scene files and add the HTTPS memory.json URL in the viewer’s party panel.</p>
         <div id="local-scenes-section" hidden><h3>Your imports on this device</h3><ul id="local-scenes"></ul></div>
       </section>
-      <div id="notice" class="notice" role="status" hidden></div>
-      <p id="error" role="alert" hidden></p>
-      <div class="workspace">
-        <section class="memories" aria-labelledby="library-heading">
-          <div class="section-heading"><div><p class="eyebrow">YOUR ACCOUNT LIBRARY</p><h2 id="library-heading">Memories <span id="memory-count">0</span></h2></div><span id="live-note">Waiting for connection</span></div>
-          <div class="filters"><label class="sr-only" for="search">Search memories</label><input id="search" type="search" placeholder="Find a moment…" /><label class="sr-only" for="filter">Filter memories</label><select id="filter"><option value="all">All memories</option><option value="ready">Ready to explore</option><option value="pending">In progress</option><option value="failed">Needs attention</option><option value="test">Test recordings</option></select></div>
-          <div id="memory-grid" class="memory-grid"></div>
-          <div id="empty" class="empty"><span aria-hidden="true">◌</span><h3>Your next memory starts here.</h3><p>Connect the iPhone app to this backend, or upload an exported video. It will appear here automatically.</p></div>
-        </section>
-        <aside>
-          <section class="panel capture-guide"><p class="eyebrow">CAPTURE WITH META GLASSES</p><h2>Record. Stop. Sent.</h2><p>In the iPhone app, connect with Meta AI, start your camera preview, and record. Stopping saves and uploads the clip automatically.</p><p class="muted">Keep the app open through upload. The browser displays results; glasses capture uses the native Meta SDK app.</p><button id="copy-library" class="secondary">Copy this library link</button><p class="small">Sign in with the same personal key on your phone and this page to see your recordings.</p></section>
-          <section class="panel upload-card"><p class="eyebrow">ALREADY HAVE A CLIP?</p><div id="upload-panel"></div><p id="upload-health" role="status">Checking upload service…</p></section>
-          <a class="diagnostics" href="/capture.html">Capture diagnostics ↗</a>
-        </aside>
+      <section class="account-panel import-panel" aria-labelledby="publish-heading">
+        <h2 id="publish-heading">Publish rendered scenes</h2>
+        <p>Upload a reconstructed scene folder to your account for phone, desktop, and Quest sharing. Scene links can be opened by anyone you share them with.</p>
+        <label>Publish scene folder<input id="publish-folder" type="file" webkitdirectory multiple /></label>
+        <button id="publish-scenes" class="primary" disabled>Publish scenes</button>
+        <p id="publish-status" role="status">Sign in above, then choose a folder containing memory.json and its assets.</p>
+      </section>
       </div>
       <footer><span>memos / Cal Hacks</span><span>A video becomes a scene only after reconstruction completes.</span></footer>
     </main>

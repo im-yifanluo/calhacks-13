@@ -86,6 +86,7 @@ uploadPanel(net, $("upload-panel"), selectRecording);
 captureSimulation(net, selectRecording);
 function render() {
   $("connection").textContent = net.status;
+  $("connection").classList.toggle("connected", net.ready);
   $("error").textContent = net.error;
   const memories = net.memories
     .filter((m) => m.sourceUrl)
