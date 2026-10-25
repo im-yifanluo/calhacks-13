@@ -138,7 +138,7 @@ async function main(): Promise<void> {
   element("mode").textContent = demo ? "Sample scene" : "Recorded";
   const grabbable = memory.objects.filter(o => o.definition.grabbable).length;
   element("asset-info").textContent = `${formatTime(duration)} · ${grabbable} ${grabbable === 1 ? "object" : "objects"} to throw`;
-  document.title = `${title} · Memory Replay`;
+  document.title = `${title} · memos`;
   status.textContent = touch ? "Pause, then drag an object where you want it. Play shows what happens."
     : "Pause (Space), then drag an object where you want it. Play shows what happens.";
   loading.hidden = true; element<HTMLFieldSetElement>("timeline-controls").disabled = false;
