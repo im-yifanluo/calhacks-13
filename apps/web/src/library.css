@@ -1,13 +1,13 @@
 @import "./glass.css";
 
 /*
- * memos library: frosted-glass panels over an ambient, low-saturation glow (no 3D scene behind this page).
+ * memos library: the viewer's glass panels on a plain near-black page (no 3D scene behind this page).
  * Tokens come from glass.css. Blur only on top-level surfaces (panels, cards, dialog); anything inside them uses --fill.
  */
 
 /* ---------- Base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
-html { background: #0a0a0f; color-scheme: dark; -webkit-text-size-adjust: 100%; }
+html { background: #0b0b0f; color-scheme: dark; -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
   min-height: 100vh;
@@ -16,19 +16,10 @@ body {
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
-/* Ambient backdrop: three soft glows fixed to the viewport, so the glass has something to frost. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(62vmax 52vmax at 8% 4%, rgba(128, 112, 196, 0.36), transparent 70%),
-    radial-gradient(56vmax 46vmax at 96% 34%, rgba(72, 158, 160, 0.30), transparent 70%),
-    radial-gradient(64vmax 50vmax at 38% 108%, rgba(196, 144, 92, 0.27), transparent 70%),
-    #0a0a0f;
-}
+/* Backdrop: plain near-black, no gradient. With nothing to blur here, panels lift off it with a faint white fill
+   (the tints below) instead of the viewer's dark tint. */
+:root { --glass-tint: rgba(255, 255, 255, 0.045); --glass-tint-strong: rgba(255, 255, 255, 0.065); --glass-solid: #16161b; }
+body::before { content: none; }
 a { color: inherit; text-decoration: none; }
 p a, .account-panel p a { text-decoration: underline; text-underline-offset: 3px; }
 button, input, select { font: inherit; color: inherit; }
@@ -258,26 +249,28 @@ nav > a:hover { background: var(--fill); }
 main { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr);
   gap: 48px;
   align-items: center;
   padding: 48px 0 40px;
 }
+.hero-side { display: grid; gap: var(--space-4); align-content: start; }
+.hero-side .account-panel { margin-top: 0; }
 h1 { font-size: clamp(40px, 5.2vw, 68px); font-weight: 650; letter-spacing: -0.035em; line-height: 1.04; }
 h1 em { font-style: normal; color: var(--text-2); }
-.intro { max-width: 540px; margin-top: var(--space-5); font-size: 17px; line-height: 1.6; color: var(--text-2); }
-.journey { list-style: none; margin: 0; padding: var(--space-6); border-radius: var(--radius-l); display: grid; gap: var(--space-5); }
+.intro { max-width: 540px; margin-top: var(--space-4); font-size: 18px; line-height: 1.5; color: var(--text-2); }
+.journey { list-style: none; margin: 0; padding: var(--space-5); border-radius: var(--radius-l); display: grid; gap: var(--space-4); }
 .journey li { display: flex; gap: var(--space-4); align-items: center; }
 .journey li > span {
   flex: none;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--fill);
   border: 1px solid var(--line);
-  font: 600 13px var(--mono);
+  font: 600 13px var(--font);
   color: var(--text);
 }
 .journey strong { font-size: 15px; font-weight: 600; }
@@ -289,20 +282,14 @@ h1 em { font-style: normal; color: var(--text-2); }
 .account-panel h3 { font-size: 17px; margin-top: var(--space-5); }
 .account-panel p { margin: var(--space-2) 0 var(--space-4); max-width: 680px; font-size: 14px; color: var(--text-2); }
 .account-panel p strong { color: var(--text); font-weight: 600; }
-.account-panel .account-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  align-items: center;
-  justify-content: space-between;
-  margin: var(--space-4) 0;
-  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
-  border-radius: var(--radius-m);
-  background: var(--fill);
-}
-#auth-status { font-size: 14px; font-weight: 500; color: var(--text); overflow-wrap: anywhere; min-width: 0; }
+/* Header row: "Account", the sign-in state, Sign out. */
+.account-panel .account-row { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; margin: 0 0 var(--space-4); }
+.account-panel .account-row h2 { margin-right: auto; font-size: 19px; }
+#auth-status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--text-2); overflow-wrap: anywhere; min-width: 0; }
+#auth-status::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+.account-panel #auth-signout { min-height: 36px; padding: 0 var(--space-3); font-size: 13px; }
 .account-panel .row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
-.account-panel .row > input { flex: 1 1 220px; width: auto; }
+.account-panel .row > input { flex: 1 1 160px; width: auto; }
 .account-panel .row > button { flex: 0 0 auto; }
 .account-panel form { max-width: 600px; }
 .account-panel form > label { margin-bottom: var(--space-2); }
@@ -314,7 +301,6 @@ h1 em { font-style: normal; color: var(--text-2); }
 .account-panel #auth-notice { margin-bottom: 0; color: var(--text); overflow-wrap: anywhere; }
 .account-panel #auth-notice:empty { display: none; }
 .account-panel #auth-notice.error, .import-panel #scene-import-status.error { color: var(--danger); }
-.account-panel .account-help { margin-bottom: 0; font-size: 13px; color: var(--text-3); }
 
 .import-panel > label { margin-top: var(--space-4); max-width: 600px; }
 .import-panel #publish-scenes { margin-top: var(--space-4); }
@@ -377,7 +363,7 @@ h1 em { font-style: normal; color: var(--text-2); }
 /* Status tone per card: ready (default) blue-violet, processing/uploaded teal, failed rose, test/unknown grey. */
 .memory-art {
   position: relative;
-  height: 128px;
+  height: 168px;
   overflow: hidden;
   border-bottom: 1px solid var(--line);
   background:
@@ -436,9 +422,9 @@ h1 em { font-style: normal; color: var(--text-2); }
 @keyframes memos-pulse { 50% { opacity: 0.3; } }
 
 .memory-content { padding: var(--space-4) var(--space-5) var(--space-5); }
-.memory-meta { margin: 0 0 var(--space-1); font-size: 12px; letter-spacing: 0.04em; color: var(--text-3); overflow-wrap: anywhere; }
-.memory-content h3 { margin: 0 0 var(--space-2); font-size: 19px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
-.memory-detail { margin: var(--space-3) 0 var(--space-4); font-size: 14px; color: var(--text-2); overflow-wrap: anywhere; }
+.memory-meta { margin: 0 0 var(--space-4); font-size: 13px; font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.memory-content h3 { margin: 0 0 2px; font-size: 19px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.memory-detail { margin: calc(-1 * var(--space-2)) 0 var(--space-4); font-size: 14px; color: var(--text-2); overflow-wrap: anywhere; }
 .progress-label { display: block; margin: 0 0 var(--space-4); font-size: 13px; color: var(--text-2); }
 .card-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .card-actions .primary, .card-actions .secondary { padding: 0 var(--space-4); font-size: 14px; }
@@ -563,11 +549,9 @@ dialog p { margin-top: var(--space-3); font-size: 13px; color: var(--text-2); }
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
 
-/* Layout: memories first, with sign-in beside them; import and publish tools below. */
-aside .account-panel { margin-top: 0; padding: var(--space-5); }
-aside .account-panel h2 { font-size: 19px; }
-aside .account-panel .row > input { flex-basis: 100%; }
-aside .account-panel .row > button { flex: 1 1 auto; }
+/* Layout: the hero (account + steps), then memories with capture and upload beside them; import and publish below. */
+.hero-side .account-panel { padding: var(--space-5); }
+#empty #seed-local { margin-top: var(--space-4); }
 .manage { display: grid; gap: var(--space-5); padding-bottom: var(--space-6); }
 .manage .account-panel { margin-top: 0; }
 
@@ -593,3 +577,9 @@ aside .account-panel .row > button { flex: 1 1 auto; }
 /* Polish: text buttons line up with the other actions; the hover lift moves only the art, so the hit box stays put. */
 .card-actions .text-button { padding-inline: 0; }
 @media (hover: hover) { .memory-card:has(.card-actions a.primary):hover { transform: none; border-color: rgba(255, 255, 255, 0.32); } }
+
+/* The scene snapshot (preview.jpg) fills the card art; a soft shade at the bottom keeps the status badge readable. */
+.memory-shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 45%; }
+.memory-card.has-shot .orbit { display: none; }
+.memory-card.has-shot .memory-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10, 10, 15, 0) 45%, rgba(10, 10, 15, 0.6)); pointer-events: none; }
+.memory-card .status-badge { z-index: 1; }

@@ -13,6 +13,21 @@ export function httpURL(value: string, base: string): URL | undefined {
   } catch { /* Untrusted or incomplete backend URL. */ }
 }
 
+/**
+ * A ready memory's preview: a snapshot of its Gaussian-splat scene, preview.jpg next to its memory.json
+ * (pipeline/tools/preview.js renders it). Memories without one keep their plain card art.
+ */
+export function previewUrl(memory: MemoryState, origin: string): string | undefined {
+  if (memory.status !== "ready") return;
+  const manifest = httpURL(memory.manifestUrl, origin);
+  const url = manifest ? new URL("preview.jpg", manifest).href : undefined;
+  return url && !missingPreviews.has(url) ? url : undefined;
+}
+
+/** Previews that failed to load: re-rendered cards do not ask for them again. */
+const missingPreviews = new Set<string>();
+export function previewMissing(url: string): void { missingPreviews.add(url); }
+
 export function viewerLink(memory: MemoryState, origin: string): string | undefined {
   if (memory.status !== "ready") return;
   const manifest = httpURL(memory.manifestUrl, origin);

@@ -1,9 +1,10 @@
 import { mountScenePublish } from "./scene-publish";
 import { Multiplayer, type Memory } from "./net";
 import { uploadPanel } from "./upload";
-import { httpURL, memoryPresentation, viewerLink } from "./library-state";
+import { httpURL, memoryPresentation, previewMissing, previewUrl, viewerLink } from "./library-state";
 import { mountAuth } from "./auth";
 import "./library.css";
+import { localMemoryUrls, seedLocalMemories, seedSummary } from "./dev-seed";
 import { mountSceneImport } from "./scene-import";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -27,12 +28,21 @@ function memoryCard(memory: Memory) {
   card.classList.toggle("selected", memory.requestId === focusedRequest);
   const art = element("div", "memory-art");
   art.append(element("span", "orbit", "◌"), element("span", "status-badge", presentation.label));
+  // A snapshot of the rendered splat scene, when the memory has one; otherwise the plain art stays.
+  const preview = previewUrl(memory, location.origin);
+  if (preview) {
+    const shot = element("img", "memory-shot");
+    shot.alt = ""; shot.loading = "lazy"; shot.decoding = "async";
+    shot.onload = () => card.classList.add("has-shot");
+    shot.onerror = () => { previewMissing(preview); shot.remove(); };
+    shot.src = preview;
+    art.prepend(shot);
+  }
   const content = element("div", "memory-content");
-  content.append(element("p", "memory-meta", `MEMORY ${memory.id} · ${Math.round(Number(memory.durationUs) / 1e6)} SEC`), element("h3", "", memory.title));
-  const owner = net.connection?.db.profile.identity.find(memory.owner);
-  content.append(element("p", "memory-meta", `By ${owner?.displayName || "Guest"} · ${memory.owner.toHexString().slice(0, 8)}`));
-  const detail = element("p", "memory-detail", presentation.detail);
-  content.append(detail);
+  // Title and length; the status badge says the rest, and a sentence only when something needs attention.
+  const seconds = Math.max(0, Math.floor(Number(memory.durationUs) / 1e6));
+  content.append(element("h3", "", memory.title), element("p", "memory-meta", `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`));
+  if (presentation.tone !== "ready") content.append(element("p", "memory-detail", presentation.detail));
   if (memory.status === "processing") {
     const label = element("label", "progress-label", `${presentation.progress}% reconstructed`);
     const progress = element("progress"); progress.max = 100; progress.value = presentation.progress;
@@ -104,7 +114,11 @@ function render() {
     if (visible) count++;
   }
   $("empty").hidden = count > 0;
-  $("empty").querySelector("h3")!.textContent = memories.length ? "No matching memories." : "Your next memory starts here.";
+  $("empty").querySelector("h3")!.textContent = memories.length ? "Nothing matches." : "No memories yet.";
+  $("empty").querySelector("p")!.hidden = memories.length > 0;
+  // Dev only (dataset.count is set when local scenes exist): offered only while the library is empty.
+  const seed = document.getElementById("seed-local");
+  if (seed) seed.hidden = memories.length > 0 || !Number(seed.dataset.count);
 }
 
 uploadPanel(net, $("upload-panel"), request => {
@@ -117,7 +131,7 @@ uploadPanel(net, $("upload-panel"), request => {
 const fields = document.createElement("fieldset"); fields.id = "upload-fields";
 while ($("upload-panel").firstChild) fields.append($("upload-panel").firstChild!);
 $("upload-panel").append(fields);
-const gate = element("p", "upload-gate", "Sign in above with your name or personal key to upload a video."); gate.id = "upload-gate";
+const gate = element("p", "upload-gate", "Sign in first."); gate.id = "upload-gate";
 $("upload-panel").prepend(gate);
 mountAuth(net);
 mountSceneImport(net);
@@ -140,8 +154,36 @@ $("copy-library").onclick = () => copyLink(new URL("/library.html", location.ori
 $("close-video").onclick = () => dialog.close();
 dialog.onclose = () => { video.pause(); video.removeAttribute("src"); video.load(); };
 net.addEventListener("change", render);
+// Dev only: fill this account's library with every scene in public/memories (also ?seed=local).
+const seedButton = $<HTMLButtonElement>("seed-local");
+let localCount = 0, seedPending = new URL(location.href).searchParams.get("seed") === "local";
+async function seedLocal() {
+  seedButton.disabled = true;
+  try {
+    const result = await seedLocalMemories(net, (done, total) => { seedButton.textContent = `Loading ${done} of ${total}…`; });
+    notice(seedSummary(result));
+  } catch (error) {
+    notice(`Could not load local memories: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    seedButton.disabled = false; seedButton.textContent = `Load local memories (${localCount})`;
+    render();
+  }
+}
+function runPendingSeed() {
+  if (!seedPending || !net.ready || !localCount) return;
+  // Once is enough: a reload should not run it again.
+  seedPending = false;
+  const url = new URL(location.href); url.searchParams.delete("seed"); history.replaceState(history.state, "", url);
+  void seedLocal();
+}
+seedButton.onclick = () => void seedLocal();
+void localMemoryUrls().then(urls => {
+  localCount = urls.length; seedButton.dataset.count = String(urls.length); seedButton.textContent = `Load local memories (${urls.length})`;
+  render(); runPendingSeed();
+});
+net.addEventListener("change", runPendingSeed);
 addEventListener("pagehide", () => net.dispose(), { once: true });
 net.connect(); render();
 fetch(`${import.meta.env.VITE_UPLOAD_API || ""}/api/health`, { signal: AbortSignal.timeout(5000) })
   .then(async response => { if (!response.ok || (await response.json()).status !== "ok") throw new Error(); $("upload-health").textContent = "Upload service connected."; })
-  .catch(() => { $("upload-health").textContent = "Upload service is unavailable. Viewing existing memories still works; connect the upload API before sending new clips."; });
+  .catch(() => { $("upload-health").textContent = "Upload service is offline. Your memories still open."; });

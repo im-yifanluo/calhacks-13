@@ -19,7 +19,7 @@ export function mountScenePublish(net: Multiplayer) {
         const subset = Object.fromEntries(Object.entries(files).filter(([p]) => p.startsWith(base)));
         return { pkg: { files: subset, manifests: [manifest] }, manifest, requestId: crypto.randomUUID(), done: false };
       });
-      status.textContent = jobs.length ? `${jobs.length} scenes selected. Publish to make them available on your other devices and in shared rooms.` : 'Choose a folder containing memory.json and its assets.';
+      status.textContent = jobs.length ? `${jobs.length} scenes selected. Publish to share them.` : 'Choose a folder with memory.json.';
     } catch (e) { jobs = []; status.textContent = String(e); }
     gate();
   };
@@ -59,8 +59,8 @@ export function mountScenePublish(net: Multiplayer) {
         }
         await post('complete', { receipt }); job.done = true;
       }
-      status.textContent = `${jobs.length} scenes published and registered in your account. Open them from Memories below, then create a party to share.`;
-    } catch (e) { status.textContent = `${e instanceof Error ? e.message : e} You can press Publish to resume without re-uploading completed files.`; }
+      status.textContent = `${jobs.length} scenes published. Find them under Memories.`;
+    } catch (e) { status.textContent = `${e instanceof Error ? e.message : e} Press Publish to resume.`; }
     finally { busy = false; gate(); }
   };
   net.addEventListener('change', gate); gate();

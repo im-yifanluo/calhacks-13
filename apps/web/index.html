@@ -115,7 +115,7 @@
         <form id="party-join-form" class="group" aria-label="Join a party" novalidate>
           <label class="field" for="room-code">Party code</label>
           <div class="row join"><input id="room-code" placeholder="Enter party code" maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" aria-describedby="party-code-help" /><button id="room-join" type="submit" class="primary" disabled>Join party</button></div>
-          <p id="party-code-help">Enter the host’s 7-character code. Use the same app address on both devices.</p>
+          <p id="party-code-help">Ask the host for their 7-character code.</p>
           <button id="room-solo" type="button" class="wide">Explore solo</button>
         </form>
         <p id="room-message" role="status"></p>
@@ -123,19 +123,19 @@
         <div id="party-code-share" class="group" hidden>
           <span>Your party code</span>
           <div class="row"><strong id="party-current-code"></strong><button id="party-copy-code" type="button">Copy code</button></div>
-          <p>Share this code or the invite link below.</p>
+          <p>Share the code or the invite link.</p>
         </div>
         <section id="auth-bar" class="group" aria-label="Account">
-          <div class="account-row"><span id="auth-status" role="status">Guest · sign in to keep your name</span><button id="auth-signout" type="button" hidden>Sign out</button></div>
+          <div class="account-row"><span id="auth-status" role="status">Guest</span><button id="auth-signout" type="button" hidden>Sign out</button></div>
           <div id="account-signed-out">
             <form id="account-create" novalidate>
               <label for="account-name">Sign-in name</label>
-              <div class="row"><input id="account-name" maxlength="40" autocomplete="nickname" placeholder="Your name" /><button type="submit" data-account-action="create">Sign in with name</button></div>
-              <p>Get a personal key to keep this identity and sign in on another device.</p>
+              <div class="row"><input id="account-name" maxlength="40" autocomplete="nickname" placeholder="Your name" /><button type="submit" data-account-action="create">Sign in</button></div>
+              <p>You get a key to sign in on your other devices.</p>
             </form>
-            <details><summary>I have a personal key</summary>
+            <details><summary>I have a key</summary>
               <form id="account-login" novalidate>
-                <label for="account-key-input">Personal sign-in key</label>
+                <label for="account-key-input">Your key</label>
                 <input id="account-key-input" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="16384" placeholder="Paste your memos1. key" />
                 <button type="submit" data-account-action="login">Sign in with key</button>
               </form>
@@ -143,8 +143,8 @@
           </div>
           <div id="account-signed-in" hidden>
             <p id="account-id"></p>
-            <div class="row"><button id="account-copy-key" type="button">Copy personal key</button><button id="account-save-key" type="button">Save key file</button></div>
-            <p>Keep your key private, like a password. Anyone with it can sign in as you. A lost key cannot be recovered by name.</p>
+            <div class="row"><button id="account-copy-key" type="button">Copy key</button><button id="account-save-key" type="button">Save key file</button></div>
+            <p>Your key signs you in anywhere. Keep it private.</p>
           </div>
           <p id="auth-notice" role="status" aria-live="polite"></p>
         </section>
@@ -159,7 +159,7 @@
           <strong id="room-label">Explore solo or join a party</strong>
           <p id="party-role" role="status"></p>
           <label id="party-speed-label" class="field" hidden>Playback speed<select id="party-speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
-          <p id="party-scene-status" role="status">Synthetic demo available. Your video can be attached when a reconstruction worker is connected.</p>
+          <p id="party-scene-status" role="status">Create a party to watch together, or join one with a code.</p>
           <progress id="party-progress" max="1" value="0" hidden aria-label="Scene reconstruction progress"></progress>
           <ul id="room-people" aria-label="People in this party"></ul>
           <div class="row"><button id="room-copy-link" disabled>Copy invite link</button><button id="room-leave" disabled>Leave</button></div>
@@ -177,6 +177,7 @@
           <label class="field">memory.json link<input id="library-url" type="url" placeholder="Leave blank for the sample" /></label>
           <div class="row"><button id="library-add" disabled>Add to library</button><button id="upload-toggle" aria-expanded="false" aria-controls="upload-panel">Upload a video</button></div>
           <div id="upload-panel" hidden></div>
+          <button id="library-seed" type="button" class="wide" hidden>Load local memories</button>
           <p><a href="/capture.html">Capture test page</a></p>
         </details>
         <p id="library-errors" role="status"></p>
