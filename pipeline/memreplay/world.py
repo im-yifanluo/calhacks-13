@@ -80,7 +80,7 @@ def horizontal_planes(P: np.ndarray, up: np.ndarray, max_tilt_deg: float = 30.0,
 
 
 def choose_floor(planes: list[dict], cam_pos: np.ndarray, P: np.ndarray | None = None,
-                 up_prior: np.ndarray | None = None) -> dict | None:
+                 up_prior: np.ndarray | None = None, expected_h: float | None = None) -> dict | None:
     """Horizontal surfaces (floor, tables, seats) share one normal. Group the planes by normal (8 deg) and try the
     groups by total support; in a group take the lowest plane with real support that leaves the cameras 0.4-2.6 m
     above it and has almost nothing below it: at most 10 % of all points more than 0.1 m below (depth noise, the
@@ -89,6 +89,29 @@ def choose_floor(planes: list[dict], cam_pos: np.ndarray, P: np.ndarray | None =
     None when no plane qualifies: the caller then assumes the camera was held at the expected height."""
     if not planes:
         return None
+
+    def floor_like(p: dict) -> bool:
+        p["below_frac"] = float(np.mean(P @ p["n"] - p["d"] < -0.10)) if P is not None else 0.0
+        tilt = float(np.degrees(np.arccos(np.clip(p["n"] @ up_prior, -1, 1)))) if up_prior is not None else 0.0
+        return p["below_frac"] <= 0.10 or (p["below_frac"] <= 0.25 and tilt <= 12.0)
+
+    # With a known camera height (the device's eye height), prefer the lowest floor-like plane that puts the camera
+    # within 0.6-1.6x of it: a stage top or a seat has the right normal and little below it, but leaves the camera
+    # far too low (the stage clip: 1.13 m seen vs 1.75 m expected).
+    if expected_h is not None:
+        top = max(p["count"] for p in planes)
+        dom = max(planes, key=lambda p: p["count"])["n"]
+        pref = []
+        for p in planes:
+            h = float(np.median(cam_pos @ p["n"] - p["d"]))
+            level = p["n"] @ dom > np.cos(np.radians(8)) or (up_prior is not None and p["n"] @ up_prior > np.cos(np.radians(12)))
+            fl = floor_like(p)
+            print(f"[world] floor candidate h={p['d']:+.2f} n={p['count']} cam_above={h:.2f} ratio={expected_h / h:.2f} "
+                  f"level={bool(level)} floor_like={fl} below={p['below_frac']:.2f}")
+            if level and p["count"] >= max(800, 0.2 * top) and 0.4 < h < 2.6 and fl and 0.6 <= expected_h / h <= 1.6:
+                pref.append((p["d"], p))
+        if pref:
+            return min(pref, key=lambda x: x[0])[1]
     groups: list[list[dict]] = []
     for p in sorted(planes, key=lambda p: -p["count"]):
         for g in groups:
@@ -288,7 +311,7 @@ def run(work: Path) -> WorldInfo:
     if len(P) > 300_000:
         P = P[rng.choice(len(P), 300_000, replace=False)]
     planes = horizontal_planes(P, up_cam, max_tilt_deg=40.0, n_planes=10)
-    floor = choose_floor(planes, cam_pos, P, up_cam)
+    floor = choose_floor(planes, cam_pos, P, up_cam, expected_h if cap else None)
     diag["planes"] = [{"height": p["d"], "count": p["count"], "rms": p["rms"], "below_frac": p.get("below_frac"),
                        "tilt_from_prior_deg": float(np.degrees(np.arccos(np.clip(p["n"] @ up_cam, -1, 1))))}
                       for p in planes]

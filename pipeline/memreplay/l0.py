@@ -230,13 +230,16 @@ def ghosts(work: Path, v: Vipe, wp: WorldPoses, frames: FramesInfo) -> list[Dyna
                 pick = rng.choice(len(pts), per_frame, replace=False)
                 pts, vv, uu = pts[pick], vv[pick], uu[pick]
             seqs[k].append((transform(wp.c2w(idx), pts), rgb[vv, uu]))
-    from .cleanup import keep_ghost
+    from .cleanup import keep_ghost, trim_frames
+    from .objects import Support
 
+    ground = Support(work)                                    # the collider's height under a person (a stage counts)
     out = []
     (work / "world" / "ghosts").mkdir(parents=True, exist_ok=True)
     real = []
     for k in range(len(tracks)):
-        ok, why = keep_ghost(seqs[k], hz)
+        seqs[k] = trim_frames(seqs[k])
+        ok, why = keep_ghost(seqs[k], hz, ground=ground)
         if ok:
             real.append(k)
         else:

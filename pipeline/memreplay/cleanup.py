@@ -102,24 +102,50 @@ def prune_file(splat: Path, path_xyz: np.ndarray, cams: list | None = None, min_
     return len(data), int(keep.sum())
 
 
-def keep_ghost(frames: list, hz: float) -> tuple[bool, str]:
-    """frames: [(xyz, rgb)] per keyframe from read_points_sequence. A real person is 0.7-2.8 m tall (depth noise included) and either
-    stays in view for >= 1 s or clearly moves (>= 0.5 m); a patterned wall mistaken for a person is static and
-    brief. Floating "people" (lowest point > 0.6 m up) are ceiling fixtures or signs."""
+def trim_frame(q: np.ndarray, radius: float = 1.0) -> np.ndarray:
+    """A person's points within `radius` (xz) of their median: the mask often bleeds onto the wall or floor behind
+    them, which lands metres away in 3D and stretches the ghost."""
+    if len(q) < 10:
+        return q
+    med = np.median(q, 0)
+    keep = np.hypot(q[:, 0] - med[0], q[:, 2] - med[2]) < radius
+    return q[keep] if keep.sum() >= 10 else q
+
+
+def trim_frames(frames: list, radius: float = 1.0) -> list:
+    out = []
+    for p, c in frames:
+        if len(p) < 10:
+            out.append((p, c))
+            continue
+        q = np.asarray(p, float)
+        med = np.median(q, 0)
+        keep = np.hypot(q[:, 0] - med[0], q[:, 2] - med[2]) < radius
+        out.append((q[keep], np.asarray(c)[keep]) if keep.sum() >= 10 else (p, c))
+    return out
+
+
+def keep_ghost(frames: list, hz: float, ground=None) -> tuple[bool, str]:
+    """frames: [(xyz, rgb)] per keyframe from read_points_sequence. A real person is 0.5-3.2 m tall (seated and
+    partly hidden people included, depth noise included) and either stays in view for >= 1 s or clearly moves
+    (>= 0.5 m); a patterned wall mistaken for a person is static and brief. "People" whose lowest point is > 0.6 m
+    above the ground under them are ceiling fixtures or signs; `ground(x, z)` is the room collider's height there
+    (a stage, a step), 0 without one."""
     vis = [i for i, (p, _) in enumerate(frames) if len(p) >= 50]
     if not vis:
         return False, "never seen"
     lows, heights, centres = [], [], []
     for i in vis:
-        q = np.asarray(frames[i][0], float)
+        q = trim_frame(np.asarray(frames[i][0], float))
         lows.append(np.percentile(q[:, 1], 3))
         heights.append(np.percentile(q[:, 1], 97) - np.percentile(q[:, 1], 3))
         centres.append(np.median(q, 0))
     h = float(np.percentile(heights, 75))
-    if not 0.7 <= h <= 2.8:      # ViPE's depth stretches a person seen across a lobby; keep them
+    if not 0.5 <= h <= 3.2:
         return False, f"{h:.2f} m tall"
-    if np.median(lows) > 0.6:
-        return False, f"floats {np.median(lows):.2f} m above the floor"
+    above = [lo - (ground(float(c[0]), float(c[2])) if ground is not None else 0.0) for lo, c in zip(lows, centres)]
+    if np.median(above) > 0.6:
+        return False, f"floats {np.median(above):.2f} m above the ground"
     moved = float(np.linalg.norm(centres[-1] - centres[0])) if len(centres) > 1 else 0.0
     if len(vis) / hz < 1.0 and moved < 0.5:
         return False, f"seen {len(vis) / hz:.1f} s and static"
