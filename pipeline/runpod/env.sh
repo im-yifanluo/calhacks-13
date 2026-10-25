@@ -12,7 +12,7 @@ export UV_CACHE_DIR=$WS/cache/uv
 export UV_PYTHON_INSTALL_DIR=$WS/cache/uv-python   # uv-managed Pythons must survive stops too
 export UV_PYTHON_PREFERENCE=only-managed  # never the image's Debian Python: conda's gcc can't find its split pyconfig.h
 export TORCH_EXTENSIONS_DIR=$WS/cache/torch_extensions   # JIT-built CUDA code (if any) must survive stops
-export TORCH_CUDA_ARCH_LIST="8.0;8.9;9.0"   # build CUDA code for A100, L40S and H100 (envs are shared on the volume)
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.0;8.9;9.0}"   # preserve an H100-only override such as 9.0
 [ -f "$WS/secrets.sh" ] && source "$WS/secrets.sh"   # HF_TOKEN, ANTHROPIC_API_KEY (never commit)
 
 if [ -f "$WS/miniforge3/etc/profile.d/conda.sh" ]; then

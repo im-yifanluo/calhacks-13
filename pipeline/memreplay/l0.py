@@ -16,8 +16,9 @@ from .world import WorldPoses
 ROOM_MAX_DEPTH = 7.0
 ROOM_CAP = 300_000
 ROOM_FRAMES = 360            # frames sampled for the room points
-GHOST_BYTES_BUDGET = 24e6    # all ghost files together; keeps the memory light enough for a phone
+GHOST_BYTES_BUDGET = 48e6    # all ghost files together (doubled from 24e6 for denser people); still light enough for a phone
 GHOST_MAX_PTS = 12_000
+GHOST_MAX_DEPTH = 30.0   # m; outdoors the people that matter walk 10-30 m away (was 8 m, tuned on rooms)
 
 
 # --- room points -------------------------------------------------------------------------------------
@@ -224,7 +225,7 @@ def ghosts(work: Path, v: Vipe, wp: WorldPoses, frames: FramesInfo) -> list[Dyna
                 touch = np.unique(lab[dilate(body, 3) & hands])
                 body |= np.isin(lab, touch[touch > 0])
             area = int(body.sum())
-            sel = erode(body, 3 if area > 20000 else 1) & ~edges & (d < 8)
+            sel = erode(body, 3 if area > 20000 else 1) & ~edges & (d < GHOST_MAX_DEPTH)
             pts, vv, uu = backproject(d, v.K(idx), sel, stride=1)
             if len(pts) > per_frame:
                 pick = rng.choice(len(pts), per_frame, replace=False)

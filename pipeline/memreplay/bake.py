@@ -20,6 +20,12 @@ from pathlib import Path
 import numpy as np
 
 
+# A per-clip fit (viewer_gain.py) made the glasses rooms slightly worse against the video (-0.3 dB), so the
+# default is identity; a fit is applied only when world/viewer_gain.json exists.
+VIEWER_GAIN_DEFAULT = [1.0, 1.0, 1.0]
+VIEWER_BIAS_DEFAULT = [0.0, 0.0, 0.0]
+
+
 def latest_ckpt(work: Path) -> Path | None:
     cks = sorted(glob.glob(str(work / "gsplat_static" / "ckpts" / "ckpt_*_rank0.pt")),
                  key=lambda p: int(Path(p).stem.split("_")[1]))
@@ -73,12 +79,16 @@ def run(work: Path) -> Path | None:
         gain, bias, note, per_view = calibrate(work, splats, rgb)
         # the viewer's own colour gap (pipeline/tools/viewer_gain.py: Spark composites brighter and warmer than
         # gsplat), folded into the export so free mode is right too
-        vg, vb = torch.ones(3), torch.zeros(3)
+        # measured on the glasses clips (o3329, o3328, v71; stage, rotunda, lawn): Spark draws these rooms about
+        # 25 % brighter and redder than the video; the per-clip fit wins when it exists
+        vg, vb = torch.tensor(VIEWER_GAIN_DEFAULT), torch.tensor(VIEWER_BIAS_DEFAULT)
         vfile = work / "world" / "viewer_gain.json"
         if vfile.exists():
             vj = json.loads(vfile.read_text())
             vg, vb = torch.tensor(vj["gain"], dtype=torch.float32), torch.tensor(vj["bias"], dtype=torch.float32)
             note += f"; viewer gain {vj['gain']} bias {vj['bias']}"
+        else:
+            note += "; default viewer gain"
         g_all, b_all = gain * vg, bias * vg + vb                 # the whole chain, raw -> exported
         rgb = (rgb * g_all + b_all).clamp(0, 1).unsqueeze(1)    # [N, 1, 3]
         # each training frame's own exposure, relative to the export: y = gi x + bi with x = (xe - b_all) / g_all

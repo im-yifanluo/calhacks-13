@@ -21,6 +21,7 @@ __pycache__/
 server/spacetime/target/
 # agents
 .claude
+.flash/
 # memories copied from the pod for local viewing (big files)
 apps/web/public/memories/
 # local test manifests and assets (generated, never committed)

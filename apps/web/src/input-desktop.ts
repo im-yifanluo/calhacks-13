@@ -26,10 +26,12 @@ export function dragPoint(ray: THREE.Ray, plane: THREE.Plane, out: THREE.Vector3
  * Pressing an object holds the camera still; the grab starts only once the press moves or is held (pressStartsGrab).
  * The viewer keeps the held object above the floor.
  */
-export function desktopInput(canvas: HTMLCanvasElement, camera: THREE.Camera, controls: OrbitControls, viewer: Viewer): void {
+export function desktopInput(canvas: HTMLCanvasElement, camera: THREE.Camera, controls: OrbitControls, viewer: Viewer,
+  canGrab: () => boolean = () => true, canMoveCamera?: () => boolean): void {
   const ray = new THREE.Raycaster(), pointer = new THREE.Vector2(), plane = new THREE.Plane();
   const hitPoint = new THREE.Vector3(), offset = new THREE.Vector3(), normal = new THREE.Vector3(), grabPoint = new THREE.Vector3();
   let activePointer: number | null = null, version = 0, lastMove = 0;
+  let controlsBeforeGrab = controls.enabled;
   /** A press on an object that has not turned into a grab yet. */
   let press: { objectId: string; x: number; y: number; at: number; timer: ReturnType<typeof setTimeout> } | null = null;
   function updateRay(event: PointerEvent) {
@@ -38,14 +40,14 @@ export function desktopInput(canvas: HTMLCanvasElement, camera: THREE.Camera, co
     ray.setFromCamera(pointer, camera);
   }
   canvas.addEventListener("pointerdown", event => {
-    if (event.button !== 0 || viewer.timeline.playing || activePointer !== null) return;
+    if (event.button !== 0 || viewer.timeline.playing || viewer.timeline.time >= viewer.timeline.duration || activePointer !== null || !canGrab()) return;
     updateRay(event);
     const hit = viewer.pick(ray);
     if (!hit) return;
     event.stopImmediatePropagation(); event.preventDefault();
     // If the browser refuses the capture (an unknown pointer id), drop the press instead of leaving input stuck.
     try { canvas.setPointerCapture(event.pointerId); } catch { return; }
-    controls.enabled = false; activePointer = event.pointerId;
+    controlsBeforeGrab = controls.enabled; controls.enabled = false; activePointer = event.pointerId;
     grabPoint.copy(hit.point);
     press = { objectId: hit.object.userData.objectId, x: event.clientX, y: event.clientY, at: performance.now(), timer: setTimeout(() => void begin(), HOLD_START_MS) };
   }, { capture: true });
@@ -79,7 +81,9 @@ export function desktopInput(canvas: HTMLCanvasElement, camera: THREE.Camera, co
     if (press) { clearTimeout(press.timer); press = null; } // a tap: nothing was grabbed
     const pointerId = activePointer; activePointer = null;
     // Time is paused: the object stays where it was let go until Play, keeping the throw the drag gave it.
-    viewer.place(); controls.enabled = true;
+    viewer.place();
+    // A blur/Escape outside a grab must not unlock wearer/XR mode. A mode may also change mid-grab.
+    if (pointerId !== null) controls.enabled = canMoveCamera?.() ?? controlsBeforeGrab;
     if (pointerId !== null && canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
   }
   for (const name of ["pointerup", "pointercancel", "lostpointercapture"] as const) {

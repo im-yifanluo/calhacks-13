@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { SplatMesh } from "@sparkjsdev/spark";
+import { SplatMesh, type SplatFileType } from "@sparkjsdev/spark";
 import type { DynamicObject, Keyframe, MemoryManifest } from "@memreplay/shared";
 import { tuple, validateTrack } from "./tracks.js";
 
@@ -158,8 +158,8 @@ export function createPointsSequence(visual: PointsVisual, buffer: ArrayBuffer, 
 const isIdentity = (track: Keyframe[]) => track.every(f => f.p.every(x => Math.abs(x) < 1e-6) &&
   Math.abs(Math.abs(f.q[3]) - Math.hypot(...f.q)) < 1e-6 && Math.abs((f.s ?? 1) - 1) < 1e-6);
 
-async function track(value: Keyframe[] | { url: string }, base: string, label: string): Promise<Keyframe[]> {
-  const data = Array.isArray(value) ? value : await json(new URL(value.url, base).href);
+async function track(value: Keyframe[] | { url: string }, resolveAsset: (url: string) => string, label: string): Promise<Keyframe[]> {
+  const data = Array.isArray(value) ? value : await json(resolveAsset(value.url));
   validateTrack(data, label);
   return data;
 }
@@ -210,15 +210,15 @@ export function primitiveGeometry(v: Extract<DynamicObject["visual"], { kind: "p
   return new THREE.BoxGeometry(x, y, z);
 }
 
-async function splat(url: string): Promise<SplatMesh> {
-  const mesh = new SplatMesh({ url, raycastable: false });
+async function splat(url: string, format?: string): Promise<SplatMesh> {
+  const mesh = new SplatMesh({ url, fileType: format && format !== "sog" ? format as SplatFileType : undefined, raycastable: false });
   try { await mesh.initialized; return mesh; }
   catch (error) { mesh.dispose(); throw error; }
 }
 
 /** Only three sequence frames are retained, with one request in flight. No unbounded GPU cache. */
 function sequence(root: THREE.Group, visual: Extract<DynamicObject["visual"], { kind: "splat-sequence" }>,
-  base: string, start: number, hz: number, warn: (message: string) => void) {
+  resolveAsset: (url: string) => string, start: number, hz: number, warn: (message: string) => void) {
   const cache = new Map<number, SplatMesh>();
   const failed = new Set<number>();
   let pending = false, disposed = false, desired = 0;
@@ -228,7 +228,7 @@ function sequence(root: THREE.Group, visual: Extract<DynamicObject["visual"], { 
     if (cache.has(desired) || pending || failed.has(desired) || disposed) return;
     const index = desired;
     pending = true;
-    void splat(new URL(visual.urlPattern.replace("{frame}", String(index)), base).href).then(mesh => {
+    void splat(resolveAsset(visual.urlPattern.replace("{frame}", String(index))), visual.format).then(mesh => {
       if (disposed) { mesh.dispose(); return; }
       root.add(mesh); cache.set(index, mesh); mesh.visible = index === desired;
       while (cache.size > 3) {
@@ -242,9 +242,12 @@ function sequence(root: THREE.Group, visual: Extract<DynamicObject["visual"], { 
   return { update, dispose: () => { disposed = true; } };
 }
 
-export async function loadMemory(url: string, demo = false, onWarning: (message: string) => void = () => {}): Promise<LoadedMemory> {
+export interface MemorySource { manifest: MemoryManifest; resolveAsset: (path: string) => string }
+
+export async function loadMemory(url: string, demo = false, onWarning: (message: string) => void = () => {}, source?: MemorySource): Promise<LoadedMemory> {
   const base = new URL(url, location.href).href;
-  const manifest = await json(base) as MemoryManifest;
+  const manifest = source?.manifest ?? await json(base) as MemoryManifest;
+  const resolveAsset = source?.resolveAsset ?? ((path: string) => new URL(path, base).href);
   validateManifest(manifest);
   if (!demo && manifest.background.splatCount > 1_000_000) throw new Error("Background exceeds the 1,000,000-splat safety limit. Reduce it in the pipeline.");
   const root = new THREE.Group();
@@ -252,7 +255,7 @@ export async function loadMemory(url: string, demo = false, onWarning: (message:
   const cleanups: (() => void)[] = [];
   const warn = (message: string) => { warnings.push(message); onWarning(message); };
   try {
-    const cameraTrack = await track(manifest.camera.track, base, "camera");
+    const cameraTrack = await track(manifest.camera.track, resolveAsset, "camera");
     if (demo) {
       const bg = new SplatMesh({ constructSplats: packed => {
         const scale = new THREE.Vector3(0.045, 0.045, 0.045), rotation = new THREE.Quaternion();
@@ -264,19 +267,22 @@ export async function loadMemory(url: string, demo = false, onWarning: (message:
       } });
       await bg.initialized; root.add(bg);
     } else {
-      root.add(await splat(new URL(manifest.background.url, base).href));
+      root.add(await splat(resolveAsset(manifest.background.url), manifest.background.format));
     }
     const roomGeometry: GeometryData[] = [];
     if (manifest.background.colliderUrl) {
-      const room = (await gltf.loadAsync(new URL(manifest.background.colliderUrl, base).href)).scene;
+      const room = (await gltf.loadAsync(resolveAsset(manifest.background.colliderUrl))).scene;
       roomGeometry.push(...meshGeometry(room)); disposeObject(room);
     }
     const objects: LoadedObject[] = [];
     for (const definition of manifest.objects) {
+      // Omit plain placeholder shapes entirely: no visual, pick target, or physics body.
+      // Keep these interactive shapes only in the built-in practice demo.
+      if (!demo && definition.visual.kind === "primitive") continue;
       const group = new THREE.Group(); group.name = definition.id; root.add(group);
-      const loaded: LoadedObject = { definition, root: group, track: await track(definition.track, base, definition.id) };
+      const loaded: LoadedObject = { definition, root: group, track: await track(definition.track, resolveAsset, definition.id) };
       if (definition.collider.kind === "convex") {
-        const hull = (await gltf.loadAsync(new URL(definition.collider.url, base).href)).scene;
+        const hull = (await gltf.loadAsync(resolveAsset(definition.collider.url))).scene;
         const parts = meshGeometry(hull);
         loaded.hull = new Float32Array(parts.reduce((n, part) => n + part.vertices.length, 0));
         let offset = 0;
@@ -287,23 +293,20 @@ export async function loadMemory(url: string, demo = false, onWarning: (message:
         const color = definition.id === "ball-1" ? 0xffb975 : 0x7edbd1;
         group.add(new THREE.Mesh(proxyGeometry(definition.collider), new THREE.MeshStandardMaterial({ color, roughness: 0.32, metalness: 0.15 })));
       } else if (definition.visual.kind === "splat-sequence") {
-        const player = sequence(group, definition.visual, base, definition.visibleFrom, manifest.timeline.sampleHz, warn);
+        const player = sequence(group, definition.visual, resolveAsset, definition.visibleFrom, manifest.timeline.sampleHz, warn);
         loaded.updateVisual = player.update; cleanups.push(player.dispose);
       } else if (definition.visual.kind === "splat") {
-        group.add(await splat(new URL(definition.visual.url, base).href));
-      } else if (definition.visual.kind === "primitive") {
-        group.add(new THREE.Mesh(primitiveGeometry(definition.visual),
-          new THREE.MeshStandardMaterial({ color: new THREE.Color(definition.visual.color), roughness: 0.45, metalness: 0.05 })));
+        group.add(await splat(resolveAsset(definition.visual.url), definition.visual.format));
       } else if (definition.visual.kind === "points-sequence") {
         // A ghost that fails to load is a warning, like a missing sequence frame: the memory stays usable without it.
         try {
-          const ghost = createPointsSequence(definition.visual, await binary(new URL(definition.visual.url, base).href),
+          const ghost = createPointsSequence(definition.visual, await binary(resolveAsset(definition.visual.url)),
             message => warn(`${definition.id}: ${message}`));
           group.add(ghost.points); loaded.updateVisual = ghost.update;
           if (!isIdentity(loaded.track)) warn(`${definition.id}: a points-sequence track should be identity (its points are already in world coordinates)`);
         } catch (error) { warn(`${definition.id}: ghost not shown: ${error instanceof Error ? error.message : String(error)}`); }
-      } else {
-        group.add((await gltf.loadAsync(new URL(definition.visual.url, base).href)).scene);
+      } else if (definition.visual.kind === "mesh") {
+        group.add((await gltf.loadAsync(resolveAsset(definition.visual.url))).scene);
       }
       objects.push(loaded);
     }

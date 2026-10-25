@@ -47,16 +47,19 @@ export function mountAuth(net: Multiplayer): void {
   const key = element<HTMLInputElement>("account-key-input");
   const signout = element<HTMLButtonElement>("auth-signout");
   const signedIn = element("account-signed-in"), signedOut = element("account-signed-out");
-  const playerName = element<HTMLInputElement>("player-name");
+  // The viewer has an editable guest name; standalone pages share auth without that field.
+  const playerName = document.querySelector<HTMLInputElement>("#player-name");
   let busy = false;
+  let rememberedName = playerName?.value ?? "";
   const show = (text: string, error = false) => {
     notice.textContent = text;
     notice.classList.toggle("error", error);
   };
   const rememberName = (value: string) => {
+    rememberedName = value;
     sessionStorage.setItem("memreplay-name", value);
     try { localStorage.setItem("memreplay-name", value); } catch { /* private mode */ }
-    playerName.value = value;
+    if (playerName) playerName.value = value;
   };
   const render = () => {
     const account = savedAccount();
@@ -67,15 +70,15 @@ export function mountAuth(net: Multiplayer): void {
     signedOut.hidden = registered || !!account;
     signout.hidden = !registered && !account;
     signout.disabled = busy;
-    playerName.readOnly = registered || !!account;
+    if (playerName) playerName.readOnly = registered || !!account;
     if (registered) {
-      if (playerName.value !== profile.displayName) rememberName(profile.displayName);
+      if ((playerName?.value ?? rememberedName) !== profile.displayName) rememberName(profile.displayName);
       element("account-id").textContent = `Your ID: ${net.identity!.toHexString().slice(0, 12)}`;
     }
     document.querySelectorAll<HTMLButtonElement>("#auth-bar button[data-account-action]").forEach(button => { button.disabled = busy; });
   };
   net.addEventListener("change", render);
-  name.value = playerName.value === "Guest" ? "" : playerName.value;
+  name.value = playerName?.value && playerName.value !== "Guest" ? playerName.value : "";
   render();
   create.onsubmit = event => {
     event.preventDefault();
@@ -89,6 +92,7 @@ export function mountAuth(net: Multiplayer): void {
         const { server, database } = databaseSettings();
         const account = { server, database, identity: net.identity!.toHexString(), token: net.token };
         const persistent = saveAccount(account);
+        window.dispatchEvent(new Event('memos-account-changed'));
         rememberName(displayName);
         show(persistent ? "Signed in. Save your personal key to sign in on another device." : "Signed in for this tab. Save your key; this browser could not remember it for later.");
       } catch (error) { show(error instanceof Error ? error.message : "Could not create your key.", true); }

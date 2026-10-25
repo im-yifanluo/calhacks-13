@@ -13,7 +13,7 @@ import CryptoKit
     let queue = UploadQueue(directory: directory)
     precondition(queue.recordings.isEmpty, "Use a new test directory")
     try queue.enqueue(file: source, duration: 1, backend: backend,
-      title: "[NATIVE UPLOAD TEST] confirmation lost", pipeline: false)
+      title: "[NATIVE UPLOAD TEST] confirmation lost", pipeline: true)
     await queue.processNext()
     precondition(queue.recordings[0].memoryID == nil, "Proxy must drop the first confirmation")
     precondition(queue.recordings[0].transferred, "File should already be stored")

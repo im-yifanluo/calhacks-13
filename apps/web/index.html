@@ -10,7 +10,7 @@
     <meta name="apple-mobile-web-app-title" content="memos" />
   </head>
   <body>
-    <main id="stage" aria-label="Interactive 3D memory"></main>
+    <main id="stage" aria-label="Interactive 3D memory. When controls are hidden, use Show UI, double-tap the scene, or press H or Escape to show them."></main>
 
     <!-- Top: what you are watching, entering VR, and the shared room. -->
     <header id="topbar">
@@ -22,6 +22,8 @@
         </div>
       </div>
       <div class="top-actions">
+        <button id="camera-mode" class="glass pill" disabled aria-pressed="false" title="Follow the recorded camera path">Camera: Free look</button>
+        <button id="hide-ui" class="glass pill" disabled aria-describedby="hide-ui-help" title="Hide controls, leaving a faint Show UI button. H / Escape or a double-tap also restores them.">Hide UI</button>
         <a href="/library.html" class="glass pill" aria-label="Memory library">Memories</a>
         <button id="vr-entry" class="glass pill accent" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.6C3 8.2 4.1 7 5.6 7h12.8C19.9 7 21 8.2 21 9.6v3.9c0 1.4-1.1 2.5-2.6 2.5h-3.1l-1.9-2.4h-2.8L8.7 16H5.6C4.1 16 3 14.9 3 13.5z" /></svg>
@@ -86,8 +88,10 @@
       <details class="help">
         <summary>How to use</summary>
         <ul>
+          <li id="hide-ui-help">Use Hide UI at the top (or press <kbd>H</kbd>) to clear the view. A faint Show UI button stays available; tap it, double-tap the scene, or press <kbd>H</kbd> / <kbd>Esc</kbd> to restore controls. This also works in Wearer's view.</li>
           <li class="pointer-fine">Drag to look around, scroll to zoom. <kbd>Space</kbd> plays or pauses, <kbd>←</kbd> <kbd>→</kbd> step, <kbd>[</kbd> <kbd>]</kbd> switch takes.</li>
           <li class="pointer-coarse">Drag the scene to look around, pinch to zoom, and use the pad to walk.</li>
+          <li>The Camera button switches between free look and following the recorded wearer's view.</li>
           <li>Pause, then drag an object and let go: it stays there, frozen with everything else, until you press Play. Each change makes a new take; the original is always kept.</li>
           <li>On a Quest: Enter VR, point and pull the trigger to use the panel, and hold grip to grab. Drag the bar under the panel to move it; B or Y hides it.</li>
         </ul>
@@ -159,6 +163,7 @@
         </section>
         <details class="group" id="library-details">
           <summary>Add a memory</summary>
+          <p><a href="/library#import-scene">Import a 3D memory (.memos.zip or folder)</a></p>
           <label class="field">memory.json link<input id="library-url" type="url" placeholder="Leave blank for the sample" /></label>
           <div class="row"><button id="library-add" disabled>Add to library</button><button id="upload-toggle" aria-expanded="false" aria-controls="upload-panel">Upload a video</button></div>
           <div id="upload-panel" hidden></div>

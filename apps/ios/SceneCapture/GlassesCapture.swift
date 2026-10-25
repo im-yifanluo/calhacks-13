@@ -9,6 +9,7 @@ final class GlassesCapture: ObservableObject {
     @Published var preview: UIImage?
     @Published var registered = false
     @Published var deviceCount = 0
+    @Published var deviceReady = false
     @Published var sessionStarted = false
     @Published var sessionExists = false
     @Published var startingSession = false
@@ -17,8 +18,11 @@ final class GlassesCapture: ObservableObject {
     @Published var recording = false
     @Published var finishing = false
     @Published var startingRecording = false
+    @Published var openingGlassesUpdate = false
+    @Published var glassesUpdateRequired = false
     private var recordingRequested = false
     private var session: DeviceSession?
+    private var deviceSelector: AutoDeviceSelector?
     private var sessionGeneration: UUID?
     private var cameraGeneration: UUID?
     private var camera: MWDATCamera.Camera?
@@ -36,10 +40,25 @@ final class GlassesCapture: ObservableObject {
         self.library = library
         do { try Wearables.configure() }
         catch { self.error = error.localizedDescription; return }
+        // Selection follows asynchronous SDK discovery. Keep it alive before a session
+        // is requested; a newly constructed selector can still have activeDevice == nil.
+        let selector = AutoDeviceSelector(wearables: Wearables.shared)
+        deviceSelector = selector
+        watchTasks.append(Task { [weak self] in
+            for await device in selector.activeDeviceStream() {
+                guard let self else { return }
+                self.deviceReady = device != nil
+                if self.session == nil, !self.startingSession {
+                    self.state = device == nil ? "Waiting for eligible glasses" : "Ready to start"
+                }
+            }
+        })
         watchTasks.append(Task { [weak self] in
             for await value in Wearables.shared.registrationStateStream() {
                 guard let self else { return }
+                let wasRegistered = self.registered
                 self.registered = value == .registered
+                if self.registered && !wasRegistered { self.error = "" }
             }
         })
         watchTasks.append(Task { [weak self] in
@@ -51,8 +70,24 @@ final class GlassesCapture: ObservableObject {
     }
 
     func connect() async {
+        error = ""
         do { try await Wearables.shared.startRegistration() }
         catch { self.error = error.localizedDescription }
+    }
+
+    func openGlassesUpdate() async {
+        guard registered, !openingGlassesUpdate, !startingSession, !sessionExists,
+              !recording, !startingRecording, !finishing else { return }
+        openingGlassesUpdate = true
+        defer { openingGlassesUpdate = false }
+        do {
+            try await Wearables.shared.openDATGlassesAppUpdate()
+        } catch { self.error = "Could not open Meta's glasses-app update: \(error.localizedDescription)" }
+    }
+
+    private func reportSessionError(_ error: DeviceSessionError) {
+        if case .datAppOnTheGlassesUpdateRequired = error { glassesUpdateRequired = true }
+        self.error = error.localizedDescription
     }
 
     func handleURL(_ url: URL) async {
@@ -64,6 +99,10 @@ final class GlassesCapture: ObservableObject {
 
     func startSession() async {
         guard session == nil, !startingSession else { return }
+        guard registered, let selector = deviceSelector, selector.activeDevice != nil else {
+            error = "Waiting for eligible glasses. Wear them with the arms open and check that Meta AI shows them connected."
+            return
+        }
         startingSession = true
         defer { startingSession = false }
         do {
@@ -74,7 +113,16 @@ final class GlassesCapture: ObservableObject {
                     throw CaptureFailure.message("Camera permission denied. Allow it in Meta AI and retry.")
                 }
             }
-            let created = try Wearables.shared.createSession(deviceSelector: AutoDeviceSelector(wearables: Wearables.shared))
+            if try await Wearables.shared.checkPermissionStatus(.microphone) != .granted {
+                guard try await Wearables.shared.requestPermission(.microphone) == .granted else {
+                    throw CaptureFailure.message("Allow glasses microphone access in Meta AI to record with audio.")
+                }
+            }
+            // The permission handoff may change availability; recheck on return.
+            guard selector.activeDevice != nil else {
+                throw CaptureFailure.message("Glasses became unavailable during permission setup. Wait for Ready to start, then retry.")
+            }
+            let created = try Wearables.shared.createSession(deviceSelector: selector)
             let generation = UUID()
             sessionGeneration = generation
             session = created
@@ -85,6 +133,7 @@ final class GlassesCapture: ObservableObject {
                         guard let self, self.sessionGeneration == generation else { return }
                         self.state = String(describing: value)
                         self.sessionStarted = value == .started
+                        if value == .started { self.error = ""; self.glassesUpdateRequired = false }
                         if value == .paused { await self.finishRecording() }
                         if value == .stopped {
                             await self.finishRecording()
@@ -104,13 +153,14 @@ final class GlassesCapture: ObservableObject {
                 created.errorPublisher.listen { [weak self] value in
                     Task { @MainActor [weak self] in
                         guard let self, self.sessionGeneration == generation else { return }
-                        self.error = value.localizedDescription
+                        self.reportSessionError(value)
                     }
                 }
             ]
             try created.start()
         } catch {
-            self.error = error.localizedDescription
+            if let sessionError = error as? DeviceSessionError { reportSessionError(sessionError) }
+            else { self.error = error.localizedDescription }
             sessionGeneration = nil
             session?.stop()
             session = nil
@@ -122,7 +172,7 @@ final class GlassesCapture: ObservableObject {
     func startPreview() async {
         guard let session, sessionStarted, camera == nil else { return }
         do {
-            guard let added = try session.addCamera(config: StreamConfiguration(videoCodec: .raw, resolution: .high, frameRate: 24)) else {
+            guard let added = try session.addCamera(config: StreamConfiguration(videoCodec: .raw, audioCodec: .pcm(sampleRate: .rate44100, numberOfChannels: 1), resolution: .high, frameRate: 30)) else {
                 throw CaptureFailure.message("Session is not ready for the camera")
             }
             let generation = UUID()
@@ -138,6 +188,9 @@ final class GlassesCapture: ObservableObject {
                         recorder.append(frame.sampleBuffer)
                         self.preview = image
                     }
+                },
+                added.stream.audioFramePublisher.listen { frame in
+                    recorder.appendAudio(frame.pcmBuffer, at: frame.presentationTimeStamp)
                 },
                 added.stream.statePublisher.listen { [weak self] value in
                     Task { @MainActor [weak self] in
@@ -162,14 +215,15 @@ final class GlassesCapture: ObservableObject {
 
     /// O starts saving the live glasses stream; it does not power on the hardware.
     func recordOn() async {
-        guard sessionStarted, !recording, !startingRecording, !finishing else { return }
+        guard sessionStarted, !recording, !startingRecording, !finishing, !library.savingProfile else { return }
         guard !library.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             error = "Enter a title before recording."; return
         }
         recordingRequested = true
         library.proof = ""
         startingRecording = true
-        defer { startingRecording = false }
+        library.captureActive = true
+        defer { startingRecording = false; if !recording { library.captureActive = false } }
         if !previewActive { await startPreview() }
         for _ in 0..<150 {
             guard recordingRequested, sessionStarted else { return }
@@ -195,7 +249,7 @@ final class GlassesCapture: ObservableObject {
         }
         let item = PendingCapture(id: UUID(), title: title)
         current = item
-        recorder.begin(at: library.directory.appendingPathComponent(item.filename))
+        recorder.begin(at: library.directory.appendingPathComponent(item.filename), includeAudio: true)
         recording = true
         UIApplication.shared.isIdleTimerDisabled = true
         recordingTimer = Task { [weak self] in
@@ -211,12 +265,10 @@ final class GlassesCapture: ObservableObject {
         finishing = true
         recordingTimer?.cancel()
         UIApplication.shared.isIdleTimerDisabled = false
-        defer { finishing = false; current = nil }
+        defer { finishing = false; current = nil; library.captureActive = false }
         do {
             _ = try await recorder.finish()
-            try library.enqueue(item)
-            library.message = "Recording saved; uploading automatically."
-            Task { await library.uploadPending() }
+            try library.saveRecording(item)
         } catch { self.error = "Recording could not be queued: \(error.localizedDescription). Check Files → Memory Replay → Captures." }
     }
 

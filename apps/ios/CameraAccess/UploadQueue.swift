@@ -209,9 +209,16 @@ final class UploadQueue {
     if recordings[index].ticket == nil {
       let job = recordings[index]
       status = "Preparing upload…"
+      let (configData, configResponse) = try await session.data(from: backend.appendingPathComponent("api/account/config"))
+      try check(configResponse, configData)
+      let config = try JSONSerialization.jsonObject(with: configData) as? [String: Any]
+      if let maximum = config?["maxUploadBytes"] as? Int, job.size > maximum {
+        throw UploadFailure(message: "Recording exceeds this server's upload limit. Record a shorter clip; your original remains saved.")
+      }
+      let reconstruct = job.pipeline && config?["pipelineAvailable"] as? Bool == true
       let data = try await request(backend, "api/uploads/presign", body: [
         "identity": identity.identity, "name": job.fileName, "type": "video/quicktime",
-        "size": job.size, "title": job.title, "durationSec": job.durationSec, "pipeline": job.pipeline,
+        "size": job.size, "title": job.title, "durationSec": job.durationSec, "pipeline": reconstruct,
       ], identity: identity)
       recordings[index].ticket = try JSONDecoder().decode(UploadTicket.self, from: data)
       try save()

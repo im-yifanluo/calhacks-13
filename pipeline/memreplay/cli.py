@@ -290,6 +290,7 @@ def main(argv: list[str] | None = None) -> int:
     pb.add_argument("--prefix", help="s3 key prefix (default memories/<work name>)")
     wk = sub.add_parser("worker", help="poll SpacetimeDB for uploads and process them")
     wk.add_argument("--once", action="store_true")
+    wk.add_argument("--memory-id", type=int, help="process only this memory (use with --once for acceptance tests)")
     args = ap.parse_args(argv)
 
     if args.cmd == "compare":
@@ -315,7 +316,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.cmd == "worker":
         from . import worker
-        worker.loop(once=args.once)
+        worker.loop(once=args.once, memory_id=args.memory_id)
         return 0
 
     if args.cmd == "merge":

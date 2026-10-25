@@ -1,0 +1,3 @@
+{$UPLOAD_DOMAIN} {
+  reverse_proxy api:8788
+}

@@ -42,6 +42,11 @@ export function uploadPanel(
         .querySelector<HTMLInputElement>("#upload-title")!
         .value.trim();
       if (!file || !title) throw new Error("Select a video and enter a title");
+      const configuration = await fetch(`${import.meta.env.VITE_UPLOAD_API || ""}/api/account/config`, { signal: AbortSignal.timeout(10000) });
+      if (!configuration.ok) throw new Error("Upload service unavailable. Please retry.");
+      const limits = await configuration.json();
+      if (file.size > limits.maxUploadBytes)
+        throw new Error(`Choose a shorter clip (up to ${Math.floor(limits.maxUploadBytes / 1024 ** 2)} MiB).`);
       const durationSec = await videoDuration(file);
       const identity = net.identity.toHexString();
       const api = async (path: string, body: unknown) => {
@@ -88,6 +93,7 @@ export function uploadPanel(
           size: file.size,
           title,
           durationSec,
+          pipeline: limits.pipelineAvailable !== false,
         });
         pending = {
           ...prepared,

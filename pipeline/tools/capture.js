@@ -11,6 +11,10 @@ const REPO = path.resolve(__dirname, "..", "..");
 const MEM = path.join(REPO, "apps/web/public/memories", id);
 const manifest = JSON.parse(fs.readFileSync(path.join(MEM, "memory.json"), "utf8"));
 const duration = manifest.timeline.durationSec;
+// the viewport must have the clip's aspect: the viewer keeps the vertical FOV and takes the aspect from the window,
+// so a 9:16 window on 3:4 glasses footage would crop the sides (and stretch everything 1.33x against the video)
+const src = manifest.source || {};
+const W = 450, H = src.width && src.height ? Math.round(W * src.height / src.width) : 800;
 const gaps = manifest.timeline.gaps || [];
 const times = spec.includes(",") ? spec.split(",").map(Number)
   : Array.from({ length: Number(spec) }, (_, k) => +(duration * (k + 0.5) / Number(spec)).toFixed(1));
@@ -23,10 +27,11 @@ const inGap = t => gaps.some(([a, b]) => t >= a && t <= b);
     headless: true,
     args: [...(process.env.SWIFTSHADER ? ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
       : ["--use-angle=metal", "--enable-gpu-rasterization", "--enable-webgl", "--enable-features=Vulkan,UseSkiaRenderer"]),
-      "--ignore-gpu-blocklist", "--no-sandbox", "--autoplay-policy=no-user-gesture-required", "--window-size=450,800"],
+      "--ignore-gpu-blocklist", "--no-sandbox", "--autoplay-policy=no-user-gesture-required", `--window-size=${W},${H}`],
   });
   const page = await browser.newPage();
-  await page.setViewport({ width: 450, height: 800, deviceScaleFactor: 1 });
+  await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 });
+  console.error(`[capture] viewport ${W}x${H} (source ${src.width}x${src.height})`);
   page.on("pageerror", e => console.error("page error:", e.message));
   await page.goto(`${process.env.CAPTURE_URL || "http://127.0.0.1:5177"}/?memory=/memories/${id}/${process.env.MEMFILE || "memory.json"}&mode=free&lod=0`, { waitUntil: "load", timeout: 120000 });
   await page.waitForFunction(() => document.getElementById("loading").hidden && window.__memreplayScene, { timeout: 180000 });

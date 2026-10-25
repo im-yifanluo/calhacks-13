@@ -16,6 +16,7 @@ import re
 import shutil
 import time
 import traceback
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -32,16 +33,34 @@ def viewer_files(work: Path) -> list[Path]:
             continue
         m = json.loads((work / name).read_text())
         files.append(name)
-        refs = [m["background"]["url"], m["background"].get("colliderUrl"), m["source"].get("audioUrl")]
-        refs += [o["visual"].get("url") for o in m["objects"]]
-        files += [r for r in refs if r and (work / r).exists()]
+        def refs(value):
+            if isinstance(value, dict):
+                if value.get("kind") == "splat-sequence":
+                    for i in range(value["frameCount"]):
+                        yield value["urlPattern"].replace("{frame}", str(i))
+                for key, child in value.items():
+                    if key in ("url", "colliderUrl", "audioUrl", "videoUrl") and child:
+                        yield child
+                    elif isinstance(child, (dict, list)):
+                        yield from refs(child)
+            elif isinstance(value, list):
+                for child in value:
+                    if isinstance(child, (dict, list)):
+                        yield from refs(child)
+        for ref in refs(m):
+            if not isinstance(ref, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./-]*", ref) or any(p in ("", ".", "..") for p in ref.split("/")):
+                raise ValueError("Scene assets must use safe relative paths")
+            file = work / ref
+            if not file.is_file() or not file.stat().st_size or work.resolve() not in file.resolve().parents:
+                raise ValueError(f"Missing or unsafe scene asset: {ref}")
+            files.append(ref)
     return [work / f for f in dict.fromkeys(files)]
 
 
 def publish_dir(work: Path, dest: Path) -> list[Path]:
     work, dest = Path(work), Path(dest)
     out = []
-    for f in viewer_files(work):
+    for f in sorted(viewer_files(work), key=lambda p: p.name == "memory.json"):
         rel = f.relative_to(work)
         (dest / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(f, dest / rel)
@@ -59,7 +78,7 @@ def publish_s3(work: Path, prefix: str) -> str:
 
     s3 = boto3.client("s3", endpoint_url=os.environ["S3_ENDPOINT"], region_name=os.environ.get("S3_REGION", "auto"))
     bucket = os.environ["S3_BUCKET"]
-    for f in viewer_files(work):
+    for f in sorted(viewer_files(work), key=lambda p: p.name == "memory.json"):
         key = f"{prefix.rstrip('/')}/{f.relative_to(work).as_posix()}"
         s3.upload_file(str(f), bucket, key, ExtraArgs={"ContentType": CONTENT_TYPES.get(f.suffix, "application/octet-stream"),
                                                        "CacheControl": "public, max-age=3600"})
@@ -72,9 +91,20 @@ def _stdb(path: str, body) -> bytes:
     data = body.encode() if isinstance(body, str) else json.dumps(body).encode()
     req = urllib.request.Request(f"{base}/v1/database/{os.environ['STDB_DATABASE']}/{path}", data=data, method="POST",
                                  headers={"Authorization": "Bearer " + os.environ["PIPELINE_TOKEN"],
+                                          "User-Agent": "memos-pipeline/1.0",
                                           "Content-Type": "text/plain" if isinstance(body, str) else "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return r.read()
+    opener = urllib.request.build_opener(_NoRedirect)
+    for attempt in range(3):
+        try:
+            with opener.open(req, timeout=30) as r:
+                return r.read()
+        except urllib.error.HTTPError as error:
+            if error.code not in (408, 429, 500, 502, 503, 504) or attempt == 2:
+                raise
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 2:
+                raise
+        time.sleep(2 ** attempt)
 
 
 def set_status(memory_id: int, status: str, progress: float, manifest_url: str = "", error: str = "") -> None:
@@ -110,7 +140,7 @@ def download(url: str, dest: Path, max_bytes: int, timeout_s: float = 300.0) -> 
     """Capped download: Content-Length checked, bytes counted, no redirects, overall time limit."""
     opener = urllib.request.build_opener(_NoRedirect)
     t0 = time.time()
-    with opener.open(url, timeout=30) as r:
+    with opener.open(urllib.request.Request(url, headers={"User-Agent": "memos-pipeline/1.0"}), timeout=30) as r:
         if int(r.headers.get("Content-Length") or 0) > max_bytes:
             raise RuntimeError("source is larger than the upload limit")
         n = 0
@@ -122,11 +152,18 @@ def download(url: str, dest: Path, max_bytes: int, timeout_s: float = 300.0) -> 
                 f.write(chunk)
 
 
-def pending_jobs() -> list[dict]:
+def pending_jobs(memory_id: int | None = None) -> list[dict]:
     """Rows of the public memory table with status 'uploaded' assigned to this worker. Test uploads (the
     uploader assigned the row to itself: pipelineIdentity == owner) are skipped."""
-    raw = json.loads(_stdb("sql", "SELECT * FROM memory WHERE status = 'uploaded'"))
     me = os.environ.get("PIPELINE_IDENTITY", "").lower().removeprefix("0x")
+    if not re.fullmatch(r"[a-f0-9]{64}", me):
+        raise ValueError("PIPELINE_IDENTITY is required; never poll another worker's jobs")
+    if memory_id is not None and (not isinstance(memory_id, int) or memory_id < 1):
+        raise ValueError("memory_id must be a positive integer")
+    query = "SELECT * FROM memory WHERE status = 'uploaded'"
+    if memory_id is not None:
+        query += f" AND id = {memory_id}"
+    raw = json.loads(_stdb("sql", query))
     jobs = []
     for stmt in raw:
         cols = [e["name"]["some"] if isinstance(e.get("name"), dict) else e.get("name")
@@ -136,7 +173,7 @@ def pending_jobs() -> list[dict]:
             pid = _identity_hex(r.get("pipelineIdentity", r.get("pipeline_identity")))
             if pid and pid == _identity_hex(r.get("owner")):
                 continue
-            if not me or pid == me:
+            if pid == me:
                 jobs.append(r)
     return jobs
 
@@ -166,7 +203,10 @@ def process(job: dict, root: Path) -> str:
         set_status(mid, "processing", progress)
     merge(work, job.get("title") or f"Memory {mid}", str(mid), "uploaded-clip")
     merge(work, job.get("title") or f"Memory {mid}", str(mid), "uploaded-clip", static=True)
-    if os.environ.get("S3_BUCKET"):
+    if os.environ.get("MEMREPLAY_UPLOAD_API"):
+        from .hosted_publish import publish_hosted
+        url = publish_hosted(work, mid)
+    elif os.environ.get("S3_BUCKET"):
         url = publish_s3(work, f"memories/{key}")
     else:
         dest = Path(os.environ["MEMREPLAY_PUBLISH_DIR"]) / key
@@ -176,28 +216,39 @@ def process(job: dict, root: Path) -> str:
     return url
 
 
-def loop(once: bool = False, poll_s: float = 15.0) -> None:
+def loop(once: bool = False, poll_s: float = 15.0, memory_id: int | None = None) -> None:
     root = Path(os.environ.get("MEMREPLAY_WORK") or os.environ.get("WORK") or "work")
     print(f"[worker] polling {os.environ['STDB_HTTP_URL']} / {os.environ['STDB_DATABASE']} every {poll_s:.0f} s")
-    if os.environ.get("S3_BUCKET"):
+    if os.environ.get("MEMREPLAY_UPLOAD_API"):
+        from .hosted_publish import preflight
+        preflight()  # Refuse expensive reconstruction if auth/storage configuration disagrees.
+    elif os.environ.get("S3_BUCKET"):
         import boto3  # noqa: F401  fail now, not after a full GPU run
     while True:
         try:
-            jobs = pending_jobs()
+            jobs = pending_jobs(memory_id)
         except Exception as e:                                   # SpacetimeDB briefly unreachable: try again
             print(f"[worker] poll failed: {e}")
+            if once:
+                raise
             jobs = []
+        failures = []
         for job in jobs:
             mid = int(job["id"])
             print(f"[worker] memory {mid}: {job.get('title')}")
             try:
                 print(f"[worker] memory {mid} ready: {process(job, root)}")
             except (Exception, SystemExit) as e:               # stages exit with SystemExit on bad input
+                failures.append(mid)
                 traceback.print_exc()
                 try:
                     set_status(mid, "failed", 0.1, error=f"{type(e).__name__}: {e}")
                 except Exception:
                     traceback.print_exc()
         if once:
+            if failures:
+                raise RuntimeError(f"Processing failed for memories {failures}")
+            if memory_id is not None and not jobs:
+                raise RuntimeError(f"Memory {memory_id} is not queued for this worker")
             return
         time.sleep(poll_s)

@@ -14,6 +14,8 @@ import {
 import { dirname, resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { databaseConfig, makeHandler, ticket, readTicket } from "./service.mjs";
+import { connectionConfig } from "./connections.mjs";
+import { sceneStorage } from "./scenes.mjs";
 
 const validKey = /^videos\/[a-f0-9]{64}\/[a-f0-9-]{36}\.(mp4|mov|webm)$/i;
 export async function localStorage({ directory, secret, publicOrigin }) {
@@ -173,10 +175,11 @@ export async function createLocalHandler(env = process.env) {
     await writeFile(secretPath, secret, { flag: "wx", mode: 0o600 });
   }
   const origin = new URL(env.PUBLIC_ORIGIN || "http://127.0.0.1:5173").origin;
-  const db = databaseConfig({
+  const databaseEnv = {
     STDB_HTTP_URL: env.STDB_HTTP_URL || `http://127.0.0.1:${env.STDB_PORT || 3055}`,
     STDB_DATABASE: env.STDB_DATABASE || "memory-replay",
-  });
+  };
+  const db = databaseConfig(databaseEnv);
   // The pipeline worker's identity, minted on first start. Its "token" is the worker's
   // PIPELINE_TOKEN; deleting this file orphans rows already assigned to the old identity.
   const workerPath = join(directory, ".worker-identity.json");
@@ -196,9 +199,11 @@ export async function createLocalHandler(env = process.env) {
     secret,
     publicOrigin: origin,
   });
+  const scenes = await sceneStorage(resolve(env.LOCAL_SCENE_DIR || join(directory, "memories")));
+  const pipelineIdentity = env.PIPELINE_IDENTITY || worker.identity.replace(/^0x/, "");
   const allowedOrigins = [
     origin,
-    ...(env.UPLOAD_ALLOWED_ORIGINS || "").split(",").filter(Boolean),
+    ...(env.UPLOAD_ALLOWED_ORIGINS || "").split(",").map(value => value.trim()).filter(Boolean),
   ];
   const api = makeHandler({
     ...db,
@@ -206,8 +211,11 @@ export async function createLocalHandler(env = process.env) {
     secret,
     assetBase: origin + "/api/local-media",
     allowedOrigins,
-    pipelineIdentity:
-      env.PIPELINE_IDENTITY || worker.identity.replace(/^0x/, ""),
+    pipelineIdentity,
+    connections: connectionConfig({ ...databaseEnv, PIPELINE_IDENTITY: pipelineIdentity }, {
+      backend: "local", assetBaseUrl: origin + "/api/local-media",
+      sceneBaseUrl: origin + "/api/local-scenes", writeScene: "memreplay publish <work-dir> --to <LOCAL_SCENE_DIR>/<memoryId>-<requestId>",
+    }),
   });
   return async (req, res) => {
     if (req.headers.origin && !allowedOrigins.includes(req.headers.origin)) {
@@ -236,7 +244,7 @@ export async function createLocalHandler(env = process.env) {
       "Access-Control-Expose-Headers",
       "X-Content-SHA256,Content-Length",
     );
-    if (!(await storage.handle(req, res))) await api(req, res);
+    if (!(await storage.handle(req, res)) && !(await scenes(req, res))) await api(req, res);
   };
 }
 if (
