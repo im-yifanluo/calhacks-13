@@ -20,7 +20,7 @@ final class DemoCapture: ObservableObject {
     init(library: SceneLibrary) { self.library = library }
 
     func recordOn() async {
-        guard canStart else { return }
+        guard canStart, !library.savingProfile else { return }
         let title = library.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, title.count <= 100 else { error = "Enter a title up to 100 characters."; return }
         error = ""; elapsed = 0; library.proof = ""
@@ -28,8 +28,9 @@ final class DemoCapture: ObservableObject {
         current = item
         recorder.begin(at: library.file(for: item))
         recording = true
+        library.captureActive = true
         UIApplication.shared.isIdleTimerDisabled = true
-        library.message = "Recording a simulated scene. Off saves the MP4 and uploads automatically."
+        library.message = "Recording a simulated scene. Stop & save finishes the MP4."
         let start = ContinuousClock.now
         frames = Task { [weak self] in
             while !Task.isCancelled {
@@ -55,12 +56,10 @@ final class DemoCapture: ObservableObject {
         recording = false; finishing = true
         frames?.cancel(); frames = nil
         UIApplication.shared.isIdleTimerDisabled = false
-        defer { finishing = false; current = nil }
+        defer { finishing = false; current = nil; library.captureActive = false }
         do {
             _ = try await recorder.finish()
-            try library.enqueue(item)
-            library.message = "MP4 saved on this phone. Uploading and checking the database…"
-            Task { await library.uploadPending() }
+            try library.saveRecording(item)
         } catch { self.error = error.localizedDescription }
     }
 

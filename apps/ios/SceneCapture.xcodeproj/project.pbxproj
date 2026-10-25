@@ -1,48 +1,286 @@
 // !$*UTF8*$!
-{ archiveVersion = 1; classes = {}; objectVersion = 56; objects = {
-9814AAC3262759DD6966517D = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassesCapture.swift; sourceTree = "<group>"; };
-33564245F2E973BC7928F88B = { isa = PBXBuildFile; fileRef = 9814AAC3262759DD6966517D; };
-D849C2346DC28E7CF350C59C = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Recorder.swift; sourceTree = "<group>"; };
-1D3AE450F1D44EAC83751E34 = { isa = PBXBuildFile; fileRef = D849C2346DC28E7CF350C59C; };
-BA0D0DB043391AC9EA29DE12 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneCaptureApp.swift; sourceTree = "<group>"; };
-0483FF967A1552B7981E28BE = { isa = PBXBuildFile; fileRef = BA0D0DB043391AC9EA29DE12; };
-F8FC052461297BFD5610DFDD = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneLibrary.swift; sourceTree = "<group>"; };
-62B83BDF90BBE81FF1A56BEF = { isa = PBXBuildFile; fileRef = F8FC052461297BFD5610DFDD; };
-0112DAE3F84CB4DF5179BE01 = { isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-7D1043473D55BFA90E8530D3 = { isa = PBXFileReference; explicitFileType = wrapper.application; path = SceneCapture.app; sourceTree = BUILT_PRODUCTS_DIR; };
-482182478A3ECD4745BEA917 = { isa = PBXGroup; path = SceneCapture; sourceTree = "<group>"; children = (9814AAC3262759DD6966517D,D849C2346DC28E7CF350C59C,BA0D0DB043391AC9EA29DE12,F8FC052461297BFD5610DFDD,0112DAE3F84CB4DF5179BE01,); };
-FBDC4F23F93125BBEEAE800C = { isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (7D1043473D55BFA90E8530D3,); };
-B28B7AF69320201D1CF206EB = { isa = PBXGroup; sourceTree = "<group>"; children = (482182478A3ECD4745BEA917,FBDC4F23F93125BBEEAE800C,); };
-BCE16DD0260827ECF338C787 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (33564245F2E973BC7928F88B,1D3AE450F1D44EAC83751E34,0483FF967A1552B7981E28BE,62B83BDF90BBE81FF1A56BEF,); runOnlyForDeploymentPostprocessing = 0; };
-0189424A5A60FED329FA868E = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-4242AE5FE71A65C94A0E5D25 = { isa = XCSwiftPackageProductDependency; package = 5A374DCD2E5EB762B527AF3A; productName = MWDATCore; };
-CF82C0500B8D6FA801980960 = { isa = PBXBuildFile; productRef = 4242AE5FE71A65C94A0E5D25; };
-5E13FB7FCBD08086D8F1623C = { isa = XCSwiftPackageProductDependency; package = 5A374DCD2E5EB762B527AF3A; productName = MWDATCamera; };
-3FEC4601F302B0BF8300D5BD = { isa = PBXBuildFile; productRef = 5E13FB7FCBD08086D8F1623C; };
-7561BFB015D8F536760CB671 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (CF82C0500B8D6FA801980960,3FEC4601F302B0BF8300D5BD,); runOnlyForDeploymentPostprocessing = 0; };
-5A374DCD2E5EB762B527AF3A = { isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/facebook/meta-wearables-dat-ios"; requirement = { kind = exactVersion; version = 1.0.1; }; };
-89E1FD6268CC0F221A2BE178 = { isa = XCBuildConfiguration; name = Debug; buildSettings = { CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.2;
-            SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; DEBUG_INFORMATION_FORMAT = dwarf; }; };
-E6DE6C99132752C914FEF632 = { isa = XCBuildConfiguration; name = Release; buildSettings = { CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.2;
-            SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1; SWIFT_OPTIMIZATION_LEVEL = "-O"; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; }; };
-862894B703A6DEDF96A9DD6C = { isa = XCConfigurationList; buildConfigurations = (89E1FD6268CC0F221A2BE178,E6DE6C99132752C914FEF632,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-7082CC0B6FC1282FCEABD07A = { isa = XCBuildConfiguration; name = Debug; buildSettings = { CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.2;
-            SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1;PRODUCT_NAME = "$(TARGET_NAME)"; PRODUCT_BUNDLE_IDENTIFIER = com.memreplay.SceneCapture;
-                INFOPLIST_FILE = SceneCapture/Info.plist; CODE_SIGN_STYLE = Automatic;
-                CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0; GENERATE_INFOPLIST_FILE = NO;
-                LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; META_APP_ID = 0; CLIENT_TOKEN = ""; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; DEBUG_INFORMATION_FORMAT = dwarf; }; };
-639A7CA24D39909E713B47F7 = { isa = XCBuildConfiguration; name = Release; buildSettings = { CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.2;
-            SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1;PRODUCT_NAME = "$(TARGET_NAME)"; PRODUCT_BUNDLE_IDENTIFIER = com.memreplay.SceneCapture;
-                INFOPLIST_FILE = SceneCapture/Info.plist; CODE_SIGN_STYLE = Automatic;
-                CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0; GENERATE_INFOPLIST_FILE = NO;
-                LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; META_APP_ID = 0; CLIENT_TOKEN = ""; SWIFT_OPTIMIZATION_LEVEL = "-O"; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; }; };
-C57128001CE614BF8549D6BB = { isa = XCConfigurationList; buildConfigurations = (7082CC0B6FC1282FCEABD07A,639A7CA24D39909E713B47F7,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-0E8A3AD980EC179856012B7E = { isa = PBXNativeTarget; name = SceneCapture; productName = SceneCapture; productType = "com.apple.product-type.application";
-        productReference = 7D1043473D55BFA90E8530D3; buildConfigurationList = C57128001CE614BF8549D6BB;
-        buildPhases = (BCE16DD0260827ECF338C787,7561BFB015D8F536760CB671,0189424A5A60FED329FA868E,); buildRules = (); dependencies = ();
-        packageProductDependencies = (4242AE5FE71A65C94A0E5D25,5E13FB7FCBD08086D8F1623C,); };
-98F54143AB4E86B28C3AFEE0 = { isa = PBXProject; attributes = { LastUpgradeCheck = 2640; }; buildConfigurationList = 862894B703A6DEDF96A9DD6C;
-        compatibilityVersion = "Xcode 14.0"; developmentRegion = en; knownRegions = (en,Base,);
-        mainGroup = B28B7AF69320201D1CF206EB; productRefGroup = FBDC4F23F93125BBEEAE800C; projectDirPath = ""; projectRoot = "";
-        targets = (0E8A3AD980EC179856012B7E,); packageReferences = (5A374DCD2E5EB762B527AF3A,); };
-}; rootObject = 98F54143AB4E86B28C3AFEE0; }
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0483FF967A1552B7981E28BE /* SceneCaptureApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0D0DB043391AC9EA29DE12 /* SceneCaptureApp.swift */; };
+		0C9198BB0D6EA52567AD2A8B /* AccountKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0487770619358760FFAF6DFE /* AccountKey.swift */; };
+		1D3AE450F1D44EAC83751E34 /* Recorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D849C2346DC28E7CF350C59C /* Recorder.swift */; };
+		33564245F2E973BC7928F88B /* GlassesCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9814AAC3262759DD6966517D /* GlassesCapture.swift */; };
+		35330B24C1EC0CA1EBA4A58F /* CaptureRequirements.swift in Sources */ = {isa = PBXBuildFile; fileRef = E99632AE3F1CB4DC4BFDE99A /* CaptureRequirements.swift */; };
+		3FEC4601F302B0BF8300D5BD /* MWDATCamera in Frameworks */ = {isa = PBXBuildFile; productRef = 5E13FB7FCBD08086D8F1623C /* MWDATCamera */; };
+		62B83BDF90BBE81FF1A56BEF /* SceneLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8FC052461297BFD5610DFDD /* SceneLibrary.swift */; };
+		CF82C0500B8D6FA801980960 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4242AE5FE71A65C94A0E5D25 /* MWDATCore */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0112DAE3F84CB4DF5179BE01 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		0487770619358760FFAF6DFE /* AccountKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountKey.swift; sourceTree = "<group>"; };
+		7D1043473D55BFA90E8530D3 /* SceneCapture.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = SceneCapture.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9814AAC3262759DD6966517D /* GlassesCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassesCapture.swift; sourceTree = "<group>"; };
+		BA0D0DB043391AC9EA29DE12 /* SceneCaptureApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneCaptureApp.swift; sourceTree = "<group>"; };
+		D849C2346DC28E7CF350C59C /* Recorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Recorder.swift; sourceTree = "<group>"; };
+		E99632AE3F1CB4DC4BFDE99A /* CaptureRequirements.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureRequirements.swift; sourceTree = "<group>"; };
+		F8FC052461297BFD5610DFDD /* SceneLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneLibrary.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		7561BFB015D8F536760CB671 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF82C0500B8D6FA801980960 /* MWDATCore in Frameworks */,
+				3FEC4601F302B0BF8300D5BD /* MWDATCamera in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		482182478A3ECD4745BEA917 /* SceneCapture */ = {
+			isa = PBXGroup;
+			children = (
+				0487770619358760FFAF6DFE /* AccountKey.swift */,
+				E99632AE3F1CB4DC4BFDE99A /* CaptureRequirements.swift */,
+				9814AAC3262759DD6966517D /* GlassesCapture.swift */,
+				D849C2346DC28E7CF350C59C /* Recorder.swift */,
+				BA0D0DB043391AC9EA29DE12 /* SceneCaptureApp.swift */,
+				F8FC052461297BFD5610DFDD /* SceneLibrary.swift */,
+				0112DAE3F84CB4DF5179BE01 /* Info.plist */,
+			);
+			path = SceneCapture;
+			sourceTree = "<group>";
+		};
+		B28B7AF69320201D1CF206EB = {
+			isa = PBXGroup;
+			children = (
+				482182478A3ECD4745BEA917 /* SceneCapture */,
+				FBDC4F23F93125BBEEAE800C /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		FBDC4F23F93125BBEEAE800C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				7D1043473D55BFA90E8530D3 /* SceneCapture.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0E8A3AD980EC179856012B7E /* SceneCapture */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C57128001CE614BF8549D6BB /* Build configuration list for PBXNativeTarget "SceneCapture" */;
+			buildPhases = (
+				BCE16DD0260827ECF338C787 /* Sources */,
+				7561BFB015D8F536760CB671 /* Frameworks */,
+				0189424A5A60FED329FA868E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SceneCapture;
+			packageProductDependencies = (
+				4242AE5FE71A65C94A0E5D25 /* MWDATCore */,
+				5E13FB7FCBD08086D8F1623C /* MWDATCamera */,
+			);
+			productName = SceneCapture;
+			productReference = 7D1043473D55BFA90E8530D3 /* SceneCapture.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		98F54143AB4E86B28C3AFEE0 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 2640;
+			};
+			buildConfigurationList = 862894B703A6DEDF96A9DD6C /* Build configuration list for PBXProject "SceneCapture" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = B28B7AF69320201D1CF206EB;
+			packageReferences = (
+				5A374DCD2E5EB762B527AF3A /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */,
+			);
+			productRefGroup = FBDC4F23F93125BBEEAE800C /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0E8A3AD980EC179856012B7E /* SceneCapture */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0189424A5A60FED329FA868E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BCE16DD0260827ECF338C787 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0C9198BB0D6EA52567AD2A8B /* AccountKey.swift in Sources */,
+				35330B24C1EC0CA1EBA4A58F /* CaptureRequirements.swift in Sources */,
+				33564245F2E973BC7928F88B /* GlassesCapture.swift in Sources */,
+				1D3AE450F1D44EAC83751E34 /* Recorder.swift in Sources */,
+				0483FF967A1552B7981E28BE /* SceneCaptureApp.swift in Sources */,
+				62B83BDF90BBE81FF1A56BEF /* SceneLibrary.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		639A7CA24D39909E713B47F7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLIENT_TOKEN = "";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = SN68W7857T;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SceneCapture/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				META_APP_ID = 0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.memreplay.SceneCapture;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		7082CC0B6FC1282FCEABD07A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLIENT_TOKEN = "";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = SN68W7857T;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SceneCapture/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				META_APP_ID = 0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.memreplay.SceneCapture;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		89E1FD6268CC0F221A2BE178 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		E6DE6C99132752C914FEF632 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		862894B703A6DEDF96A9DD6C /* Build configuration list for PBXProject "SceneCapture" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				89E1FD6268CC0F221A2BE178 /* Debug */,
+				E6DE6C99132752C914FEF632 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C57128001CE614BF8549D6BB /* Build configuration list for PBXNativeTarget "SceneCapture" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7082CC0B6FC1282FCEABD07A /* Debug */,
+				639A7CA24D39909E713B47F7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		5A374DCD2E5EB762B527AF3A /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/facebook/meta-wearables-dat-ios";
+			requirement = {
+				kind = exactVersion;
+				version = 1.0.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4242AE5FE71A65C94A0E5D25 /* MWDATCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5A374DCD2E5EB762B527AF3A /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATCore;
+		};
+		5E13FB7FCBD08086D8F1623C /* MWDATCamera */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5A374DCD2E5EB762B527AF3A /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATCamera;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+}

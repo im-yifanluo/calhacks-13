@@ -87,6 +87,8 @@ export function makeHandler({
   listMemories,
   getProfile,
   setProfile,
+  registerAccount,
+  accountDestination,
 }) {
   return async (req, res) => {
     const origin = req.headers.origin;
@@ -122,6 +124,9 @@ export function makeHandler({
         return send(502, { error: "Could not connect to SpacetimeDB" });
       }
     }
+    if (req.method === "GET" && route.pathname === "/api/account/config" && accountDestination)
+      return send(200, accountDestination);
+    const accountRoute = route.pathname === "/api/account" && req.method === "POST" && registerAccount && getProfile;
     const profileRoute = route.pathname === "/api/profile" &&
       ((req.method === "GET" && getProfile) || (req.method === "POST" && setProfile));
     const listing =
@@ -129,7 +134,7 @@ export function makeHandler({
       route.pathname === "/api/memories" &&
       listMemories;
     if (
-      !listing && !profileRoute &&
+      !listing && !profileRoute && !accountRoute &&
       (req.method !== "POST" ||
         !["/api/uploads/presign", "/api/uploads/complete"].includes(
           route.pathname,
@@ -147,6 +152,12 @@ export function makeHandler({
         return send(401, { error: "Invalid identity" });
       if (!(await verify(body.identity, auth)))
         return send(401, { error: "Identity/token mismatch" });
+      if (accountRoute) {
+        if (typeof body.name !== "string" || !body.name.trim() || body.name.trim().length > 40)
+          throw new Error("Name must be 1–40 characters");
+        await registerAccount(body.name.trim(), auth);
+        return send(200, await getProfile(body.identity, auth));
+      }
       if (profileRoute) {
         if (req.method === "POST") {
           if (typeof body.displayName !== "string" || !body.displayName.trim() || body.displayName.trim().length > 40)
@@ -286,7 +297,18 @@ export function productionConfig(env = process.env) {
 export function databaseConfig(env = process.env) {
   const base = env.STDB_HTTP_URL.replace(/\/$/, "");
   const url = `${base}/v1/database/${encodeURIComponent(env.STDB_DATABASE)}`;
+  const accountServer = new URL(env.ACCOUNT_SERVER_URL || (env.PUBLIC_ORIGIN ? `${new URL(env.PUBLIC_ORIGIN).origin}/stdb` : base));
+  if (!["https:", "http:"].includes(accountServer.protocol) || accountServer.username || accountServer.password || accountServer.search || accountServer.hash)
+    throw new Error("ACCOUNT_SERVER_URL must be a public HTTP(S) SpacetimeDB base URL");
   return {
+    accountDestination: { server: accountServer.href.replace(/\/$/, ""), database: env.STDB_DATABASE },
+    registerAccount: async (name, auth) => {
+      const response = await fetch(`${url}/call/register_account`, {
+        method: "POST", headers: { Authorization: auth, "Content-Type": "application/json" },
+        body: JSON.stringify([name]), signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) throw new Error("Could not register this name. An existing personal key's name cannot be changed.");
+    },
     verify: async (id, auth) =>
       (
         await fetch(`${base}/v1/identity/${id}/verify`, {
@@ -313,12 +335,12 @@ export function databaseConfig(env = process.env) {
       if (!/^[a-f0-9]{64}$/i.test(identity)) throw new Error("Invalid identity");
       const response = await fetch(`${url}/sql`, {
         method: "POST", headers: { Authorization: auth },
-        body: `SELECT display_name FROM profile WHERE identity = 0x${identity}`,
+        body: `SELECT display_name, provider FROM profile WHERE identity = 0x${identity}`,
         signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) throw new Error("Could not load your profile");
       const [result] = await response.json();
-      return { identity, displayName: result.rows[0]?.[0] ?? "" };
+      return { identity, displayName: result.rows[0]?.[0] ?? "", provider: result.rows[0]?.[1] ?? "guest" };
     },
     listMemories: async (identity, auth) => {
       if (!/^[a-f0-9]{64}$/i.test(identity))

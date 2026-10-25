@@ -55,6 +55,8 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Connect to your glasses and local scene server.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Include glasses microphone audio in your scene recording.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>processing</string>

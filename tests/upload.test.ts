@@ -9,6 +9,36 @@ import {
 } from "../server/upload/service.mjs";
 const secret = "x".repeat(40),
   owner = "a".repeat(64);
+test("native account registration authenticates before mutation and exposes only public config", async () => {
+  let registered = "", calls = 0;
+  const server = createServer(makeHandler({
+    allowedOrigins: [],
+    accountDestination: { server: "https://app.test/stdb", database: "memos" },
+    verify: async (id: string, auth: string) => id === owner && auth === "Bearer valid",
+    registerAccount: async (name: string, auth: string) => {
+      expect(auth).toBe("Bearer valid"); calls++;
+      if (registered && registered !== name) throw new Error("Registered names cannot change");
+      registered = name;
+    },
+    getProfile: async (identity: string) => ({ identity, displayName: registered, provider: "key" }),
+  }));
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${(server.address() as any).port}`;
+  const post = (name: string, identity = owner, token = "valid") => fetch(`${base}/api/account`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, identity }),
+  });
+  try {
+    expect(await (await fetch(`${base}/api/account/config`)).json()).toEqual({ server: "https://app.test/stdb", database: "memos" });
+    expect((await post("Nikko", "b".repeat(64))).status).toBe(401);
+    expect((await post("Nikko", owner, "forged")).status).toBe(401);
+    expect((await post(" ")).status).toBe(400);
+    expect((await post("x".repeat(41))).status).toBe(400);
+    expect(calls).toBe(0);
+    expect(await (await post("  Nikko  ")).json()).toEqual({ identity: owner, displayName: "Nikko", provider: "key" });
+    expect((await post("Different name")).status).toBe(400);
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+});
 test("upload receipts reject tampering and expiration", () => {
   const signed = ticket({ owner, expires: Date.now() + 1000 }, secret);
   expect(readTicket(signed, secret).owner).toBe(owner);

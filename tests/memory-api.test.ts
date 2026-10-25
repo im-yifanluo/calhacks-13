@@ -1,6 +1,26 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { databaseConfig } from "../server/upload/service.mjs";
 afterEach(() => vi.unstubAllGlobals());
+test("native account config uses the web destination and registration calls the existing reducer", async () => {
+  const id = "a".repeat(64);
+  const fetch = vi.fn(async (url: string, options: RequestInit) => {
+    expect(options.headers).toMatchObject({ Authorization: "Bearer credential" });
+    if (url.endsWith("/call/register_account")) {
+      expect(options.body).toBe('["Nikko"]');
+      return new Response(null, { status: 200 });
+    }
+    expect(options.body).toBe(`SELECT display_name, provider FROM profile WHERE identity = 0x${id}`);
+    return new Response(JSON.stringify([{ rows: [["Nikko", "key"]] }]));
+  });
+  vi.stubGlobal("fetch", fetch);
+  const settings = { STDB_HTTP_URL: "http://internal:3055", STDB_DATABASE: "memos", PUBLIC_ORIGIN: "https://app.test" };
+  const db = databaseConfig(settings);
+  expect(db.accountDestination).toEqual({ server: "https://app.test/stdb", database: "memos" });
+  expect(databaseConfig({ ...settings, ACCOUNT_SERVER_URL: "https://maincloud.test/" }).accountDestination.server).toBe("https://maincloud.test");
+  expect(() => databaseConfig({ ...settings, ACCOUNT_SERVER_URL: "https://user:secret@host.test" })).toThrow();
+  await db.registerAccount("Nikko", "Bearer credential");
+  expect(await db.getProfile(id, "Bearer credential")).toEqual({ identity: id, displayName: "Nikko", provider: "key" });
+});
 test("phone memory listing exposes scene output and preserves owner filtering", async () => {
   const identity = "a".repeat(64), pipeline = "b".repeat(64);
   const fetch = vi.fn(async (_url: string, options: RequestInit) => {

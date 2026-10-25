@@ -1,6 +1,12 @@
 # Memory Replay phone app and demo
 
-The buttons are **On** and **Off**. On starts a recording; Off finalizes a video-only MP4, saves it on the phone, queues upload automatically, queries SpacetimeDB independently, then downloads the stored video and compares SHA-256 hashes. A successful result says **PASS · Database row #… · Download matches recording**. Video bytes are in local disk/S3/R2 storage; the database holds their record and URL.
+## Physical iPhone acceptance · October 24
+
+Verified on Nikko's iPhone with real Meta glasses: registration, developer-software update handoff, camera preview, local MP4 recording/playback, website personal-key sign-in, hosted upload and independent download integrity. Database row #6 matched the phone's MP4 by SHA-256; the backend teammate confirmed it belongs to the intended NikkoTest user. Picture and duration were confirmed by playback. **Audio remains unresolved:** the user heard no sound; this does not establish whether audio is absent, silent or muted. Audio debugging is deferred. Hosted tests use `pipeline:false`; GPU reconstruction was not tested. New signed-out clips remain local until explicitly uploaded after sign-in.
+
+The native buttons are **Record** and **Stop & save**. Starting a glasses session or preview alone does not record. Record starts saving frames; Stop & save finalizes the MP4 (the glasses target also records SDK audio). Without sign-in, the clip stays on the phone and appears in **Memories → On this phone**, where it can be played or exported. These clips do not enter the upload queue or block later account/server setup. After signing in, choose **Upload as [name]** on a local clip to associate it with that account and queue it explicitly.
+
+When already signed in, new recordings upload automatically after saving. Upload verifies the database record and downloaded bytes; a successful result says **PASS · Database row #… · Download matches recording**. Video bytes live in local disk/S3/R2 storage; the database holds their record and URL. Local recording does not require meeting pipeline quality thresholds, but real-video uploads still validate resolution, frame rate and audio.
 
 There are two native iPhone projects, with shared recording, upload, library and settings code:
 
@@ -12,6 +18,23 @@ There are two native iPhone projects, with shared recording, upload, library and
 The demo's `[SIMULATION]` clips presign with `pipeline: false` and verify that the returned database row belongs to the uploader's test queue. They never request reconstruction. An imported real MP4 is a normal upload, even from the demo app. Neither app implements reconstruction; uploads remain `uploaded` until a separate worker processes them.
 
 The **Party** tab opens the shared viewer using the saved server address. Create a party or enter a seven-character invite code; name-and-key sign-in and leader-controlled playback run in the system browser. See [PARTIES.md](PARTIES.md) for setup and testing. Finish recording/upload before switching to the browser.
+
+## Hosted iPhone upload test
+
+In Settings choose **Use memos upload server** (`https://memos.alightdell64.chatgpt.site`, no `/api` suffix). In Capture paste the personal key from your existing memos website account. In Memories choose **Upload as [name]** on a saved local clip. Never paste a private key into chat or logs.
+
+The hosted service advertises `pipelineAvailable: false` and a 90 MiB limit through `/api/account/config`. The app uses its portable-key API: `POST /api/account` with `displayName` or `personalKey`, `GET /api/account` for the profile, and the full `memos1.` key as the bearer credential. Keys remain in Keychain. The older local service retains its JWT/profile flow. The hosted upload ticket's `expiresIn` is converted into a persisted expiry; raw PUT requests include file length and never carry account authorization. Upload-only tests skip reconstruction quality thresholds and send `pipeline:false`; source bytes are not transcoded by the uploader. Real processing uploads retain the quality checks.
+
+An opt-in live check creates a separate test account and tiny generated clip, restores the account, uploads with processing disabled, lists the memory and compares downloaded bytes:
+
+```bash
+xcrun swiftc -parse-as-library apps/ios/SceneCapture/AccountKey.swift \
+  apps/ios/SceneCapture/Recorder.swift apps/ios/Tests/HostedUploadChecks.swift \
+  -o /tmp/memos-hosted-checks
+/tmp/memos-hosted-checks --live
+```
+
+On October 24 this check passed against the public API. It leaves a clearly labeled synthetic test memory and account on the service; it does not use a person's footage or sign-in key. Physical iPhone upload remains a separate acceptance step.
 
 ## Fast demo on your Mac
 
@@ -38,11 +61,28 @@ The command-line build uses `/tmp` because cloud-synced folders can attach Finde
 
 ## Names, scene status and the web library
 
-The current UI adds a name-based guest profile. After saving the server address,
-enter your name and tap **Continue with this name** before recording. Returning
-users retain the same Keychain identity. Settings lets you change the name without
-changing your ID. First-time setup requires the upload service; once configured,
-recordings can still queue locally during an outage.
+After saving the server address, **Create personal key** registers your name with
+`register_account`, preserving any existing phone identity and its recordings. Or
+paste the `memos1.…` key from web sign-in into **Sign in with saved key**. The app
+checks the key's server/database, then asks the backend to authenticate it before
+replacing the Keychain credential. Names registered to keys cannot be renamed.
+**Copy personal key** makes an expiring local clipboard copy; save it privately and
+paste it into the browser on iPhone or Quest to access the same account. No keys are
+included in viewer links, logs, or video metadata. A party code is a separate thing.
+Pending clips bind to their original account/server; finish uploads before switching.
+Account/server changes are disabled while recording. **Keep on phone only** stops
+an unwanted upload retry while retaining the clip for playback/export.
+
+The upload service adds `GET /api/account/config` → `{server,database}` and
+`POST /api/account` → `{identity,displayName,provider}` (body `{identity,name}`,
+Bearer token required). Existing `/api/profile` and guest naming remain compatible.
+Set **ACCOUNT_SERVER_URL** to the exact public SpacetimeDB base used by web keys:
+`https://YOUR-WEB-HOST/stdb` for the same-origin proxy, or the HTTP(S) equivalent
+of `VITE_STDB_URL` without its trailing slash. Local upload defaults to
+`PUBLIC_ORIGIN/stdb`; use the same public hostname on desktop and phone when making
+keys. Production falls back to `STDB_HTTP_URL` if neither public setting is given,
+so explicitly configure it when that address is internal. Both app and web need the
+same `STDB_DATABASE`. Restart the upload service after updating it.
 
 **Memories** shows reconstruction status and offers **Open in 3D** and a share link
 when the worker supplies a valid manifest. It refreshes every five seconds while
@@ -50,9 +90,10 @@ the app is active. **Web viewer URL** in Settings is optional when upload and we
 hosting share an origin. For separate hosting, both services must use the same DB.
 The web library is `/library.html`. See [FRONTEND_FLOW.md](FRONTEND_FLOW.md).
 
-The earlier simulator verification below predates these UI additions. This Mac
-currently has Command Line Tools only; the new Swift sources were syntax-checked,
-not rebuilt for iPhone/Simulator.
+The updated native sources compile against the physical iPhone SDK with Xcode 27.1
+and Meta DAT 1.0.1. Compile checks use `CODE_SIGNING_ALLOWED=NO` and do not establish
+an installable build. Signing/provisioning and a real glasses recording remain
+separate device checks. The earlier simulator evidence below predates this update.
 
 ## Install on your iPhone
 
@@ -73,24 +114,41 @@ After initial name setup, no server? You can still demonstrate On/Off, save a re
 
 ## Use the actual Wayfarer camera
 
-Meta's [CameraAccess sample requirements](https://github.com/facebook/meta-wearables-dat-ios/blob/main/samples/CameraAccess/README.md) currently list **Xcode 26.4+, Swift 6.3+, iOS 17.2+**. The glasses project is separate so its binary SDK does not prevent building the demo with Xcode 15.4. The glasses target still requires full compilation and physical-device testing with the supported toolchain.
+Meta's [CameraAccess sample requirements](https://github.com/facebook/meta-wearables-dat-ios/blob/main/samples/CameraAccess/README.md) currently list **Xcode 26.4+, Swift 6.3+, iOS 17.2+**. The glasses project is separate so its binary SDK does not prevent building the demo with Xcode 15.4. The glasses target compiles with Xcode 27.1; physical-device testing is still required.
 
 1. Open **SceneCapture.xcodeproj** with the supported Xcode. Set your signing team/unique bundle ID, select your paired physical iPhone, and let Swift Package Manager resolve Meta DAT **1.0.1**.
 2. In Meta AI, enable glasses Developer Mode following Meta's current instructions. That mode does not need app credentials; release channels need your `META_APP_ID` and `CLIENT_TOKEN` in build settings. The callback scheme is `scenecapture://`.
 3. Run the app, configure its server, tap **Connect with Meta AI**, finish registration/permissions and return. Tap **Start Session**, then **Preview glasses camera**.
 4. Leave the phone stationary and turn your head. The preview must follow the glasses. Tap **On**, wait 10–15 seconds, tap **Off**. Off stops recording and preview, retains the MP4 and uploads automatically. It does not power off the glasses or operate their built-in 3K recorder.
-5. Expect PASS and play the stored clip. The SDK stream is requested at high resolution/24 fps; this is not a claim of built-in 3K/30 capture. Video only, 90-second limit. Backgrounding ends the session and attempts to finish the recording; start a new session on return.
+5. Expect PASS and play the stored clip. The SDK stream requests `.high`, 30 fps and 44.1 kHz mono PCM audio; MP4 encoding uses H.264 + AAC on the SDK timestamps. Meta labels DAT camera audio streaming **experimental**, so support must be verified on the real glasses. This does not claim built-in 3K capture. The app inspects the actual file before presigning: ≥1280 px on its long edge, ≥29 fps (allowing 29.97), a nonempty audio track, and a readable duration. An unsuitable live clip stays local/pending with its measured properties in the error; use **Keep on phone only** and import a suitable Meta AI export if needed. 90-second recording limit. Backgrounding ends the session and attempts to finish the recording; start a new session on return.
 
-For a real glasses clip without the newer Xcode: record using the glasses' physical capture button, export through Meta AI, then upload the MP4/MOV from the browser's import panel. The native file importer currently accepts MP4 only.
+For a real glasses clip without the newer Xcode: record using the glasses' physical capture button, export through Meta AI, then upload the MP4/MOV from the browser's import panel. The native importer accepts MP4 and MOV, preserves the container extension/MIME type, and applies the same media checks.
 
 ## Source layout and regeneration
 
 `SceneCaptureApp.swift` is the shared UI. `DemoCapture.swift` supplies synthetic frames; `GlassesCapture.swift` supplies SDK frames. `Recorder.swift` writes H.264 MP4s. `SceneLibrary.swift` persists the queue/catalog, obtains a database identity, transfers clips and verifies stored bytes. The two projects compile different capture sources; the demo has no Meta package reference.
 
-Run `npm run ios:generate` after changing source layout. Generated projects and plists are committed; regeneration resets personal signing customizations. Do not put videos, credentials, DerivedData or `xcuserdata` in git.
+Run `npm run ios:generate` after changing source layout. Generated projects and plists are committed; regeneration preserves existing signing team, bundle identifier and Meta registration build settings. Do not put videos, credentials, DerivedData or `xcuserdata` in git.
 
 ## Verification on this branch
 
 Checked on 24 October 2026 with Xcode 15.4 and iPhone 15 Simulator (iOS 17.5): the standalone demo builds with ad-hoc signing, records playable MP4s, retains a failed upload through app relaunch/update, automatically retries, and plays the stored URL. A 12.68-second phone clip produced database row #1 with SHA-256 `a1e586447bc8d9720e00cb3bc00e7c5200d5f210d72eed2a3cf649ec78b49921`; its database owner and pipeline identity match, confirming a test upload. A later 30-second recording also passed verification and the time limit. IDs/hashes are evidence from this local database, not hardcoded expectations for another installation.
 
 The shared recorder smoke test, 88 Vitest tests (2 existing skipped), 75 viewer tests, TypeScript checks, production web build and live SpacetimeDB integration test passed. Physical iPhone installation, live Wayfarer capture, R2/S3 and reconstruction remain unverified. The full Meta SDK target cannot compile with the installed Xcode 15.4; only the independent demo target was built and run here.
+
+## Repeatable checks for the new contract
+
+```bash
+xcrun swiftc -parse-as-library apps/ios/SceneCapture/AccountKey.swift \
+  apps/ios/SceneCapture/Recorder.swift apps/ios/SceneCapture/CaptureRequirements.swift \
+  apps/ios/Tests/ContractChecks.swift -o /tmp/memos-native-checks
+/tmp/memos-native-checks
+# Against a separately published LOCAL test database on port 3055:
+STDB_DATABASE=YOUR-LOCAL-TEST-DATABASE node scripts/test-phone-account.mjs
+```
+
+The native checks encode real files, verify video plus audio, reject silent/24 fps/
+low-resolution files, and exercise browser-compatible key encoding/decoding. The
+live API check verifies registration, key reuse, immutable names, and identity/token
+mismatch rejection. Neither test proves SDK hardware delivery or successful RunPod
+reconstruction; test those with an actual paired phone and glasses.

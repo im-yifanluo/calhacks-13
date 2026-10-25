@@ -2,6 +2,9 @@
 from pathlib import Path
 import hashlib
 import plistlib
+import json
+import re
+import subprocess
 
 def generate(demo):
     ROOT = Path(__file__).resolve().parents[1]
@@ -9,6 +12,20 @@ def generate(demo):
     name = 'SceneCaptureDemo' if demo else 'SceneCapture'
     project = ROOT / 'apps' / 'ios' / f'{name}.xcodeproj'
     project.mkdir(exist_ok=True)
+    # Xcode may have saved a user's signing team or app registration settings.
+    # Retain these when regenerating source membership instead of resetting setup.
+    personal = {}
+    existing = project / 'project.pbxproj'
+    if existing.exists():
+        previous = json.loads(subprocess.check_output(['plutil', '-convert', 'json', '-o', '-', str(existing)]))['objects']
+        keep = {'DEVELOPMENT_TEAM', 'PRODUCT_BUNDLE_IDENTIFIER', 'CODE_SIGN_IDENTITY',
+                'PROVISIONING_PROFILE_SPECIFIER', 'META_APP_ID', 'CLIENT_TOKEN'}
+        for target in previous.values():
+            if target.get('isa') == 'PBXNativeTarget' and target.get('name') == name:
+                for config_id in previous[target['buildConfigurationList']]['buildConfigurations']:
+                    config = previous[config_id]
+                    personal[config['name']] = {key: value for key, value in config['buildSettings'].items() if key in keep}
+
     def ident(s): return hashlib.sha1(s.encode()).hexdigest()[:24].upper()
     def ref(s): return ident(s)
     objects = []
@@ -46,6 +63,11 @@ def generate(demo):
                 settings = settings.replace('com.memreplay.SceneCapture', 'com.memreplay.SceneCaptureDemo').replace('SceneCapture/Info.plist', 'SceneCapture/Info-Demo.plist')
                 settings += ' SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEMO_APP;'
             settings += ' SWIFT_OPTIMIZATION_LEVEL = "-Onone"; DEBUG_INFORMATION_FORMAT = dwarf;' if mode == 'Debug' else ' SWIFT_OPTIMIZATION_LEVEL = "-O"; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";'
+            if level == 'target':
+                for key, value in sorted(personal.get(mode, {}).items()):
+                    settings = re.sub(r'(?<![A-Za-z0-9_])' + key + r'\s*=\s*(?:"(?:[^"\\]|\\.)*"|[^;]*);', '', settings)
+                    settings += f' {key} = {json.dumps(value)};'
+            settings = "\n".join(line.rstrip() for line in settings.splitlines())
             obj(level+mode, f'isa = XCBuildConfiguration; name = {mode}; buildSettings = {{ {settings} }};')
         obj(level+'configs', f'isa = XCConfigurationList; buildConfigurations = ({ref(level+"Debug")},{ref(level+"Release")},); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;')
     sdk_products = '' if demo else f'{ref("MWDATCore")},{ref("MWDATCamera")},'
@@ -71,6 +93,7 @@ def generate(demo):
         'UIBackgroundModes': ['processing', 'bluetooth-central', 'bluetooth-peripheral', 'external-accessory'],
         'UISupportedExternalAccessoryProtocols': ['com.meta.ar.wearable'],
         'NSBluetoothAlwaysUsageDescription': 'Connect to your glasses to capture scenes.',
+        'NSMicrophoneUsageDescription': 'Include glasses microphone audio in your scene recording.',
         'NSLocalNetworkUsageDescription': 'Connect to your glasses and local scene server.',
         'NSBonjourServices': ['_bonjour._tcp'],
         'NSAppTransportSecurity': {'NSAllowsLocalNetworking': True},
@@ -78,7 +101,7 @@ def generate(demo):
     }
     if demo:
         info['CFBundleDisplayName'] = 'Replay Demo'
-        for key in ['MWDAT', 'CFBundleURLTypes', 'UIBackgroundModes', 'UISupportedExternalAccessoryProtocols', 'NSBluetoothAlwaysUsageDescription', 'NSBonjourServices']:
+        for key in ['MWDAT', 'CFBundleURLTypes', 'UIBackgroundModes', 'UISupportedExternalAccessoryProtocols', 'NSBluetoothAlwaysUsageDescription', 'NSMicrophoneUsageDescription', 'NSBonjourServices']:
             info.pop(key, None)
         info['NSLocalNetworkUsageDescription'] = 'Upload your recordings to the Memory Replay server on your Mac.'
     (folder / plist_name).write_bytes(plistlib.dumps(info))

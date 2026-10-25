@@ -71,7 +71,7 @@ struct CaptureView: View {
                         if let image = capture.preview {
                             Image(uiImage: image).resizable().scaledToFit().accessibilityLabel("Camera preview")
                         } else {
-                            ContentUnavailableView("Camera off", systemImage: "eyeglasses", description: Text("Connect your glasses and start a session, then tap On."))
+                            ContentUnavailableView("Camera off", systemImage: "eyeglasses", description: Text("Connect your glasses and start a session, then tap Record."))
                                 .frame(minHeight: 190)
                         }
                         HStack {
@@ -82,7 +82,7 @@ struct CaptureView: View {
                             #if DEMO_APP
                             Text(String(format: "%04.1f / 30 s", capture.elapsed)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                             #else
-                            Text("VIDEO ONLY").font(.caption2).foregroundStyle(.secondary)
+                            Text("TARGET: 30 FPS + AUDIO").font(.caption2).foregroundStyle(.secondary)
                             #endif
                         }.padding(14)
                     }.background(.white.opacity(0.06)).clipShape(RoundedRectangle(cornerRadius: 20))
@@ -92,13 +92,13 @@ struct CaptureView: View {
                             .textFieldStyle(.roundedBorder).disabled(capture.recording || capture.startingRecording)
                         HStack(spacing: 14) {
                             Button { Task { await capture.recordOn() } } label: {
-                                Label("On", systemImage: "record.circle").frame(maxWidth: .infinity, minHeight: 38)
-                            }.tint(.mint).disabled(!capture.canStart || !library.profileReady).keyboardShortcut("o", modifiers: [])
+                                Label("Record", systemImage: "record.circle").frame(maxWidth: .infinity, minHeight: 38)
+                            }.tint(.mint).disabled(!capture.canStart || library.savingProfile).keyboardShortcut("o", modifiers: [])
                             Button { Task { await capture.recordOff() } } label: {
-                                Label("Off", systemImage: "stop.fill").frame(maxWidth: .infinity, minHeight: 38)
-                            }.tint(.orange).disabled(!capture.canStop).keyboardShortcut("f", modifiers: [])
+                                Label("Stop & save", systemImage: "stop.fill").frame(maxWidth: .infinity, minHeight: 38)
+                            }.tint(.orange).disabled(!capture.canStop || (!capture.recording && !capture.startingRecording)).keyboardShortcut("f", modifiers: [])
                         }.buttonStyle(.borderedProminent).font(.headline).foregroundStyle(.black)
-                        Text("On starts recording. Off saves and uploads automatically. Keep the app open.")
+                        Text(library.profileReady ? "Record starts saving video. Stop & save finishes it and uploads automatically. Keep the app open." : "Record saves video on this phone without an account. Tap Stop & save, then open Memories to play or export it. Nothing uploads until you sign in and choose Upload.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     VStack(alignment: .leading, spacing: 12) {
@@ -139,10 +139,20 @@ struct CaptureView: View {
     #if !DEMO_APP
     private var connection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("\(capture.registered ? "Registered" : "Not registered") · \(capture.deviceCount) available · \(capture.state)").font(.caption)
+            Text("\(capture.registered ? "Registered" : "Not registered") · \(capture.deviceCount) detected · \(capture.state)").font(.caption)
+            if capture.registered && !capture.deviceReady && !capture.sessionExists {
+                Text("Waiting for glasses to become eligible. Keep them on with the arms open and confirm they are connected in Meta AI.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Button("Connect with Meta AI") { Task { await capture.connect() } }.disabled(capture.registered)
+            if capture.glassesUpdateRequired {
+                Text("Meta says its developer software on the glasses needs updating. The button below opens Meta's update flow.")
+                    .font(.caption).foregroundStyle(.orange)
+            }
+            Button("Update glasses developer software") { Task { await capture.openGlassesUpdate() } }
+                .disabled(!capture.registered || capture.openingGlassesUpdate || capture.sessionExists || capture.startingSession || capture.startingRecording || capture.finishing)
             Button("Start Session") { Task { await capture.startSession() } }
-                .disabled(!capture.registered || capture.deviceCount == 0 || capture.sessionExists || capture.startingSession)
+                .disabled(!capture.registered || !capture.deviceReady || capture.sessionExists || capture.startingSession)
             Button("Preview glasses camera") { Task { await capture.startPreview() } }
                 .disabled(!capture.sessionStarted || capture.previewActive || capture.finishing)
             Button("End Session") { Task { await capture.endSession() } }.disabled(!capture.sessionExists)
@@ -158,7 +168,7 @@ struct LibraryView: View {
         NavigationStack {
             List {
                 Section("From recording to 3D") {
-                    Text("Your videos upload when recording stops. This library follows processing automatically; open the finished scene in the web viewer when it is ready.")
+                    Text("Recordings stay on this phone. When signed in, new recordings also upload automatically. Clips saved before sign-in can be uploaded individually below.")
                     if let url = library.libraryURL { Link("Open web memory library", destination: url) }
                     if !library.sceneConnectionError.isEmpty {
                         Text("Live status unavailable: \(library.sceneConnectionError)").font(.caption).foregroundStyle(.orange)
@@ -167,14 +177,26 @@ struct LibraryView: View {
                 Section("Upload status · \(library.pending.count) pending") {
                     Text(library.message)
                     Button("Retry uploads") { Task { await library.uploadPending() } }.disabled(library.uploading || library.checking || library.pending.isEmpty)
-                    Button("Import exported glasses MP4") { importing = true }
+                    Button("Import glasses MP4 / MOV") { importing = true }
                 }
                 Section("On this phone · available offline") {
-                    if library.localCaptures.isEmpty { Text("Tap On, then Off to save your first clip.").foregroundStyle(.secondary) }
+                    if library.localCaptures.isEmpty { Text("Tap Record, then Stop & save to save your first clip.").foregroundStyle(.secondary) }
                     ForEach(library.localCaptures) { clip in
                         VStack(alignment: .leading, spacing: 6) {
                             Text(clip.title).font(.headline)
-                            Text(library.pending.contains(where: { $0.id == clip.id }) ? "Awaiting upload / verification" : "Local MP4 retained").font(.caption).foregroundStyle(.secondary)
+                            Text(library.pending.contains(where: { $0.id == clip.id }) ? "Awaiting upload / verification" : "Local video retained").font(.caption).foregroundStyle(.secondary)
+                            if clip.owner == nil && !library.pending.contains(where: { $0.id == clip.id }) {
+                                if library.profileReady {
+                                    Button("Upload as \(library.displayName)") { Task { await library.uploadLocal(clip) } }
+                                        .disabled(library.uploading || library.checking || library.savingProfile || library.captureActive)
+                                } else {
+                                    Text("Saved locally. Sign in to upload later.").font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            if library.pending.contains(where: { $0.id == clip.id }) {
+                                Button("Keep on phone only · stop upload retries") { library.keepLocalOnly(clip) }
+                                    .disabled(library.uploading || library.checking || library.savingProfile)
+                            }
                             HStack {
                                 Button("Play local clip") { library.playLocal(clip) }.buttonStyle(.bordered)
                                 ShareLink(item: library.file(for: clip)) { Label("Export", systemImage: "square.and.arrow.up") }.buttonStyle(.bordered)
@@ -205,7 +227,7 @@ struct LibraryView: View {
             }.navigationTitle("Memories")
                 .refreshable { await library.refresh() }
                 .toolbar { Button("Refresh") { Task { await library.refresh() } }.disabled(library.uploading || library.checking) }
-                .fileImporter(isPresented: $importing, allowedContentTypes: [.mpeg4Movie]) { result in
+                .fileImporter(isPresented: $importing, allowedContentTypes: [.mpeg4Movie, .quickTimeMovie]) { result in
                     switch result {
                     case .success(let url): Task { await library.importVideo(url) }
                     case .failure(let error): library.message = error.localizedDescription
@@ -242,7 +264,7 @@ struct PartyView: View {
                 }
                 Section("From a recording to a scene") {
                     Text("Finish recording with Off and wait for upload verification. Follow processing in Memories, then open the finished scene or choose it in the party lobby. The synthetic demo stays available while reconstruction runs.")
-                    Text("The party opens in your browser for Google sign-in, invite links and the interactive viewer. Guest mode also works. Sign-in does not change this app's capture identity.")
+                    Text("The party opens in your browser. Copy your personal key from Settings and paste it into web sign-in to use the same account and recordings. Your party code is separate.")
                     Text("A reconstruction worker is still required to turn video into a 3D scene.").foregroundStyle(.secondary)
                 }
             }.navigationTitle("Party")
@@ -253,16 +275,27 @@ struct UserProfileView: View {
     @ObservedObject var library: SceneLibrary
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("What should we call you?").font(.headline)
-            TextField("Your name", text: $library.displayName).textFieldStyle(.roundedBorder)
-                .textContentType(.nickname).autocorrectionDisabled().accessibilityLabel("Your name")
-            Button(library.savingProfile ? "Saving…" : library.profileReady ? "Save name" : "Continue with this name") {
-                Task { await library.saveProfile() }
-            }.buttonStyle(.borderedProminent).disabled(library.savingProfile || library.checking || library.uploading)
+            if library.profileReady {
+                Text("Signed in as \(library.displayName)").font(.headline)
+                Button("Copy personal key") { Task { await library.copyPersonalKey() } }
+                    .buttonStyle(.bordered)
+            } else {
+                Text("Create your account").font(.headline)
+                TextField("Your name", text: $library.displayName).textFieldStyle(.roundedBorder)
+                    .textContentType(.nickname).autocorrectionDisabled().accessibilityLabel("Your name")
+                Button(library.savingProfile ? "Signing in…" : "Create personal key") {
+                    Task { await library.saveProfile() }
+                }.buttonStyle(.borderedProminent)
+                Text("Already signed in on the web? Paste that personal key below to keep the same account.").font(.caption)
+            }
+            SecureField("memos1.… personal key", text: $library.personalKeyInput)
+                .textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder)
+            Button("Sign in with saved key") { Task { await library.importAccount() } }
+                .disabled(!library.pending.isEmpty || library.personalKeyInput.isEmpty)
             Text(library.profileMessage).font(.caption)
             if !library.userID.isEmpty { Text("User ID: \(library.userID)").font(.caption2.monospaced()).textSelection(.enabled) }
-            Text("Your name labels a unique guest ID saved on this device. The same name on another device creates a different user.").font(.caption).foregroundStyle(.secondary)
-        }
+            Text("Your personal key works on phone, web and Quest. Keep it private. A registered name cannot be changed.").font(.caption).foregroundStyle(.secondary)
+        }.disabled(library.savingProfile || library.checking || library.uploading || library.captureActive)
     }
 }
 struct SettingsView: View {
@@ -280,14 +313,19 @@ struct SettingsView: View {
                         .accessibilityLabel("Web viewer address")
                     Text("Leave the viewer URL blank when the web app and upload API share one address. For separate hosting, enter the web app's HTTPS origin. Both must use the same SpacetimeDB database.").font(.caption)
                     Button("Save server") { library.saveSettings() }.disabled(library.uploading || library.checking || library.savingProfile)
+                    Button("Use memos upload server") {
+                        library.endpoint = "https://memos.alightdell64.chatgpt.site"
+                        library.viewerEndpoint = "https://memos.alightdell64.chatgpt.site"
+                        library.saveSettings()
+                    }.disabled(library.uploading || library.checking || library.savingProfile || library.captureActive || !library.pending.isEmpty)
                     Button("Test connection") { Task { await library.refresh() } }.disabled(library.uploading || library.checking)
                     Text(library.message)
                 }
                 Section("How to test") {
-                    Text("1. Start the database, upload service and web app on your Mac.")
-                    Text("2. On iPhone, use the Mac's .local hostname on the same Wi-Fi. Simulator can use http://127.0.0.1:5173.")
-                    Text("3. Tap On, wait 3–5 seconds, then tap Off. Expect a verified database row and matching video bytes.")
-                    Text("4. Open Saved videos to play the stored recording. Local clips are also available offline and can be exported.")
+                    Text("1. Choose Use memos upload server, then sign in in Capture with your website personal key.")
+                    Text("2. In Memories, choose Upload as your name on a local clip. The hosted server currently accepts clips up to 90 MiB for storage testing, without GPU processing.")
+                    Text("3. Wait for PASS: the database record and downloaded video must match your recording.")
+                    Text("4. Local clips remain available offline and can be exported. New recordings upload automatically when signed in.")
                 }
                 Section("About this build") {
                     #if DEMO_APP

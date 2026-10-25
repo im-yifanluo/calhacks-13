@@ -174,6 +174,8 @@ export async function createLocalHandler(env = process.env) {
   }
   const origin = new URL(env.PUBLIC_ORIGIN || "http://127.0.0.1:5173").origin;
   const db = databaseConfig({
+    ACCOUNT_SERVER_URL: env.ACCOUNT_SERVER_URL,
+    PUBLIC_ORIGIN: origin,
     STDB_HTTP_URL: env.STDB_HTTP_URL || `http://127.0.0.1:${env.STDB_PORT || 3055}`,
     STDB_DATABASE: env.STDB_DATABASE || "memory-replay",
   });
