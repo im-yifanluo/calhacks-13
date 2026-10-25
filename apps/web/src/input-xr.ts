@@ -168,7 +168,7 @@ export class XRInput {
       const ctx = this.context;
       ctx.fillStyle = "#101e27"; ctx.fillRect(0, 0, 1024, 256);
       ctx.fillStyle = "#a1ece0"; ctx.font = "bold 35px sans-serif";
-      ctx.fillText(`MEMORY REPLAY · ${timeline.active.name} · ${timeline.time.toFixed(1)}s`, 28, 56);
+      ctx.fillText(`memos · ${timeline.active.name} · ${timeline.time.toFixed(1)}s`, 28, 56);
       ctx.fillStyle = "#ffffff"; ctx.font = "28px sans-serif";
       [timeline.playing ? "PAUSE" : "PLAY", "−1 SEC", "+1 SEC", "TAKES", "ORIGINAL"].forEach((text, i) => ctx.fillText(text, 28 + i * 202, 140));
       ctx.fillStyle = "#bdcbd3"; ctx.font = "23px sans-serif";

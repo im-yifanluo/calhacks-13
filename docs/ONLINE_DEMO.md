@@ -1,13 +1,13 @@
-# Online phone party demo
+# memos · Online party demo
 
-The hosted demo is at **https://jerry-memory-replay-phone.alightdell64.chatgpt.site/**. It serves the built viewer from Sites and connects directly to SpacetimeDB Maincloud. The Mac and phone both act as clients; neither a laptop server nor a tunnel is required.
+The **memos** hosted demo is at **https://jerry-memory-replay-phone.alightdell64.chatgpt.site/**. It serves the built viewer from Sites and connects directly to SpacetimeDB Maincloud. The Mac and phone both act as clients; neither a laptop server nor a tunnel is required. The generated hosting address retains its original slug; the site title and visible branding are memos.
 
 ## Server and room addresses
 
 - **Fresh visit / solo:** open the server address with no room path: `https://jerry-memory-replay-phone.alightdell64.chatgpt.site/`. **Explore solo** closes the party panel; it does not create or join a shared room.
 - **Shared party:** creating a party or entering its code changes the address to `/ROOMCODE`, for example `https://jerry-memory-replay-phone.alightdell64.chatgpt.site/031HHRP`. Copying the invite link uses this address.
 - **Direct entry:** opening or refreshing `/ROOMCODE` rejoins that room and loads its current scene. The database owns the scene selection; a per-tab scene hint avoids putting asset URLs in the invite link.
-- **Leave / home:** **Leave** or the **MEMORY REPLAY** home link returns to `/` and solo playback. A fresh visit to `/` never silently rejoins the previous party.
+- **Leave / home:** **Leave** or the **memos** home link returns to `/` and solo playback. A fresh visit to `/` never silently rejoins the previous party.
 - Existing `/?room=ROOMCODE` links still join, then become `/ROOMCODE`. Codes are unchanged and still contain seven letters/numbers.
 
 Production hosting must serve `index.html` for room paths, including refreshes. In the Sites hosting manifest, use `"static": {"directory": "dist", "not_found_handling": "single-page-application"}`. Vite's development server already supports this fallback. Static assets retain their root-relative `/assets/` URLs.
