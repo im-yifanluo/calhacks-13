@@ -1,0 +1,75 @@
+{
+ "run": "run4_glasses_final, part 3 (v106), Oct 24 ~9:25 PM PT",
+ "results": [
+  {
+   "id": "v106",
+   "title": "Hackathon hall, long walk",
+   "first": {
+    "layout": 3.2,
+    "colour": 2.9,
+    "dynamic": 2.8,
+    "lost_rows_score": 0,
+    "fade_justified": true,
+    "largely_matches": false,
+    "defects": [
+     {
+      "t": 5,
+      "what": "In the upper-left ceiling, grey smeared blobs replace the skylight and trusses. The upper-right is a flat white dome scattered with dark triangular patches that are not in the video.",
+      "fixable": "pipeline: floater pruning and sky-dome or far-field fill on the ceiling"
+     },
+     {
+      "t": 5,
+      "what": "The seated crowd at the tables is an orange, skin-toned smear. Laptops, table edges and individual heads are lost, and the floor at the bottom is a dark blurred band.",
+      "fixable": "mostly inherent: people moving through a crowded hall get baked into the static splat. Better masking of dynamic regions during training would reduce it."
+     },
+     {
+      "t": 15,
+      "what": "The person in a beige jacket who fills the left third of the frame is missing from the render, with no ghost either. A dark red/black smeared floater blob sits in the lower left where the video shows floor and seated people.",
+      "fixable": "floater: fixable by pruning. Missing near person: a ghost or track gap for subjects close to the camera (partly inherent, since the subject is too close and blurred)."
+     },
+     {
+      "t": 15,
+      "what": "The people walking down the central aisle are missing or smeared, with no ghosts. The floor is a uniform grey blur with no paint marks, and dark streaky floaters hang near the ceiling at the top.",
+      "fixable": "ghosts for people in the distance: fixable. Floor texture: inherent to low-texture motion-blurred footage. Ceiling floaters: pruning."
+     },
+     {
+      "t": 25,
+      "what": "Black voids and jumbled truss fragments in the top centre of the ceiling. In the video the ceiling is uniform grey.",
+      "fixable": "pipeline: sky/far fill and pruning"
+     },
+     {
+      "t": 25,
+      "what": "The white folding chairs on the left are only faint, transparent outlines, and the floor in the lower left is smeared. The three standing people are correct ghosts (good).",
+      "fixable": "partly fixable: more weight on near-field density. Thin chair legs are partly inherent."
+     },
+     {
+      "t": 35,
+      "what": "A dark floating chunk sits in the upper-left ceiling. The foreground white chairs and the table are smeared, laptops are gone, and the bottom edge has dark smudges. The crowd has a warm orange cast, and the banners are more saturated than in the video.",
+      "fixable": "floater: pruning. Colour cast: colour calibration. Foreground smear: partly inherent."
+     },
+     {
+      "t": 45,
+      "what": "The dark-hooded person who occupies the left ~45% of the frame is missing, with no ghost. In its place and across the foreground, the render shows a dense smeared crowd of seated people where the video has empty white chairs and sparse tables (baked from other times). A large bright beige/skin blob floats at bottom centre. Worst row: PSNR 11.3.",
+      "fixable": "bright floater and baked crowd: fixable with better dynamic masking and pruning of transient people. Missing near occluder: partly inherent."
+     },
+     {
+      "t": 55,
+      "what": "The top-left ceiling renders pure black where the video shows a grey ceiling and trusses.",
+      "fixable": "pipeline: sky/far-field fill (clearly fixable)"
+     },
+     {
+      "t": 55,
+      "what": "The tables and seated people in the left half are an oversaturated orange-red smear, laptops and table surfaces are lost, and the seated woman is a coarse brown mosaic ghost. The background banners, screen, pillars and lights line up well.",
+      "fixable": "colour: calibration and less saturation on baked people. Smear: mostly inherent to the moving crowd."
+     }
+    ],
+    "summary": "The render is recognisably the same hall from the same viewpoint in every row: ceiling light rows, pillars, back-wall banners, screens and the booth on the right line up closely, so the camera tracking is good throughout. The near and mid field are much weaker.\n\n**Layout per row:**\n- 5 s: 3.5\n- 15 s: 3\n- 25 s: 3.5\n- 35 s: 3.5\n- 45 s: 2.5\n- 55 s: 3\n\n**Colour per row:**\n- 5 s: 3\n- 15 s: 3\n- 25 s: 3\n- 35 s: 3.5\n- 45 s: 2.5\n- 55 s: 2.5\n\n**Dynamic per row:**\n- 5 s: 3\n- 15 s: 2\n- 25 s: 4\n- 35 s: 3\n- 45 s: 2\n- 55 s: 3\n\n**Recurring problems:**\n- The crowded tables are baked into orange or skin-toned smears.\n- People close to the camera at 15 s and 45 s vanish with no ghost.\n- At 45 s, people baked in from other times fill a foreground that is actually empty, and a bright beige floater sits at bottom centre.\n- The ceiling has black voids or grey mush at 5, 25 and 55 s. At 55 s the top-left is solid black.\n- Foreground chairs and tables smear.\n\nThe standing group at 25 s is handled well, with ghosts in the right places and colours. Mean PSNR is 14.8, SSIM 0.54 and histogram match 0.64.\n\n**Verdict:** largely_matches is false. Layout averages 3.2 (needs \u22653.5) and colour averages 2.9 (needs \u22653). No row scores below 2 on layout.\n\n**Tracking-lost rows:** none were flagged and none should have been, because geometry stays aligned in every row. Not fading anything is therefore justified. The lost_rows_score of 0 means not applicable.\n\n**Most fixable in the pipeline:** sky/far-field fill for the black and grey ceiling, floater pruning (15 s lower left, 35 s ceiling, 45 s bottom blob), better masking of transient people so the empty foreground at 45 s doesn't fill with baked crowd, and colour calibration for the orange cast. Mostly inherent to the footage: the smearing of densely packed moving people and the loss of near, motion-blurred subjects."
+   },
+   "check": {
+    "agree": true,
+    "reason": "I agree with the verdict (largely_matches = false), and the first judge's scores are within about \u00b10.5 of mine on every row. I checked each row at full resolution, video and render side by side.\n\n**Verdict:** the layout failure holds even under generous scoring. If I lift 5 s and 25 s to 4, the layout average is still only about 3.3, below the 3.5 needed. Strictly, I'd score layout 3.0\u20133.2 myself:\n- 5 s and 35 s have obvious errors in whole regions (ceiling, foreground tables and crowd), not \"small blur\", so 3\u20133.5 rather than a solid 3.5.\n\nColour about 2.8\u20132.9 is right:\n- The ceilings render much darker than the grey ceiling in the video: black at the top centre at 25 s, the whole top band at 45 s, and the top left at 55 s.\n- The table crowds take an orange-red cast.\n\n**Camera alignment is excellent in every row.** Pillars, banners, screens, light rows and the booth and white bin at 15 s line up within a few pixels. No row should be flagged as tracking lost, so fade_justified = true and lost_rows_score 0 (not applicable) are correct.\n\n**Corrections to the first judge's defects (none change the verdict):**\n1. **5 s:** the dark triangular patches in the top-right white dome are not invented. They sit where the roof truss webbing is under the skylight in the video, so they are a degraded and inverted rendering of the truss, not pure floaters.\n2. **45 s, missing defect:** the whole top band of the ceiling renders near-black where the video shows a grey ceiling. This is the same far-field or sky-fill problem as 55 s.\n3. **45 s, overstated defect:** most of the \"baked crowd where the video has empty chairs\" lies behind the hooded person who covers the left ~50% of the video. There the render is showing what is behind the occluder, not contradicting the video. The real contradictions are:\n   - in the visible strip at x\u2248200\u2013250 of the 450-px column, smeared seated people where the video has an empty white chair;\n   - the bright beige blob at bottom centre, a baked near transient or floater.\n\n   Layout 2.5 at 45 s is still fair.\n4. **25 s:** dynamic 4 is slightly generous. The three standing people and the seated man are in the right places, but as coarse blocky mosaics with dotted, broken legs, so I'd give 3.5. The dynamic average is then about 2.75 instead of 2.8, which makes no difference.\n5. **35 s:** colour 3.5 is a little generous given the dark ceiling streaks, the floating chunk and the orange crowd. I'd give 3.\n\n**Fixable vs inherent:** the first judge's split is right.\n- **Fixable in the pipeline:** sky and far-field fill for the black or grey ceiling at 5, 25, 45 and 55 s; pruning of floaters (15 s lower left, 35 s ceiling chunk, 45 s beige blob); colour calibration for the orange cast; better masking of transient people.\n- **Mostly inherent to the footage:** the smeared dense moving crowd, missing very-near motion-blurred people (15 s, 45 s), and the loss of floor texture.\n\nMetrics agree with what I see: mean PSNR 14.8, SSIM 0.54, histogram 0.64; worst row 45 s at PSNR 11.3."
+   }
+  }
+ ],
+ "report": "# Judging report: video \u2192 3D scene pipeline\n\n## Per-clip scores (skeptic-corrected)\n\n- **v106, hackathon hall, long walk:** layout 3.2 \u00b7 colour 2.8 \u00b7 dynamic 2.75 \u00b7 PSNR 14.8, SSIM 0.54, histogram match 0.64 \u00b7 worst row 45 s (PSNR 11.3) \u00b7 tracking lost: none, so no fade was needed \u00b7 **largely matches: no**\n\nThe skeptic lowered colour at 35 s (3.5 \u2192 3) and dynamic at 25 s (4 \u2192 3.5). It put layout at 3.0\u20133.2 but changed no row. Neither change affects the verdict.\n\n## Most important defects\n\n**Fixable in the pipeline**\n1. **Black or grey ceiling.** Black voids or grey mush replace the grey ceiling and trusses at 5, 25, 45 and 55 s. At 45 s the whole top band is black, and at 55 s the top-left is. This needs far-field or sky fill. The dark triangles at 5 s are a degraded copy of the real truss, not invented floaters.\n2. **Floaters.** A dark red blob sits in the lower left at 15 s, a dark chunk hangs from the ceiling at 35 s, and a bright beige blob sits at bottom centre at 45 s. Pruning should remove them.\n3. **Transient people baked into the static scene.** At 45 s smeared seated people appear on a visible empty chair. Walkers in the central aisle at 15 s have no ghosts. Better masking of moving people, plus ghosts for distant people, would fix both.\n4. **Orange or red cast** on the table crowds, worst at 55 s. Colour calibration should correct it.\n\n**Inherent to the footage**\n5. **Lost detail in crowds and nearby subjects.** Densely packed moving crowds smear: laptops and table edges are lost. Very close, motion-blurred people vanish with no ghost (15 s, 45 s). The low-texture floor and thin chair legs are lost. More weight on near-field density might help a little.\n\nMuch of what looks like a baked crowd at 45 s sits behind the hooded person in the foreground. There the render shows what is behind that person, so it does not contradict the video.\n\n## Verdict\n\n**The scene does not yet largely match the video from the recorded camera.** Camera tracking is excellent. Pillars, banners, screens, light rows and the booth line up within a few pixels in every row. The far background is recognisably the same hall throughout. Layout (3.2, needs at least 3.5) and colour (2.8, needs at least 3) miss the bar because of the ceiling, floaters and baked crowds. The standing group at 25 s is handled well, with ghosts in the right places. Ceiling fill, floater pruning and masking of moving people are all pipeline work and would likely push this clip over the line. Crowd smear will remain."
+}

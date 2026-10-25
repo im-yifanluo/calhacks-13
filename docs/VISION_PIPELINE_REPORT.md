@@ -24,8 +24,9 @@ Oct 24, CalHacks 13. Built on branch `pipe/vision`; runbook in [pipeline/README.
 - **Day 2 evening, the demo footage (Ray-Ban Meta glasses, 9 clips, 7 s to 60 s, indoors and out)**: all nine convert
   end to end into walkable scenes with moving people ghosts; from the recorded camera they score 16–19 dB (best:
   the colonnade walk 2 at 19.3, the rotunda at 18.7 with a real sky, the speaker at 18.3). The judge panel's verdict:
-  layout holds in every clip and camera alignment never slips; the two stage clips pass the bar, the outdoor clips fail
-  it on colour by 0.1–0.25 (a warm cast on walls and sandstone), the top thing to fix next. The viewer now opens a
+  layout holds in every clip and camera alignment never slips; the two stage clips pass the bar, the five outdoor clips fail
+  it on colour by 0.1–0.25 (a warm cast on walls and sandstone), the top thing to fix next, and the two crowded hall
+  walks fail on layout too (people baked into the room as smears). The viewer now opens a
   memory in **follow mode** (ride the recorded walk, pause to roam). A parallel **real 4DGS** track reaches 30.5 dB
   on the speaker clip with sharp moving people but is not yet a VR scene (details in §3).
 - **Day 2 in one line**: two silent failures found and fixed (the floor fit took a bed for the floor; removing the
@@ -162,7 +163,8 @@ of credits from ~7 PM, noun lists and prop descriptions came from hand-written t
 What the glasses scenes look like from the recorded camera (grids in `apps/web/public/memories/<id>/compare.jpg`):
 - **Stage, speaker at the podium (v59)**: the demo scene. The speaker stands as a moving point ghost at the podium in
   every sampled moment; bear, backdrop, stage and bag in place; the acrylic podium is only partly there; the far left
-  of the hall smears. PSNR 18.3 / SSIM 0.75.
+  of the hall smears. PSNR 18.3 / SSIM 0.75. The judges' "phantom tan box beside the podium" was the teddy's
+  fallback primitive (its splat carve found 45 Gaussians): the teddy is now a fixture and stays in the room.
 - **Stage and the hall (v71)**: same stage, then the camera turns to the crowded hall: the speaker ghost holds, the
   hall is recognisable but blurry, seated people become a textured mass, 11 walking people are ghosts.
 - **Palace of Fine Arts, short (o3329)**: ground-level path, lawn, planters, sign and door right where they are; six
@@ -189,13 +191,14 @@ that helped indoors made these scenes slightly worse, so it is off by default.
 
 <!-- GLASSES-TABLE -->
 Scores from the recorded camera (six moments per clip, render vs video; PSNR in dB; colour = histogram match;
-centre = middle third), final pipeline of Oct 24, 9 PM PT. `pipeline/tools/results_table.py` regenerates this table.
+centre = middle third), final pipeline of Oct 24, 9:30 PM PT. `pipeline/tools/results_table.py` regenerates this table.
 
 | clip | length | floor fit | scale | cam height | room Gaussians (pruned) | props | ghosts | lost tracking | PSNR | SSIM | colour | centre SSIM |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Stage: speaker at the podium (`v59`) | 18 s | found | 1.41 | 1.74 m | 415523 (84477) | 1 | 3 | 0 s in 0 | 18.3 | 0.749 | 0.724 | 0.622 |
+| Stage: speaker at the podium (`v59`) | 18 s | found | 1.41 | 1.74 m | 415489 (84511) | 0 | 3 | 0 s in 0 | 18.313 | 0.748 | 0.725 | 0.623 |
 | Stage and the hall (`v71`) | 39 s | found | 1.0 | 1.51 m | 408415 (88102) | 3 | 11 | 0 s in 0 | 17.697 | 0.72 | 0.819 | 0.616 |
 | Hackathon hall walk (`v83`) | 45 s | found | 1.0 | 1.68 m | 403242 (96343) | 12 | 31 | 0 s in 0 | 16.055 | 0.576 | 0.626 | 0.528 |
+| Hackathon hall, long walk (`v106`) | 60 s | found | 1.0 | 1.64 m | 308010 (190815) | 12 | 14 | 0 s in 0 | 14.783 | 0.537 | 0.644 | 0.517 |
 | Palace of Fine Arts: short (`o3329`) | 7 s | found | 1.0 | 1.84 m | 465104 (33996) | 1 | 7 | 0 s in 0 | 17.868 | 0.63 | 0.401 | 0.621 |
 | Palace of Fine Arts: rotunda and people (`o3328`) | 43 s | found | 0.68 | 1.73 m | 263874 (236126) | 0 | 14 | 0 s in 0 | 18.698 | 0.69 | 0.598 | 0.676 |
 | Palace of Fine Arts: colonnade walk (`o3330`) | 60 s | found | 1.0 | 1.81 m | 314620 (185380) | 4 | 13 | 0 s in 0 | 18.357 | 0.677 | 0.431 | 0.67 |
@@ -248,10 +251,12 @@ Same panel and bar (layout ≥ 3.5 and colour ≥ 3), run on the final renders (
 | Palace of Fine Arts: colonnade walk (`o3330`) | 3.50 | 2.75 | 2.5 | fails on colour | agrees |
 | Palace of Fine Arts: colonnade walk 2 (`o3331`) | 3.50 | 2.80 | 3.5 | fails on colour | corrected (stricter) |
 | Palace of Fine Arts: garden and people (`o3332`) | 3.40 | 2.80 | 3.0 | fails on layout and colour | agrees |
+| Hackathon hall, long walk (`v106`) | 3.20 | 2.90 | 2.8 | fails on layout and colour | agrees |
 <!-- /GLASSES-JUDGE -->
 
 The panel's summary, in substance: *geometry and camera alignment hold in every clip and layout passes in five of six;
-only the two stage clips pass on both counts, and only just. Colour decides the result*: grey walls come out peach,
+only the two stage clips pass on both counts, and only just; the two crowded hall walks also miss on layout. Colour
+decides the result*: grey walls come out peach,
 the teddy and the sandstone saturated orange, tan brick salmon, the short clip with a cyan cast. After colour: people
 baked into the static room as smears where they sat or passed (hall walk, colonnade), walkers missing or rendered as
 sparse mosaics, floaters (sky blobs, flame-like smears on distant buildings, needle streaks on pavement), the phantom
@@ -412,6 +417,9 @@ In the order we hit it. Every fix is in the code and the runbook.
   write on both pods failed and the three trainings in flight (o3331, o3332, v106) and their queue workers died
   silently (their logs could not even record the error). Restarted at 8:37 PM after the agent freed 25 GB; exports
   are spz-only from here, and the agent keeps 15 GB free.
+- **Phantom box in the demo scene**: a prop whose carve finds too few Gaussians falls back to a primitive drawn in
+  front of the object still in the room; for the giant teddy that was an opaque tan box. Fixed by data (the teddy is
+  a fixture in `manual_specs.json`); the general rule, drop or hide such props, is in §5.
 - **Scoring decode check**: the agent suspected the scorer's ffmpeg decode was darker than the OpenCV frames the
   trainer sees; measured on the current clips the two differ by about 2 levels of 255, so the scores stand.
 
@@ -422,7 +430,7 @@ In the order we hit it. Every fix is in the code and the runbook.
    compositing of the same Gaussians, and it is what the judges mark down on every outdoor clip. Measure it once (a
    synthetic colour-chart splat rendered by gsplat and by Spark) and correct it in the viewer, instead of the per-clip
    affine fit tried today, which flattened contrast and cost 0.3–1.5 dB.
-2. **People who sit or linger.** ViPE's people masks (dilated 12 px) keep walkers out of the room, but people who sit
+2. **People who sit or linger, and props that fail to carve** (a prop with too few carved Gaussians should stay in the room, not become a box). ViPE's people masks (dilated 12 px) keep walkers out of the room, but people who sit
    or pass slowly get baked in as smears (hall walk, colonnade). Mask by motion as well as by class, or drop frames
    where a person covers the same pixels for seconds; and give ghosts denser points on the upper body.
 3. **Record a clip made for this**: walk sideways while panning, phone at one height, someone tossing a ball and
