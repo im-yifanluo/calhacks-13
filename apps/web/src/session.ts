@@ -112,6 +112,18 @@ export function roomCode(href: string): string {
 
 const ROOM_MANIFEST_KEY = "memreplay-room-manifest:";
 
+/** Explicit former origins of this app, for scene records saved before a hostname rename. */
+export function resolveManifestUrl(value: string, base: string): string {
+  const url = new URL(value, base);
+  const aliases = (import.meta.env.VITE_ASSET_ORIGIN_ALIASES ?? "").split(",").map((origin: string) => origin.trim());
+  if (aliases.includes(url.origin)) {
+    const current = new URL(base);
+    url.protocol = current.protocol;
+    url.host = current.host;
+  }
+  return url.href;
+}
+
 /** Only a hint for the next load. The database always checks and replaces it after joining. */
 export function rememberRoomManifest(storage: Pick<Storage, "setItem">, code: string, manifest: string): void {
   storage.setItem(ROOM_MANIFEST_KEY + normalizeCode(code), manifest);
@@ -122,11 +134,11 @@ export function loadedManifest(href: string, storage?: Pick<Storage, "getItem">)
   const url = new URL(href);
   const code = roomCode(href);
   const roomManifest = code ? storage?.getItem(ROOM_MANIFEST_KEY + code) : null;
-  return new URL(roomManifest ?? url.searchParams.get("memory") ?? DEFAULT_MANIFEST, url).href;
+  return resolveManifestUrl(roomManifest ?? url.searchParams.get("memory") ?? DEFAULT_MANIFEST, href);
 }
 
 export function sameManifest(a: string, b: string, base: string): boolean {
-  return new URL(a, base).href === new URL(b, base).href;
+  return resolveManifestUrl(a, base) === resolveManifestUrl(b, base);
 }
 
 /**
@@ -607,7 +619,7 @@ export class Session {
     if (!response.ok) throw new Error(`Demo manifest returned ${response.status}`);
     const manifest = await response.json() as MemoryManifest;
     validateManifest(manifest);
-    const existing = this.net.memories.find(m => m.manifestUrl === manifestUrl && m.status === "ready" && m.title === manifest.title);
+    const existing = this.net.memories.find(m => sameManifest(m.manifestUrl, manifestUrl, location.href) && m.status === "ready" && m.title === manifest.title);
     if (existing) return existing.id;
     const requestId = memoryRequestId();
     await this.net.connection!.reducers.createMemory({ requestId, title: manifest.title,
@@ -835,12 +847,12 @@ export class Session {
     this.adding = true;
     this.render();
     try {
-      const manifestUrl = new URL(
+      const manifestUrl = resolveManifestUrl(
         this.ui.libraryUrl.value.trim() || DEFAULT_MANIFEST,
         location.href,
-      ).href;
+      );
       const existing = this.net.memories.find(
-        (m) => m.manifestUrl === manifestUrl && m.status === "ready",
+        (m) => sameManifest(m.manifestUrl, manifestUrl, location.href) && m.status === "ready",
       );
       if (existing) {
         this.ui.memories.value = existing.id.toString();

@@ -1,11 +1,11 @@
 # memos · Online party demo
 
-The **memos** hosted demo is at **https://jerry-memory-replay-phone.alightdell64.chatgpt.site/**. It serves the built viewer from Sites and connects directly to SpacetimeDB Maincloud. The Mac and phone both act as clients; neither a laptop server nor a tunnel is required. The generated hosting address retains its original slug; the site title and visible branding are memos.
+The **memos** hosted demo is at **https://memos.alightdell64.chatgpt.site/**. It serves the built viewer from Sites and connects directly to SpacetimeDB Maincloud. The Mac and phone both act as clients; neither a laptop server nor a tunnel is required. The HTTP address redirects to HTTPS. The site title and public hostname are memos.
 
 ## Server and room addresses
 
-- **Fresh visit / solo:** open the server address with no room path: `https://jerry-memory-replay-phone.alightdell64.chatgpt.site/`. **Explore solo** closes the party panel; it does not create or join a shared room.
-- **Shared party:** creating a party or entering its code changes the address to `/ROOMCODE`, for example `https://jerry-memory-replay-phone.alightdell64.chatgpt.site/031HHRP`. Copying the invite link uses this address.
+- **Fresh visit / solo:** open the server address with no room path: `https://memos.alightdell64.chatgpt.site/`. **Explore solo** closes the party panel; it does not create or join a shared room.
+- **Shared party:** creating a party or entering its code changes the address to `/ROOMCODE`, for example `https://memos.alightdell64.chatgpt.site/031HHRP`. Copying the invite link uses this address.
 - **Direct entry:** opening or refreshing `/ROOMCODE` rejoins that room and loads its current scene. The database owns the scene selection; a per-tab scene hint avoids putting asset URLs in the invite link.
 - **Leave / home:** **Leave** or the **memos** home link returns to `/` and solo playback. A fresh visit to `/` never silently rejoins the previous party.
 - Existing `/?room=ROOMCODE` links still join, then become `/ROOMCODE`. Codes are unchanged and still contain seven letters/numbers.
@@ -52,8 +52,11 @@ Build the frontend with these public settings before packaging it for Sites:
 ```bash
 VITE_STDB_URL=wss://maincloud.spacetimedb.com \
 VITE_STDB_DATABASE=jerry-memory-replay-phone-20261024 \
+VITE_ASSET_ORIGIN_ALIASES=https://jerry-memory-replay-phone.alightdell64.chatgpt.site \
 npm run build -w apps/web -- --outDir ../../data/hosted-phone-site/dist
 ```
+
+Keep the former-origin alias in this build: existing cloud room records still reference the previous hostname, and the viewer resolves those assets on the current host. Room codes and the database remain the same. External asset origins are not rewritten.
 
 Preserve `.openai/hosting.json` in the hosting checkout. Its README describes the synthetic-demo presentation changes: omit `capture.html`, hide the upload controls, and explain that uploads are available in the local capture app. Do not copy `.env` files, tokens, database directories, or recordings into the static distribution. Use the Sites workflow to save and deploy the matching source/build; rebuilding alone does not update the live site.
 
