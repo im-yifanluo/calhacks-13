@@ -104,10 +104,26 @@ export type Device = "quest" | "phone" | "desktop";
 export const normalizeCode = (code: string | null | undefined) =>
   (code ?? "").trim().toUpperCase();
 
-/** The manifest this page loaded, as main.ts picks it: ?memory=, else the demo default. Absolute. */
-export function loadedManifest(href: string): string {
+/** /CODE is canonical. Old ?room= invitations still work; a path code takes precedence. */
+export function roomCode(href: string): string {
   const url = new URL(href);
-  return new URL(url.searchParams.get("memory") ?? DEFAULT_MANIFEST, url).href;
+  const match = /^\/([a-z0-9]{7})\/?$/i.exec(url.pathname);
+  return normalizeCode(match?.[1] ?? url.searchParams.get("room"));
+}
+
+const ROOM_MANIFEST_KEY = "memreplay-room-manifest:";
+
+/** Only a hint for the next load. The database always checks and replaces it after joining. */
+export function rememberRoomManifest(storage: Pick<Storage, "setItem">, code: string, manifest: string): void {
+  storage.setItem(ROOM_MANIFEST_KEY + normalizeCode(code), manifest);
+}
+
+/** Resolve the scene without putting its asset URL in the shared room address. */
+export function loadedManifest(href: string, storage?: Pick<Storage, "getItem">): string {
+  const url = new URL(href);
+  const code = roomCode(href);
+  const roomManifest = code ? storage?.getItem(ROOM_MANIFEST_KEY + code) : null;
+  return new URL(roomManifest ?? url.searchParams.get("memory") ?? DEFAULT_MANIFEST, url).href;
 }
 
 export function sameManifest(a: string, b: string, base: string): boolean {
@@ -115,19 +131,15 @@ export function sameManifest(a: string, b: string, base: string): boolean {
 }
 
 /**
- * This page's URL for room `code` (null: no room). `memory` replaces ?memory= when the room shows
- * another memory; otherwise the page's own ?memory= is kept, so a copied link opens the same scene.
+ * One server origin: /CODE joins a party, / starts solo. Scene URLs stay in the database.
  */
 export function roomUrl(
   href: string,
   code: string | null,
-  memory?: string,
 ): string {
   const url = new URL(href);
-  if (url.pathname === "/upload") url.pathname = "/";
-  if (memory !== undefined) url.searchParams.set("memory", memory);
-  if (code) url.searchParams.set("room", code);
-  else url.searchParams.delete("room");
+  url.pathname = code ? `/${normalizeCode(code)}` : "/";
+  url.search = "";
   url.hash = "";
   return url.href;
 }
@@ -363,7 +375,7 @@ export class Session {
   adapter?: NetAdapter;
   private viewer?: Viewer;
   private readonly avatars: Avatars;
-  /** ?room= of this page; cleared when that room cannot be joined. */
+  /** Room from the path or legacy query; cleared when it cannot be joined. */
   private urlRoom: string;
   /** The room this page is in ("" while it is a local session). */
   private room = "";
@@ -411,8 +423,13 @@ export class Session {
     speed: $<HTMLSelectElement>("party-speed"),
     inviteLabel: $("party-invite-label"),
     invite: $<HTMLInputElement>("party-invite"),
+    joinForm: $<HTMLFormElement>("party-join-form"),
     code: $<HTMLInputElement>("room-code"),
     join: $<HTMLButtonElement>("room-join"),
+    solo: $<HTMLButtonElement>("room-solo"),
+    codeShare: $("party-code-share"),
+    currentCode: $("party-current-code"),
+    copyCode: $<HTMLButtonElement>("party-copy-code"),
     label: $("room-label"),
     people: $("room-people"),
     copy: $<HTMLButtonElement>("room-copy-link"),
@@ -436,9 +453,7 @@ export class Session {
       (text) => !line || line.textContent === text,
       () => (this.adapter ? roomHint(this.room) : ""),
     );
-    this.urlRoom = normalizeCode(
-      new URL(location.href).searchParams.get("room"),
-    );
+    this.urlRoom = roomCode(location.href);
     const { ui } = this;
     ui.name.value = sessionStorage.getItem(NAME_KEY) || localStorage.getItem(NAME_KEY) || "Guest";
     ui.name.addEventListener("input", () => {
@@ -451,22 +466,25 @@ export class Session {
     ui.panel.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        this.expand(false);
+        // A fresh visit shows the party-code field; invite links open the scene directly (stdb/jerry-p4).
+    this.expand(!this.urlRoom || innerWidth > 650);
         ui.toggle.focus();
       }
     });
     dragToClose(ui.panel, ui.panel.querySelector<HTMLElement>(".sheet-head") ?? ui.panel, () => this.expand(false));
-    this.expand(false);
+    // A fresh visit shows the party-code field; invite links open the scene directly (stdb/jerry-p4).
+    this.expand(!this.urlRoom || innerWidth > 650);
     ui.create.onclick = () => void this.create();
     ui.attach.onclick = () => void this.attachScene();
     ui.cancel.onclick = () => void this.act("scene", "Could not cancel", () => this.net.connection!.reducers.attachPartyMemory({ memoryId: 0n }));
     ui.speed.onchange = () => void this.act("clock", "Could not change speed", () => this.net.connection!.reducers.setPlaybackSpeed({ speed: Number(ui.speed.value) }));
     ui.invite.onclick = () => ui.invite.select();
-    ui.join.onclick = () => void this.join(ui.code.value, false);
-    ui.code.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && !ui.join.disabled)
-        void this.join(ui.code.value, false);
-    });
+    ui.joinForm.onsubmit = (event) => {
+      event.preventDefault();
+      if (!ui.join.disabled) void this.join(ui.code.value, false);
+    };
+    ui.copyCode.onclick = () => void this.copyCode();
+    ui.solo.onclick = () => this.expand(false);
     ui.leave.onclick = () => void this.leave();
     ui.copy.onclick = () => void this.copyLink();
     ui.libraryAdd.onclick = () => void this.addToLibrary();
@@ -538,7 +556,7 @@ export class Session {
       this.firstReady = false;
       if (this.urlRoom) void this.join(this.urlRoom, true);
       // The server put this identity back in its old room on connect, but this page has no
-      // ?room=, so it is a local session: leave, or the others see a ghost.
+      // room address, so it is a solo session: leave, or the others see a ghost.
       else if (net.room)
         void net.attempt(() => net.connection!.reducers.leaveRoom({}), null);
       return;
@@ -549,7 +567,8 @@ export class Session {
         this.rejoinCycle = this.readyCycle;
         void this.rejoin();
       } else if (net.room && net.memory && this.sceneRevision !== undefined && net.party?.sceneRevision !== this.sceneRevision) {
-        this.navigate(roomUrl(location.href, this.room, net.memory.manifestUrl), `Opening “${net.memory.title}” for everyone…`);
+        rememberRoomManifest(sessionStorage, this.room, net.memory.manifestUrl);
+        this.navigate(roomUrl(location.href, this.room), `Opening “${net.memory.title}” for everyone…`);
       } else if (net.room && net.memory && !sameManifest(net.memory.manifestUrl, this.host.manifestUrl, location.href)) {
         this.entered(true);
       } else if (net.room && !this.adapter) this.startAdapter();
@@ -642,10 +661,16 @@ export class Session {
 
   private async join(code: string, fromUrl: boolean): Promise<void> {
     const joinCode = normalizeCode(code);
-    if (!joinCode || this.busy) return;
+    if (this.busy || this.navigating || !this.net.ready) return;
+    if (!/^[A-Z0-9]{7}$/.test(joinCode)) {
+      const message = "Enter the host’s 7-character party code (letters and numbers).";
+      if (fromUrl) this.abandonJoin(message);
+      else this.panel.show(message, { kind: "room", error: true });
+      return;
+    }
     if (joinCode === this.room) {
       // Joining again would clear this player's object ownership mid-throw on the server.
-      return this.panel.show(`You're already in room ${joinCode}.`);
+      return this.panel.show(`You're already in party ${joinCode}.`);
     }
     this.busy = true;
     this.render();
@@ -656,13 +681,16 @@ export class Session {
     this.busy = false;
     if (!error) {
       this.panel.resolve("room");
+      this.ui.code.value = "";
+      this.ui.code.blur();
       this.entered(fromUrl);
+      if (innerWidth <= 650 && this.room === joinCode) this.expand(false);
     } else if (fromUrl)
       // Stay a local session, and do not retry this code on reload. A reconnect can put this identity back in its
       // previous room on the server; abandonJoin leaves that too, or the others keep seeing a frozen avatar.
       this.abandonJoin(`Could not join room ${joinCode} (${error}). You're exploring on your own.`);
     else
-      this.panel.show(`Could not join room ${joinCode}: ${error}`, {
+      this.panel.show(`Could not join party ${joinCode}: ${error}. Check the code and use the same app address as the host.`, {
         kind: "room",
         error: true,
       });
@@ -700,11 +728,12 @@ export class Session {
       return;
     }
     const code = room.joinCode;
+    rememberRoomManifest(sessionStorage, code, memory.manifestUrl);
     if (
       !sameManifest(memory.manifestUrl, this.host.manifestUrl, location.href)
     ) {
       // Nikko's viewer loads one manifest at boot: reload into the room's memory.
-      const target = roomUrl(location.href, code, memory.manifestUrl);
+      const target = roomUrl(location.href, code);
       if (fromUrl && !claimReload(sessionStorage, target)) {
         this.abandonJoin(
           `Room ${code} shows “${memory.title}”, but this page could not open it (${memory.manifestUrl}). You're exploring on your own.`,
@@ -723,7 +752,7 @@ export class Session {
     this.sceneRevision = this.net.party?.sceneRevision;
     if (this.adapter) return;
     this.room = this.urlRoom = code;
-    // Keep ?room= in the address bar, so a reload rejoins and the link can be shared.
+    // Canonicalize legacy invites and lowercase/trailing-slash paths after joining.
     history.replaceState(history.state, "", roomUrl(location.href, code));
     this.startAdapter();
   }
@@ -735,6 +764,7 @@ export class Session {
   private abandonJoin(text: string): void {
     void this.net.attempt(() => this.net.connection!.reducers.leaveRoom({}), null);
     this.urlRoom = "";
+    this.expand(true);
     history.replaceState(history.state, "", roomUrl(location.href, null));
     this.panel.show(text, { kind: "room", error: true });
   }
@@ -798,6 +828,16 @@ export class Session {
     } catch {
       // Shown until replaced, so it can be copied by hand.
       this.panel.show(url, { persist: true });
+    }
+  }
+
+  private async copyCode(): Promise<void> {
+    if (!this.room) return;
+    try {
+      await navigator.clipboard.writeText(this.room);
+      this.panel.show("Party code copied. Share it with someone using this app.");
+    } catch {
+      this.panel.show(`Your party code is ${this.room}. Select it above to copy.`, { persist: true });
     }
   }
 
@@ -973,7 +1013,7 @@ export class Session {
     if (ui.hudLabel) {
       setText(
         ui.hudLabel,
-        this.room ? `Party ${this.room} · ${people}` : "Local session",
+        this.room ? `Party ${this.room} · ${people}` : "Solo session",
       );
       ui.hudLabel.classList.toggle("shared", !!this.room);
     }
@@ -1021,6 +1061,8 @@ export class Session {
     ui.speed.value = String(net.timeline?.speed ?? 1);
     ui.inviteLabel.hidden = !this.room;
     ui.invite.value = this.room ? roomUrl(location.href, this.room) : "";
+    ui.codeShare.hidden = !this.room;
+    setText(ui.currentCode, this.room);
     const leader = players.find(p => p.identity.isEqual(room!.host));
     setText(ui.role, net.party ? net.isLeader ? "You are the leader · control playback below." : `${leader?.name || "The leader"} controls time. Look around and grab objects while paused.` : "");
     const pending = net.pendingMemory;
@@ -1031,6 +1073,7 @@ export class Session {
       : net.party ? `Viewing ${net.memory?.title}. ${net.memory?.manifestUrl.includes("/demo/memory.json") ? "Synthetic demo; not reconstructed from video." : ""}`
       : "Synthetic demo available. Create a party and share its link. No reconstruction worker is required to test multiplayer.");
     ui.join.disabled = !idle;
+    ui.solo.hidden = !!this.room || !!this.urlRoom;
     ui.libraryAdd.disabled = !net.ready || this.adding;
     ui.libraryAdd.textContent = this.adding ? "Adding…" : "Add to library";
     ui.copy.disabled = !this.room;

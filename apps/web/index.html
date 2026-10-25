@@ -101,6 +101,19 @@
         </button>
       </div>
       <div id="room-body">
+        <form id="party-join-form" class="group" aria-label="Join a party" novalidate>
+          <label class="field" for="room-code">Party code</label>
+          <div class="row join"><input id="room-code" placeholder="Enter party code" maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" aria-describedby="party-code-help" /><button id="room-join" type="submit" class="primary" disabled>Join party</button></div>
+          <p id="party-code-help">Enter the host’s 7-character code. Use the same app address on both devices.</p>
+          <button id="room-solo" type="button" class="wide">Explore solo</button>
+        </form>
+        <p id="room-message" role="status"></p>
+        <p id="room-error" role="alert"></p>
+        <div id="party-code-share" class="group" hidden>
+          <span>Your party code</span>
+          <div class="row"><strong id="party-current-code"></strong><button id="party-copy-code" type="button">Copy code</button></div>
+          <p>Share this code or the invite link below.</p>
+        </div>
         <section id="auth-bar" class="group" aria-label="Account">
           <div class="account-row"><span id="auth-status" role="status">Guest · ready to join</span><button id="auth-signout" hidden>Sign out</button></div>
           <div id="google-signin" aria-label="Sign in with Google">Loading Google sign-in…</div>
@@ -120,7 +133,6 @@
           <label class="field">Your name<input id="player-name" maxlength="40" autocomplete="nickname" /></label>
           <label class="field">Scene or video<select id="room-memories" aria-label="Memory library"></select></label>
           <button id="room-create" class="primary wide" disabled>Create a party</button>
-          <div class="row join"><input id="room-code" aria-label="Party code" placeholder="Party code" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false" /><button id="room-join" class="primary" disabled>Join</button></div>
           <div id="party-scene-actions" class="row" hidden><button id="party-attach">Use selected scene / video</button><button id="party-cancel" hidden>Cancel pending scene</button></div>
         </section>
         <details class="group" id="library-details">
@@ -130,9 +142,7 @@
           <div id="upload-panel" hidden></div>
           <p><a href="/capture.html">Capture test page</a></p>
         </details>
-        <p id="room-message" role="status"></p>
         <p id="library-errors" role="status"></p>
-        <p id="room-error" role="alert"></p>
       </div>
     </dialog>
 

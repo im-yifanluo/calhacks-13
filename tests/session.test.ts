@@ -14,6 +14,8 @@ import {
   NOTICE_MS,
   playerColor,
   RELOAD_GUARD_KEY,
+  rememberRoomManifest,
+  roomCode,
   roomUrl,
   sameManifest,
 } from "../apps/web/src/session";
@@ -128,20 +130,38 @@ describe("room URLs and manifests", () => {
     ).toBe(false);
   });
 
-  test("roomUrl sets or clears ?room= and keeps the page's memory unless told otherwise", () => {
+  test("party addresses use /CODE and leaving always returns to the server root", () => {
     const local = `${page}?memory=%2Flocal%2Fa.json#x`;
-    expect(roomUrl(local, "ABC1234")).toBe(
-      `${page}?memory=%2Flocal%2Fa.json&room=ABC1234`,
-    );
+    expect(roomUrl(local, "ABC1234")).toBe(`${page}ABC1234`);
     expect(roomUrl(`${page}?room=ABC1234`, null)).toBe(page);
-    const moved = new URL(
-      roomUrl(`${page}upload?room=OLD`, "NEW", "http://h/m.json"),
-    );
-    expect(moved.pathname).toBe("/");
-    expect(moved.searchParams.get("memory")).toBe("http://h/m.json");
-    expect(moved.searchParams.get("room")).toBe("NEW");
-    // The reloaded page must load exactly the room's manifest.
-    expect(loadedManifest(moved.href)).toBe("http://h/m.json");
+    expect(roomUrl(`${page}ABC1234?memory=/local/a.json#x`, null)).toBe(page);
+    expect(roomUrl(`${page}upload?room=OLD`, " new1234 ")).toBe(`${page}NEW1234`);
+    expect(roomUrl(`${page}ABC1234/`, "XYZ1234")).toBe(`${page}XYZ1234`);
+  });
+
+  test("direct paths and legacy links resolve the same room; unrelated paths stay solo", () => {
+    expect(roomCode(`${page}abc1234/`)).toBe("ABC1234");
+    expect(roomCode(`${page}?room=abc1234`)).toBe("ABC1234");
+    expect(roomCode(`${page}ABC1234?room=XYZ1234`)).toBe("ABC1234");
+    for (const path of ["", "upload", "capture.html", "assets/app.js", "ABC1234/extra", "abc"]) {
+      expect(roomCode(page + path)).toBe("");
+    }
+  });
+
+  test("a clean room address reloads its database-selected scene, without leaking into solo or another room", () => {
+    const items = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => items.get(key) ?? null,
+      setItem: (key: string, value: string) => void items.set(key, value),
+    };
+    expect(loadedManifest(`${page}ABC1234`, storage)).toBe(`${page}demo/memory.json`);
+    rememberRoomManifest(storage, "abc1234", "https://cdn.example/scene/memory.json");
+    expect(loadedManifest(`${page}ABC1234`, storage)).toBe("https://cdn.example/scene/memory.json");
+    expect(loadedManifest(page, storage)).toBe(`${page}demo/memory.json`);
+    expect(loadedManifest(`${page}XYZ1234`, storage)).toBe(`${page}demo/memory.json`);
+    rememberRoomManifest(storage, "ABC1234", "https://cdn.example/next/memory.json");
+    expect(loadedManifest(`${page}ABC1234`, storage)).toBe("https://cdn.example/next/memory.json");
+    expect(roomUrl(`${page}ABC1234`, "ABC1234")).toBe(`${page}ABC1234`);
   });
 
   test("claimReload allows one automatic reload per target", () => {

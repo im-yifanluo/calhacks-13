@@ -9,7 +9,7 @@ import { desktopInput } from "./input-desktop.js";
 import { sampleTrack } from "./tracks.js";
 import { mountAudio } from "./audio.js";
 import { mountAuth } from "./auth.js";
-import { Session } from "./session.js";
+import { DEFAULT_MANIFEST, loadedManifest, Session } from "./session.js";
 import { PhoneJoystick, isTouchDevice } from "./phone-joystick.js";
 import { PathGuide } from "./guided.js";
 import { applyExposure, clearExposure } from "./exposure.js";
@@ -28,9 +28,9 @@ const toast = new Toast(element("toast"), status);
 
 async function main(): Promise<void> {
   const params = new URLSearchParams(location.search);
-  const manifestUrl = params.get("memory") ?? "/demo/memory.json";
+  const manifestUrl = loadedManifest(location.href, sessionStorage);
   const sceneUrl = new URL(manifestUrl, location.href);
-  const demo = !params.has("memory") || (sceneUrl.origin === location.origin && sceneUrl.pathname === "/demo/memory.json");
+  const demo = sceneUrl.origin === location.origin && sceneUrl.pathname === DEFAULT_MANIFEST;
   // Dev only: ?xrPreview shows the headset panel on the desktop, worked with the mouse.
   const xrPreview = import.meta.env.DEV && params.has("xrPreview");
   document.body.classList.toggle("stats", params.has("stats"));

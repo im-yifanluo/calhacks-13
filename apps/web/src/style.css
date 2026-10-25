@@ -290,3 +290,14 @@ body.idle #topbar > * { pointer-events: none; }
 #room-panel #party-invite { font-size: 12px; color: var(--accent); }
 #room-message { overflow-wrap: anywhere; }
 }
+
+/* Party join form and party code (stdb/jerry-p4). */
+#party-join-form > label:first-child { color: var(--accent); font-weight: 650; }
+#party-join-form #room-join { flex: none; min-width: 100px; }
+#room-solo { margin-top: 6px; }
+#room-code { text-transform: uppercase; letter-spacing: 0.1em; }
+#room-code::placeholder { text-transform: none; letter-spacing: normal; }
+#party-code-share { color: var(--accent); }
+#party-code-share[hidden] { display: none; }
+#party-current-code { font: 700 22px ui-monospace, monospace; letter-spacing: 0.13em; user-select: all; }
+#party-code-share button { flex: none; }
