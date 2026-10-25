@@ -137,7 +137,10 @@ export function createPointsSequence(visual: PointsVisual, buffer: ArrayBuffer, 
   const position = new THREE.Float16BufferAttribute(size, 3).setUsage(THREE.DynamicDrawUsage);
   const color = new THREE.BufferAttribute(new Float32Array(size), 3).setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute("position", position); geometry.setAttribute("color", color); geometry.setDrawRange(0, 0);
-  const points = new THREE.Points(geometry, new THREE.PointsMaterial({ size: 0.015, vertexColors: true, sizeAttenuation: true }));
+  // dot size follows the point budget: a person drawn with 1,500 points needs ~4 cm dots to read as a body, one with
+  // 12,000 points is fine at 1.5 cm (the pipeline spreads a fixed byte budget over all the people in a clip)
+  const dot = Math.min(0.045, Math.max(0.015, 0.015 * Math.sqrt(12000 / Math.max(500, data.maxCount))));
+  const points = new THREE.Points(geometry, new THREE.PointsMaterial({ size: dot, vertexColors: true, sizeAttenuation: true }));
   points.name = "points-sequence";
   points.frustumCulled = false; // the bounds change every frame
   let current = -1;

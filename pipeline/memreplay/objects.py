@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 
+import os
+
 import json
 import math
 from pathlib import Path
@@ -23,6 +25,8 @@ from .world import WorldPoses
 
 G = np.array([0.0, -9.81, 0.0])
 MIN_OBS = 3                 # keyframes an object must be seen in
+PROP_MOTION = os.environ.get("MEMREPLAY_PROP_MOTION", "1") == "1"   # 0 parks every prop (the demo footage); see run()
+MAX_PROPS = int(os.environ.get("MEMREPLAY_MAX_PROPS", "12"))         # most-seen props kept; a hall of cups is not a prop set
 MAX_EXTENT = 1.2            # m; bigger "objects" are furniture or bad masks
 REST_SPEED = 0.25           # m/s
 
@@ -443,6 +447,26 @@ def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
             t, P, V = np.r_[0.0, t], np.vstack([P[:1], P]), np.vstack([np.zeros((1, 3)), V])
         if t[-1] < dur and vis1 == float(dur):
             t, P, V = np.r_[t, dur], np.vstack([P, P[-1:]]), np.vstack([V, np.zeros((1, 3))])
+        # a prop that never really went anywhere (90 % of its keyframes within 0.35 m of its median) is static:
+        # mask jitter and identity hops made a bag "slide" 3.5 m across a stage. A real throw keeps a rest spot,
+        # an arc and another rest spot, so more than 10 % of its keyframes sit far from the median.
+        if len(P) > 2:
+            sp = np.linalg.norm(V, axis=1)
+            flying = sp > 1.5
+            runs = np.diff(np.flatnonzero(np.diff(np.r_[False, flying, False])))[::2] if flying.any() else np.array([0])
+            sustained_flight = bool(runs.max() >= 3)              # >= 0.3 s above 1.5 m/s: a real throw or carry
+            med = np.median(P, axis=0)
+            spread90 = float(np.percentile(np.linalg.norm(P - med, axis=1), 90))
+            # PROP_MOTION off (MEMREPLAY_PROP_MOTION=0, used for the demo footage): every prop is parked, because the tracker's identity
+            # hops across look-alike bottles and cups still look like 5-10 m "moves", and the gap filler turns a hop
+            # into a smooth arc that passes the flight test. The default keeps recorded motion.
+            if not PROP_MOTION or spread90 < 0.35 or (static and not sustained_flight):
+                # never really went anywhere, or the pipeline already judged it static and its "moves" are only
+                # single-frame jumps (mask jitter, identity hops): park it where it rests most of the time
+                rest = P[sp < 0.3] if (sp < 0.3).sum() >= 3 else P
+                P[:] = np.median(rest, axis=0)
+                V[:] = 0.0
+                static = True
         # never inside the floor or a table: lift the bottom onto the support below
         for k in range(len(P)):
             floor = support(P[k, 0], P[k, 2])
@@ -468,6 +492,12 @@ def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
                        "shape": spec.shape, "size_m": spec.size_m, "observed_size_m": seen, "mass_kg": round(mass, 3),
                        "visible": [float(t[0]), float(t[-1])], "max_speed_m_s": float(speeds.max()),
                        "path_length_m": float(np.sum(np.linalg.norm(np.diff(P, axis=0), axis=1))) if len(P) > 1 else 0.0})
+    if len(result) > MAX_PROPS:
+        order = sorted(range(len(result)), key=lambda i: -report[i]["sightings"])
+        keep_i = set(order[:MAX_PROPS])
+        print(f"[objects] keeping the {MAX_PROPS} most-seen of {len(result)} props")
+        result = [r for i, r in enumerate(result) if i in keep_i]
+        report = [r for i, r in enumerate(report) if i in keep_i]
     (work / "objects" / "objects.json").write_text(ObjectsFragment(objects=result).model_dump_json(indent=2))
     (work / "objects" / "report.json").write_text(json.dumps(report, indent=2))
     print(f"[objects] {len(result)} objects: " + ", ".join(f"{r['id']} ({r['shape']}, {r['mass_kg']} kg, "
