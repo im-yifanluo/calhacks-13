@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1720" height="730" viewBox="0 0 1720 730">
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4a5961"/></marker>
+<marker id="a2" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="#4a5961"/></marker>
+<style>
+text { font-family: Inter, -apple-system, "Helvetica Neue", Arial, sans-serif; text-anchor: middle; fill: #1d2a31; }
+.t { font-size: 18px; font-weight: 600; }
+.s { font-size: 13.5px; fill: #5b6b74; }
+.l { font-size: 13.5px; font-weight: 500; fill: #2c3a41; }
+.g { font-size: 14px; font-weight: 600; fill: #5b6b74; text-anchor: start; letter-spacing: 0.02em; }
+</style></defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<rect x="40" y="70" width="190" height="80" rx="12" fill="#eef6f4" stroke="#2f7d6d" stroke-width="2"/>
+<text x="135.0" y="106.0" class="t">Ray-Ban Meta</text>
+<text x="135.0" y="128.0" class="s">glasses</text>
+<rect x="350" y="70" width="210" height="80" rx="12" fill="#eef6f4" stroke="#2f7d6d" stroke-width="2"/>
+<text x="455.0" y="106.0" class="t">Phone app</text>
+<text x="455.0" y="128.0" class="s">iOS · SceneCapture</text>
+<rect x="740" y="70" width="230" height="80" rx="12" fill="#eef6f4" stroke="#2f7d6d" stroke-width="2"/>
+<text x="855.0" y="106.0" class="t">Upload service</text>
+<text x="855.0" y="128.0" class="s">Node · signs + verifies</text>
+<path d="M1150,72 A115.0,14 0 0 1 1380,72 V148 A115.0,14 0 0 1 1150,148 Z" fill="#fff6e5" stroke="#b7801b" stroke-width="2"/>
+<path d="M1150,72 A115.0,14 0 0 0 1380,72" fill="none" stroke="#b7801b" stroke-width="2"/>
+<text x="1265.0" y="112.0" class="t">SpacetimeDB</text>
+<text x="1265.0" y="134.0" class="s">memory registry + live sync</text>
+<path d="M740,312 A115.0,14 0 0 1 970,312 V388 A115.0,14 0 0 1 740,388 Z" fill="#fff6e5" stroke="#b7801b" stroke-width="2"/>
+<path d="M740,312 A115.0,14 0 0 0 970,312" fill="none" stroke="#b7801b" stroke-width="2"/>
+<text x="855.0" y="352.0" class="t">Object storage</text>
+<text x="855.0" y="374.0" class="s">R2 · videos + scenes</text>
+<rect x="1450" y="310" width="220" height="80" rx="12" fill="#eef0fb" stroke="#4f5db3" stroke-width="2"/>
+<text x="1560.0" y="346.0" class="t">GPU worker</text>
+<text x="1560.0" y="368.0" class="s">Runpod · memreplay</text>
+<rect x="350" y="540" width="1030" height="160" rx="16" fill="#f7fafb" stroke="#c6d2d7" stroke-width="1.6" stroke-dasharray="6 5"/>
+<text x="372" y="568" class="g">Viewers · one web app (apps/web)</text>
+<rect x="380" y="590" width="290" height="80" rx="12" fill="#eef6f4" stroke="#2f7d6d" stroke-width="2"/>
+<text x="525.0" y="626.0" class="t">Quest Browser</text>
+<text x="525.0" y="648.0" class="s">WebXR</text>
+<rect x="720" y="590" width="290" height="80" rx="12" fill="#eef6f4" stroke="#2f7d6d" stroke-width="2"/>
+<text x="865.0" y="626.0" class="t">Phone browser</text>
+<text x="865.0" y="648.0" class="s">or the app's web view</text>
+<rect x="1060" y="590" width="290" height="80" rx="12" fill="#eef6f4" stroke="#2f7d6d" stroke-width="2"/>
+<text x="1205.0" y="636.0" class="t">Desktop browser</text>
+<path d="M230,110 H344" fill="none" stroke="#4a5961" stroke-width="2.2" marker-end="url(#a)"/>
+<rect x="235.4" y="78" width="109.19999999999999" height="24" rx="12" fill="#ffffff" stroke="#d5dde1"/>
+<text x="290" y="95" class="l">I1 · DAT SDK</text>
+<path d="M560,110 H734" fill="none" stroke="#4a5961" stroke-width="2.2" marker-end="url(#a)"/>
+<rect x="554.4" y="78" width="185.2" height="24" rx="12" fill="#ffffff" stroke="#d5dde1"/>
+<text x="647" y="95" class="l">I2 · presign, complete</text>
+<path d="M970,110 H1144" fill="none" stroke="#4a5961" stroke-width="2.2" marker-end="url(#a)"/>
+<rect x="979.6" y="78" width="154.79999999999998" height="24" rx="12" fill="#ffffff" stroke="#d5dde1"/>
+<text x="1057" y="95" class="l">I3 · create_memory</text>
+<path d="M455,150 V350 H734" fill="none" stroke="#4a5961" stroke-width="2.2" marker-end="url(#a)"/>
+<rect x="497.8" y="336" width="124.39999999999999" height="24" rx="12" fill="#ffffff" stroke="#d5dde1"/>
+<text x="560" y="353" class="l">I2 · PUT video</text>
+<path d="M1560,310 V110 H1386" fill="none" stroke="#4a5961" stroke-width="2.2" marker-end="url(#a)"/>
+<rect x="1471.2" y="206" width="177.6" height="24" rx="12" fill="#ffffff" stroke="#d5dde1"/>
+<text x="1560" y="223" class="l">I4 · poll, set status</text>
+<path d="M1450,350 H976" fill="none" stroke="#4a5961" stroke-width="2.2" marker-end="url(#a)"/>
+<rect x="986.0" y="336" width="208.0" height="24" rx="12" fill="#ffffff" stroke="#d5dde1"/>
+<text x="1090" y="353" class="l">I5 · GET video, PUT scene</text>
+<path d="M855,540 V408" fill="none" stroke="#4a5961" stroke-width="2.2" marker-end="url(#a)"/>
+<rect x="766.2" y="458" width="177.6" height="24" rx="12" fill="#ffffff" stroke="#d5dde1"/>
+<text x="855" y="475" class="l">I6 · load scene files</text>
+<path d="M1265,540 V168" fill="none" stroke="#4a5961" stroke-width="2.2" marker-end="url(#a)" marker-start="url(#a2)"/>
+<rect x="1138.2" y="458" width="253.6" height="24" rx="12" fill="#ffffff" stroke="#d5dde1"/>
+<text x="1265" y="475" class="l">I7 · party, clock, grabs, poses</text>
+</svg>
