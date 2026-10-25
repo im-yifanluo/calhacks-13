@@ -36,8 +36,8 @@ Who owns which part and interface: [TEAM.md](TEAM.md).
 **Status:** upload, the pipeline, scene switching and live sync work. Glasses capture, the automatic worker and the cloud setup are not done yet.
 
 **Next, in order**
-1. Cloud setup: Maincloud database, R2 bucket, upload service and viewer on HTTPS.
-2. Run the worker on Runpod and test one real upload end to end.
-3. Build the phone app on a real iPhone against the DAT SDK.
-4. Make the viewer's VR controls respect the party leader.
-5. Record the demo clip.
+1. Hosting: Maincloud database, R2 bucket, upload service and viewer on HTTPS (Jerry).
+2. Run the worker on Runpod and test one real upload end to end (Yifan).
+3. Build the phone app on a real iPhone with the glasses, durable upload queue (Nikko).
+4. Viewer party fixes: VR controls respect the leader, no stray takes (Jerry, after hosting).
+5. Record the demo clip (everyone), run it through the pipeline (Yifan).

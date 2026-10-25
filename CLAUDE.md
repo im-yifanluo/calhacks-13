@@ -4,9 +4,10 @@ Turn a Ray-Ban Meta glasses video into a 3D memory that people relive together i
 
 ## Read first
 1. **[docs/INTEGRATION.md](docs/INTEGRATION.md):** what was merged from which branch, which contract won, how the viewer talks to the server, and the known issues with owners.
-2. **[docs/PLAN.md](docs/PLAN.md):** product plan, system design, timeline, risks.
-3. **[README.md](README.md):** setup and daily commands.
-4. Per-area docs: [docs/P3_VIEWER.md](docs/P3_VIEWER.md) (viewer), [docs/P4.md](docs/P4.md) (multiplayer, upload, worker contract), [docs/CAPTURE_TEST.md](docs/CAPTURE_TEST.md) (upload and stored-video test), [docs/SPLAT_TEST.md](docs/SPLAT_TEST.md), [pipeline/README.md](pipeline/README.md) (vision pipeline runbook; being rewritten).
+2. **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** (system design, interfaces I1–I7) and **[docs/TEAM.md](docs/TEAM.md)** (who owns which folder and interface: Nikko glasses + upload, Jerry hosting + database + viewer, Yifan pipeline).
+3. **[docs/PLAN.md](docs/PLAN.md):** product plan, system design, timeline, risks.
+4. **[README.md](README.md):** setup and daily commands.
+5. Per-area docs: [docs/P3_VIEWER.md](docs/P3_VIEWER.md) (viewer), [docs/P4.md](docs/P4.md) (multiplayer, upload, worker contract), [docs/CAPTURE_TEST.md](docs/CAPTURE_TEST.md) (upload and stored-video test), [docs/SPLAT_TEST.md](docs/SPLAT_TEST.md), [pipeline/README.md](pipeline/README.md) (vision pipeline runbook; being rewritten).
 
 ## Layout
 ```

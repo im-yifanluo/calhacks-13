@@ -28,11 +28,13 @@ What's fixed and what's still open: [docs/INTEGRATION.md](docs/INTEGRATION.md) �
 
 ## Who does what
 
+Full roles, interface owners and working rules: [docs/TEAM.md](docs/TEAM.md). System design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 | Person | Owns | Folders |
 |---|---|---|
-| **Vision (one person)** | The whole pipeline: one glasses clip in, `memory.json` out, plus the worker that picks up uploads. Owns the GPU pod. | `pipeline/` |
-| **P3 · XR client** | Quest rendering, grab + physics, timeline in VR, people ghosts, audio. Next: test on the Quest (controls, frame rate, load time). | `apps/web/` |
-| **P4 · Multiplayer & phone** | SpacetimeDB module, network adapter, room panel, phone controls, upload, demo | `server/`, `apps/web/src/net/`, `apps/web/src/session.ts` |
+| **Nikko** | Glasses and upload: the phone app (Meta glasses capture, durable upload queue) and the upload service | `apps/ios/`, `server/upload/` |
+| **Jerry** | Hosting first (Maincloud database, R2 bucket, upload service and viewer on HTTPS) and the database rules; then the web viewer (Quest, phone, desktop) | `server/spacetime/`, `apps/web/` |
+| **Yifan** | The pipeline: video → scene on Runpod, the GPU worker, the scene format | `pipeline/`, `packages/shared/` |
 
 ---
 
