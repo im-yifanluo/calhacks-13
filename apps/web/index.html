@@ -44,6 +44,19 @@
         <span id="room-connection" role="status">Connecting…</span>
       </div>
       <div id="room-body">
+        <form id="party-join-form" aria-label="Join a party" novalidate>
+          <label for="room-code">Party code</label>
+          <div class="row"><input id="room-code" placeholder="Enter party code" maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" aria-describedby="party-code-help" /><button id="room-join" type="submit" class="primary" disabled>Join party</button></div>
+          <p id="party-code-help">Enter the host’s 7-character code. Use the same app address on both devices.</p>
+          <label>Your name<input id="player-name" maxlength="40" autocomplete="nickname" /></label>
+        </form>
+        <p id="room-message" role="status"></p>
+        <p id="room-error" role="alert"></p>
+        <div id="party-code-share" hidden>
+          <span>Your party code</span>
+          <div class="row"><strong id="party-current-code"></strong><button id="party-copy-code" type="button">Copy code</button></div>
+          <p>Share this code or the invite link below.</p>
+        </div>
         <section id="auth-bar" aria-label="Account">
           <div class="account-row"><span id="auth-status" role="status">Guest · ready to join</span><button id="auth-signout" hidden>Sign out</button></div>
           <div id="google-signin" aria-label="Sign in with Google">Loading Google sign-in…</div>
@@ -51,10 +64,8 @@
         </section>
         <details open>
           <summary>Play together</summary>
-          <label>Your name<input id="player-name" maxlength="40" autocomplete="nickname" /></label>
           <label>Scene or video<select id="room-memories" aria-label="Memory library"></select></label>
           <div class="row"><button id="room-create" class="primary" disabled>Create party</button><button id="upload-toggle" aria-expanded="false" aria-controls="upload-panel">Upload</button></div>
-          <div class="row"><input id="room-code" aria-label="Party code" placeholder="PARTY CODE" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false" /><button id="room-join" class="primary" disabled>Join</button></div>
           <div id="party-scene-actions" hidden><button id="party-attach">Use selected scene / video</button><button id="party-cancel" hidden>Cancel pending scene</button></div>
           <strong id="room-label">Explore solo or join a party</strong>
           <p id="party-role" role="status"></p>
@@ -73,9 +84,7 @@
         </details>
         <div id="upload-panel" hidden></div>
         <p><a href="/capture.html">Capture test · upload and play video</a></p>
-        <p id="room-message" role="status"></p>
         <p id="library-errors" role="status"></p>
-        <p id="room-error" role="alert"></p>
       </div>
     </section>
     <div id="joystick" role="group" aria-label="Drag to walk" title="Drag to walk"><span class="knob"></span><span class="joystick-label">WALK</span></div>

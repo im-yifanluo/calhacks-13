@@ -5,12 +5,20 @@ The hosted demo is at **https://jerry-memory-replay-phone.alightdell64.chatgpt.s
 ## Test on a Mac and iPhone
 
 1. Open the hosted address on the Mac. Enter `Mac leader`, keep **Synthetic demo · ready to play** selected, and choose **Create party**.
-2. Open that party's invite link in iPhone Safari. Join the existing party; do not create another party on the phone.
+2. Copy the **Your party code** value from the Mac. Open the hosted address in iPhone Safari, enter that code in the blank **Party code** field, and tap **Join party**. Lowercase codes and surrounding spaces are accepted. The panel closes after joining on a phone so the scene is visible. Opening the full invite link also joins directly.
 3. Both participants should appear in the party list. Collapse **PARTY** if it covers the scene or timeline.
 4. Play, pause, seek, and change playback speed on the Mac. The phone should follow; its playback controls should be disabled while the Mac is leader.
 5. Keep the leader tab open. Closing or reloading it can transfer leadership to another connected member. The hosted app itself remains available when the Mac sleeps or shuts down.
 
 Each device still needs working internet. A slow first download or a disconnected client is possible, but the phone no longer depends on the Mac's outbound tunnel. This is a public synthetic demo. Google sign-in is not configured, and the hosted copy hides capture/upload controls because no hosted upload service is connected. Existing local recordings were not copied to the cloud.
+
+### Party-code checks
+
+- The code field starts blank and appears at the top of the party panel, including a fresh phone visit. **Join party** or the keyboard's Enter/Go submits it. Guests do not need Google sign-in.
+- The host sees a large **Your party code** with **Copy code**. Creating another party produces a different code; any existing party in this database can be joined through the same field.
+- Try an empty/short code: the app should explain the 7-character format. Try a nonexistent 7-character code: it should show an error without removing you from your current party. Enter a valid code afterward: it should join and clear the error.
+- While joined, open **PARTY** and enter another host's code to switch parties. The target party's scene and leader-controlled timeline load together.
+- Codes belong to the configured SpacetimeDB database. Both devices should use the hosted address above. Codes from the older `localhost`/LAN demo use a separate database and cannot be joined from this hosted demo. A code is not a universal identifier for an unrelated website.
 
 ## Deployment details
 
@@ -40,6 +48,8 @@ npm run build -w apps/web -- --outDir ../../data/hosted-phone-site/dist
 Preserve `.openai/hosting.json` in the hosting checkout. Its README describes the synthetic-demo presentation changes: omit `capture.html`, hide the upload controls, and explain that uploads are available in the local capture app. Do not copy `.env` files, tokens, database directories, or recordings into the static distribution. Use the Sites workflow to save and deploy the matching source/build; rebuilding alone does not update the live site.
 
 ## Verification
+
+The party-code update passed TypeScript checking, the 22 session/party unit tests, and a production build. Two local browser instances verified blank-code validation, joining with lowercase and padded input via Enter, preserving the current party after an unknown code, switching to a second party, clearing the field/error after success, and copying a host code. Guest playback controls remained disabled after switching.
 
 The production frontend build and the live four-client party suite passed against Maincloud:
 

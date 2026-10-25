@@ -81,6 +81,15 @@ kbd { font: inherit; background: #263944; padding: 1px 4px; border-radius: 3px; 
 #room-people .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; }
 #room-panel p { font-size: 11px; color: #9bb1bc; margin: 8px 0; line-height: 1.5; }
 #room-panel p:empty { display: none; }
+#party-join-form { padding: 4px 0 8px; border-bottom: 1px solid #30434e; }
+#party-join-form > label:first-child { color: #a2e8d6; font-size: 13px; font-weight: 650; }
+#party-join-form .row { margin-top: 6px; }
+#party-join-form #room-join { flex: none; min-width: 100px; }
+#room-code { text-transform: uppercase; letter-spacing: .1em; }
+#room-code::placeholder { text-transform: none; letter-spacing: normal; }
+#party-code-share { padding: 14px 0 8px; border-bottom: 1px solid #30434e; color: #a2e8d6; }
+#party-current-code { font: 700 22px ui-monospace, monospace; letter-spacing: .13em; user-select: all; }
+#party-code-share button { flex: none; }
 #auth-bar { padding: 14px 0 10px; border-bottom: 1px solid #30434e; }
 .account-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
 #auth-status { color: #a2e8d6; font-size: 11px; }

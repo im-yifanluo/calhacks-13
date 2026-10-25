@@ -410,8 +410,12 @@ export class Session {
     speed: $<HTMLSelectElement>("party-speed"),
     inviteLabel: $("party-invite-label"),
     invite: $<HTMLInputElement>("party-invite"),
+    joinForm: $<HTMLFormElement>("party-join-form"),
     code: $<HTMLInputElement>("room-code"),
     join: $<HTMLButtonElement>("room-join"),
+    codeShare: $("party-code-share"),
+    currentCode: $("party-current-code"),
+    copyCode: $<HTMLButtonElement>("party-copy-code"),
     label: $("room-label"),
     people: $("room-people"),
     copy: $<HTMLButtonElement>("room-copy-link"),
@@ -446,17 +450,18 @@ export class Session {
     });
     ui.toggle.onclick = () =>
       this.expand(ui.panel.classList.contains("collapsed"));
-    this.expand(innerWidth > 650);
+    // A fresh phone visit should expose the blank code field; invite links open the scene directly.
+    this.expand(!this.urlRoom || innerWidth > 650);
     ui.create.onclick = () => void this.create();
     ui.attach.onclick = () => void this.attachScene();
     ui.cancel.onclick = () => void this.act("scene", "Could not cancel", () => this.net.connection!.reducers.attachPartyMemory({ memoryId: 0n }));
     ui.speed.onchange = () => void this.act("clock", "Could not change speed", () => this.net.connection!.reducers.setPlaybackSpeed({ speed: Number(ui.speed.value) }));
     ui.invite.onclick = () => ui.invite.select();
-    ui.join.onclick = () => void this.join(ui.code.value, false);
-    ui.code.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && !ui.join.disabled)
-        void this.join(ui.code.value, false);
-    });
+    ui.joinForm.onsubmit = (event) => {
+      event.preventDefault();
+      if (!ui.join.disabled) void this.join(ui.code.value, false);
+    };
+    ui.copyCode.onclick = () => void this.copyCode();
     ui.leave.onclick = () => void this.leave();
     ui.copy.onclick = () => void this.copyLink();
     ui.libraryAdd.onclick = () => void this.addToLibrary();
@@ -632,10 +637,16 @@ export class Session {
 
   private async join(code: string, fromUrl: boolean): Promise<void> {
     const joinCode = normalizeCode(code);
-    if (!joinCode || this.busy) return;
+    if (this.busy || this.navigating || !this.net.ready) return;
+    if (!/^[A-Z0-9]{7}$/.test(joinCode)) {
+      const message = "Enter the host’s 7-character party code (letters and numbers).";
+      if (fromUrl) this.abandonJoin(message);
+      else this.panel.show(message, { kind: "room", error: true });
+      return;
+    }
     if (joinCode === this.room) {
       // Joining again would clear this player's object ownership mid-throw on the server.
-      return this.panel.show(`You're already in room ${joinCode}.`);
+      return this.panel.show(`You're already in party ${joinCode}.`);
     }
     this.busy = true;
     this.render();
@@ -646,13 +657,16 @@ export class Session {
     this.busy = false;
     if (!error) {
       this.panel.resolve("room");
+      this.ui.code.value = "";
+      this.ui.code.blur();
       this.entered(fromUrl);
+      if (innerWidth <= 650 && this.room === joinCode) this.expand(false);
     } else if (fromUrl)
       // Stay a local session, and do not retry this code on reload. A reconnect can put this identity back in its
       // previous room on the server; abandonJoin leaves that too, or the others keep seeing a frozen avatar.
       this.abandonJoin(`Could not join room ${joinCode} (${error}). You're exploring on your own.`);
     else
-      this.panel.show(`Could not join room ${joinCode}: ${error}`, {
+      this.panel.show(`Could not join party ${joinCode}: ${error}. Check the code and use the same app address as the host.`, {
         kind: "room",
         error: true,
       });
@@ -725,6 +739,7 @@ export class Session {
   private abandonJoin(text: string): void {
     void this.net.attempt(() => this.net.connection!.reducers.leaveRoom({}), null);
     this.urlRoom = "";
+    this.expand(true);
     history.replaceState(history.state, "", roomUrl(location.href, null));
     this.panel.show(text, { kind: "room", error: true });
   }
@@ -788,6 +803,16 @@ export class Session {
     } catch {
       // Shown until replaced, so it can be copied by hand.
       this.panel.show(url, { persist: true });
+    }
+  }
+
+  private async copyCode(): Promise<void> {
+    if (!this.room) return;
+    try {
+      await navigator.clipboard.writeText(this.room);
+      this.panel.show("Party code copied. Share it with someone using this app.");
+    } catch {
+      this.panel.show(`Your party code is ${this.room}. Select it above to copy.`, { persist: true });
     }
   }
 
@@ -1008,6 +1033,8 @@ export class Session {
     ui.speed.value = String(net.timeline?.speed ?? 1);
     ui.inviteLabel.hidden = !this.room;
     ui.invite.value = this.room ? roomUrl(location.href, this.room) : "";
+    ui.codeShare.hidden = !this.room;
+    setText(ui.currentCode, this.room);
     const leader = players.find(p => p.identity.isEqual(room!.host));
     setText(ui.role, net.party ? net.isLeader ? "You are the leader · control playback below." : `${leader?.name || "The leader"} controls time. Look around and grab objects while paused.` : "");
     const pending = net.pendingMemory;
