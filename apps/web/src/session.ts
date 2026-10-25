@@ -9,6 +9,7 @@ import { NetAdapter } from "./net/adapter.js";
 import { validateManifest } from "./loader.js";
 import { isTouchDevice } from "./phone-joystick.js";
 import { uploadPanel } from "./upload.js";
+import { dragToClose } from "./ui.js";
 import type { Viewer } from "./viewer.js";
 
 /** main.ts loads this manifest when the URL has no ?memory= (its built-in demo). */
@@ -392,7 +393,7 @@ export class Session {
   private headRotation = new THREE.Quaternion();
   private hands = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly ui = {
-    panel: $("room-panel"),
+    panel: $<HTMLDialogElement>("room-panel"),
     toggle: $<HTMLButtonElement>("room-toggle"),
     summary: $("room-summary"),
     connection: $("room-connection"),
@@ -444,9 +445,18 @@ export class Session {
       this.saveName();
       this.profileDirty = true;
     });
-    ui.toggle.onclick = () =>
-      this.expand(ui.panel.classList.contains("collapsed"));
-    this.expand(innerWidth > 650);
+    // A non-modal sheet: the memory stays visible and usable behind it.
+    ui.toggle.onclick = () => this.expand(!ui.panel.open);
+    $("room-close").onclick = () => this.expand(false);
+    ui.panel.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        this.expand(false);
+        ui.toggle.focus();
+      }
+    });
+    dragToClose(ui.panel, ui.panel.querySelector<HTMLElement>(".sheet-head") ?? ui.panel, () => this.expand(false));
+    this.expand(false);
     ui.create.onclick = () => void this.create();
     ui.attach.onclick = () => void this.attachScene();
     ui.cancel.onclick = () => void this.act("scene", "Could not cancel", () => this.net.connection!.reducers.attachPartyMemory({ memoryId: 0n }));
@@ -909,7 +919,9 @@ export class Session {
   }
 
   private expand(open: boolean): void {
-    this.ui.panel.classList.toggle("collapsed", !open);
+    const panel = this.ui.panel;
+    if (open && !panel.open) panel.show();
+    if (!open && panel.open) panel.close();
     this.ui.toggle.setAttribute("aria-expanded", String(open));
   }
 
@@ -917,6 +929,7 @@ export class Session {
     this.ui.upload.hidden = !open;
     this.ui.uploadToggle.setAttribute("aria-expanded", String(open));
     if (!open) return;
+    this.ui.upload.closest("details")?.setAttribute("open", "");
     this.expand(true);
     this.ui.upload.scrollIntoView({ block: "nearest" });
   }
@@ -1034,9 +1047,10 @@ export class Session {
   private renderLibrary(): void {
     const select = this.ui.memories;
     const memories = this.net.memories;
-    const key = memories
+    // Prefixed so an empty library still renders once (its hint).
+    const key = `library:${memories
       .map((m) => `${m.id}:${m.title}:${m.status}:${m.progress}`)
-      .join("|");
+      .join("|")}`;
     if (key === this.memoryKey) return;
     this.memoryKey = key;
     const previous = select.value;

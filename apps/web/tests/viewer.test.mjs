@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { Euler, Group, Quaternion, Vector3 } from "three";
 import { colliderDepth, initPhysics, STEP } from "../.test-dist/physics.js";
 import { validateManifest } from "../.test-dist/loader.js";
-import { Viewer, isGhost } from "../.test-dist/viewer.js";
+import { AT_END, Viewer, isGhost } from "../.test-dist/viewer.js";
 
 const frame = (t, x, y = 1, z = 0, extra = {}) => ({ t, p: [x, y, z], q: [0, 0, 0, 1], ...extra });
 const close = (a, b, tolerance = 1e-5) => assert.ok(Math.abs(a - b) < tolerance, `${a} != ${b}`);
@@ -179,6 +179,17 @@ test("the status line reports the finished recording instead of keeping 'Recordi
   } finally { viewer.dispose(); }
 });
 
+test("a grab at the very end is refused with a message saying what to do", async () => {
+  const { memory } = build([still()]);
+  const reports = []; const viewer = new Viewer(memory, message => reports.push(message));
+  try {
+    viewer.seek(6);
+    assert.equal(await viewer.grab("ball"), false);
+    assert.equal(reports.at(-1), AT_END);
+    assert.equal(viewer.timeline.branches.length, 1);
+  } finally { viewer.dispose(); }
+});
+
 test("collider depth below the origin follows the rotation and scale", () => {
   const turn = (x, y, z) => new Quaternion().setFromEuler(new Euler(x, y, z));
   close(colliderDepth({ kind: "sphere", radius: 0.1 }, turn(1, 2, 3), 2), 0.2);
@@ -224,4 +235,57 @@ test("an object released unmoved from under the floor is lifted onto it first", 
     close(events.find(e => e.type === "throw").pose.p[1], 0.1);
     close(viewer.timeline.active.tracks.get("ball").at(-1).p[1], 0.1, 0.01);
   } finally { viewer.dispose(); }
+});
+
+test("let go while paused, an object is placed: it stays put with the throw it was given, and Play releases it", async () => {
+  const { memory, objects } = build([still()]);
+  const reports = []; const viewer = new Viewer(memory, message => reports.push(message)); const root = objects[0].root;
+  try {
+    viewer.seek(1); assert.equal(await viewer.grab("ball"), true);
+    viewer.moveHeld(new Vector3(0.1, 1.2, 0), new Quaternion(), 1 / 60);
+    viewer.moveHeld(new Vector3(0.2, 1.4, 0), new Quaternion(), 1 / 60); // moving right and up
+    viewer.place();
+    assert.equal(viewer.isPlaced, true); assert.equal(viewer.recording, false); assert.match(reports.at(-1), /placed\. Press Play/);
+    const at = root.position.clone();
+    for (let i = 0; i < 60; i++) viewer.update(STEP);
+    assert.ok(root.position.distanceTo(at) < 1e-9, "frozen with the rest of the scene");
+    viewer.togglePlay();
+    assert.equal(viewer.held, null); assert.equal(viewer.timeline.playing, true);
+    const take = viewer.timeline.active.tracks.get("ball");
+    close(take[0].t, 1); close(take[0].p[0], at.x); close(take[0].p[1], at.y);
+    for (let i = 0; i < 12; i++) viewer.update(STEP);
+    assert.ok(root.position.x > at.x + 0.02, "it carries on with the throw it was given");
+    assert.match(reports.at(-1), /^Playing your take/);
+  } finally { viewer.dispose(); }
+});
+
+test("grabbing a placed object again carries on the same edit; another object releases it into the take first", async () => {
+  const { memory } = build([still(), can]);
+  const viewer = new Viewer(memory, () => {});
+  try {
+    viewer.seek(1); assert.equal(await viewer.grab("ball"), true);
+    viewer.moveHeld(new Vector3(0.3, 1.2, 0), new Quaternion(), 1 / 60); viewer.place();
+    assert.equal(await viewer.grab("ball"), true);
+    assert.equal(viewer.timeline.branches.length, 2, "no new take"); assert.equal(viewer.isPlaced, false);
+    viewer.moveHeld(new Vector3(0.5, 1.2, 0), new Quaternion(), 1 / 60); viewer.place();
+    assert.equal(await viewer.grab("can"), true);
+    assert.equal(viewer.held.definition.id, "can");
+    const ballTake = viewer.timeline.branches[1].tracks.get("ball");
+    assert.ok(ballTake?.length > 1, "the ball's throw was recorded into its take");
+    close(ballTake[0].t, 1); close(ballTake[0].p[0], 0.5);
+  } finally { viewer.dispose(); }
+});
+
+test("a seek or a take change releases a placed object into its take, like Play", async () => {
+  for (const change of ["seek", "take"]) {
+    const { memory } = build([still()]);
+    const viewer = new Viewer(memory, () => {});
+    try {
+      viewer.seek(1); await viewer.grab("ball"); viewer.moveHeld(new Vector3(0.2, 1.5, 0), new Quaternion(), 1 / 60); viewer.place();
+      const take = viewer.timeline.activeId;
+      if (change === "seek") viewer.seek(2); else viewer.selectBranch("original");
+      assert.equal(viewer.held, null);
+      assert.ok(viewer.timeline.branches.find(b => b.id === take).tracks.get("ball").length > 1, change);
+    } finally { viewer.dispose(); }
+  }
 });

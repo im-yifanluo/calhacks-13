@@ -5,6 +5,9 @@ import { colliderDepth, Physics, STEP } from "./physics.js";
 import { SAME_TIME, Timeline, type Branch } from "./timeline.js";
 import { keyframe, keyframeVelocity, sampleTrack, trackVelocity, validateTrack } from "./tracks.js";
 
+/** What a grab at the very end of the memory says. */
+export const AT_END = "That's the end of the memory. Scrub back or press Play, then pause to grab something.";
+
 export interface GrabRequest { objectId: string; branchId: string; time: number; pose: Keyframe }
 /** P4 installs this gate before enabling shared-room interaction. Never grant optimistically. */
 export interface InteractionAuthority {
@@ -40,6 +43,12 @@ export class Viewer {
    * A grab meanwhile catches the preview at its rest time, as grabbing a running preview does, so nothing jumps.
    */
   private restHold: { object: LoadedObject; frame: Keyframe; time: number; branchId: string } | null = null;
+  /**
+   * Let go of while time is paused: the object stays where it was put (still held, so still ours in a room) with the
+   * throw it would have had, until Play (or a seek, a take change or an applied clock) releases it. Picking it up again
+   * carries on the same edit.
+   */
+  private placed: { linear: THREE.Vector3; angular: THREE.Vector3 } | null = null;
   /** Other players' throws that came to rest while we watched, held at their landing pose like our own restHold. */
   private remoteHolds = new Map<string, { frame: Keyframe; time: number; branchId: string }>();
   /** The status line still shows "Throw recorded…" from our last throw. */
@@ -132,7 +141,17 @@ export class Viewer {
   }
 
   async grab(objectId: string): Promise<boolean> {
-    if (this.disposed || this.held || this.pendingGrab || this.timeline.playing || this.timeline.time >= this.timeline.duration) return false;
+    if (this.disposed || this.pendingGrab || this.timeline.playing) return false;
+    // A placed object is still ours: picking it up again carries on the same edit, no new take.
+    if (this.held && this.placed && this.held.definition.id === objectId) {
+      this.placed = null; this.motion.set(0, 0, 0); this.angularMotion.set(0, 0, 0); this.lastMove = performance.now();
+      this.report(`Holding ${this.held.definition.label}. Move it, then let go.`);
+      return true;
+    }
+    // Another object while one is placed: the placed one is released into its take first (finishSimulation below).
+    if (this.held && !this.placed) return false;
+    // Nothing can be edited at the very end (a take made there has no time left to play), so say so.
+    if (this.timeline.time >= this.timeline.duration) { this.report(AT_END); return false; }
     const object = this.memory.objects.find(o => o.definition.id === objectId);
     if (!object?.definition.grabbable || !object.root.visible) return false;
     this.throwNoted = false;
@@ -143,7 +162,7 @@ export class Viewer {
     if (catchTime !== undefined && catchTime >= this.timeline.duration) catchTime = undefined;
     this.finishSimulation();
     if (catchTime !== undefined) this.timeline.seek(catchTime);
-    if (this.timeline.time >= this.timeline.duration) return false;
+    if (this.timeline.time >= this.timeline.duration) { this.report(AT_END); return false; }
     this.sample();
     if (!object.root.visible) return false;
     const op = ++this.operation;
@@ -181,6 +200,7 @@ export class Viewer {
   /** Move the held object. It is kept above the floor by its collider's depth (rotation included), whatever the input. */
   moveHeld(target: THREE.Vector3, rotation: THREE.Quaternion, dt: number): void {
     if (!this.held) return;
+    this.placed = null;
     const position = this.floorTarget.copy(target);
     position.y = Math.max(position.y, this.floorLimit(this.held, rotation));
     const elapsed = Math.max(1 / 240, Math.min(dt, 0.1));
@@ -202,14 +222,35 @@ export class Viewer {
 
   cancelPendingGrab(): void { ++this.operation; }
 
+  get isPlaced(): boolean { return this.placed !== null; }
+
+  /**
+   * Let go while time is paused: the object stays exactly where it is, frozen like everything else, keeping the
+   * momentum the hand gave it. Play (or a seek, a take change, an applied clock) releases it with that momentum, so the
+   * scene carries on from there; grabbing it again first lets you adjust it. While playing this is release().
+   */
+  place(): void {
+    if (!this.held || this.placed) return;
+    if (this.timeline.playing) { this.release(); return; }
+    // A stationary hand keeps no momentum (a stale pointer sample is not a throw), as in release().
+    const fresh = performance.now() - this.lastMove <= 100;
+    this.placed = {
+      linear: (fresh ? this.motion.clone() : new THREE.Vector3()).add(this.initialVelocity).clampLength(0, 12),
+      angular: fresh ? this.angularMotion.clone() : new THREE.Vector3(),
+    };
+    this.report(`${this.held.definition.label[0].toUpperCase()}${this.held.definition.label.slice(1)} placed. Press Play to see what happens, or grab it again to adjust it.`);
+  }
+
   release(): void {
     this.cancelPendingGrab();
     const object = this.held;
     if (!object) return;
     this.held = null;
+    const placed = this.placed; this.placed = null;
     // A stationary hand retains the recorded momentum. A stale pointer sample is not a throw.
-    if (performance.now() - this.lastMove > 100) { this.motion.set(0, 0, 0); this.angularMotion.set(0, 0, 0); }
-    const velocity = this.motion.clone().add(this.initialVelocity).clampLength(0, 12);
+    if (!placed && performance.now() - this.lastMove > 100) { this.motion.set(0, 0, 0); this.angularMotion.set(0, 0, 0); }
+    const velocity = placed ? placed.linear : this.motion.clone().add(this.initialVelocity).clampLength(0, 12);
+    if (placed) this.angularMotion.copy(placed.angular);
     // Never release inside or under the floor (an object can rest there in its track, or be released unmoved).
     const floor = this.floorLimit(object, object.root.quaternion);
     if (object.root.position.y < floor) this.physics.hold(object.definition.id, this.floorTarget.copy(object.root.position).setY(floor), object.root.quaternion);
@@ -257,10 +298,12 @@ export class Viewer {
   }
 
   togglePlay(): void {
+    const placed = this.placed ? this.held?.definition.label : undefined;
     this.finishSimulation();
     if (this.timeline.time >= this.timeline.duration) this.timeline.seek(0);
     this.timeline.playing = !this.timeline.playing;
     this.sample(); this.clockEvent();
+    if (placed && this.timeline.playing) this.report(`Playing your take: the ${placed} goes from where you left it.`);
   }
   seek(time: number): void {
     this.finishSimulation(); this.remotePoses.clear(); this.timeline.playing = false; this.timeline.seek(time); this.sample(); this.clockEvent();
@@ -341,7 +384,7 @@ export class Viewer {
    */
   revokeOwnership(objectId: string): void {
     if (this.pendingRequest?.objectId === objectId) this.cancelPendingGrab();
-    if (this.held?.definition.id === objectId) this.held = null;
+    if (this.held?.definition.id === objectId) { this.held = null; this.placed = null; }
     if (this.restHold?.object.definition.id === objectId) this.restHold = null;
     if (this.activeSimulation?.object.definition.id === objectId) {
       const simulation = this.activeSimulation;

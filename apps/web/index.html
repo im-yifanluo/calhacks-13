@@ -3,84 +3,142 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0c151e" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%23a2e8d6' stroke-width='4'/%3E%3C/svg%3E" />
+    <meta name="theme-color" content="#0b1118" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%238ce5dd' stroke-width='4'/%3E%3C/svg%3E" />
     <title>Memory Replay</title>
   </head>
   <body>
-    <main id="stage"></main>
-    <header>
-      <div class="eyebrow"><span class="brand-dot"></span> MEMORY REPLAY <span id="mode">LOCAL DEMO</span></div>
-      <h1 id="title">A moment. Another possibility.</h1>
-      <p id="subtitle">Pause the memory. Change the throw. Replay your take.</p>
-    </header>
-    <aside class="scene-meta"><span id="state">LOADING</span><span id="fps">— fps</span></aside>
-    <div id="loading" role="status"><span class="spinner"></span> Opening your memory…</div>
-    <section id="hud" aria-label="Memory controls">
-      <div class="hud-top"><span id="asset-info">Loading scene</span><span class="local-label">Local session</span></div>
-      <p id="warning" role="alert" hidden></p>
-      <fieldset id="timeline-controls" disabled>
-        <legend class="sr-only">Playback and alternate takes</legend>
-        <div class="transport">
-          <button id="play" class="primary">Pause</button>
-          <button id="restart" title="Return to the start" aria-label="Return to the start">↤</button>
-          <div class="scrubber"><label class="sr-only" for="scrub">Memory time</label><input id="scrub" type="range" min="0" max="1000" step="1" value="0" /><div id="markers" aria-label="Timeline forks"></div></div>
-          <output id="time">0.0 / 0.0s</output>
+    <main id="stage" aria-label="Interactive 3D memory"></main>
+
+    <!-- Top: what you are watching, entering VR, and the shared room. -->
+    <header id="topbar">
+      <div class="glass title-pill">
+        <span class="brand-dot" aria-hidden="true"></span>
+        <div class="title-text">
+          <h1 id="title">Memory Replay</h1>
+          <p><span id="mode">Loading</span><span class="sep" aria-hidden="true"> · </span><span id="asset-info">opening the scene</span></p>
         </div>
-        <div class="tools">
-          <label class="take-label" for="branches">TAKE</label><select id="branches"><option value="original">Original recording</option></select>
-          <button id="original">Original</button><button id="export" title="Download your local takes as JSON">Export takes</button>
-          <label class="toggle"><input id="debug" type="checkbox" /> Colliders</label>
-          <label class="toggle"><input id="eyes" type="checkbox" /> Wearer's view</label>
-          <label class="toggle" title="Stay near the recorded path; what the camera never saw fades out"><input id="guided" type="checkbox" /> Guided path</label>
+      </div>
+      <div class="top-actions">
+        <button id="vr-entry" class="glass pill accent" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.6C3 8.2 4.1 7 5.6 7h12.8C19.9 7 21 8.2 21 9.6v3.9c0 1.4-1.1 2.5-2.6 2.5h-3.1l-1.9-2.4h-2.8L8.7 16H5.6C4.1 16 3 14.9 3 13.5z" /></svg>
+          <span>Enter VR</span>
+        </button>
+        <button id="room-toggle" class="glass pill" aria-expanded="false" aria-controls="room-panel" aria-haspopup="dialog">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2" /><path d="M3.5 19.5c.6-3.3 2.8-5.2 5.5-5.2s4.9 1.9 5.5 5.2" /><circle cx="17" cy="9.5" r="2.4" /><path d="M16 14.4c2.3.2 3.9 1.9 4.5 5.1" /></svg>
+          <span class="sr-only">Room: </span><span id="room-summary">Solo</span>
+        </button>
+      </div>
+    </header>
+    <aside class="scene-meta" aria-hidden="true"><span id="state">LOADING</span><span id="fps">— fps</span></aside>
+
+    <!-- One status line at the top; it fades after a few seconds. Warnings stay. -->
+    <div id="notices">
+      <div id="toast" class="glass toast"><p id="status" role="status" aria-live="polite">Opening your memory…</p></div>
+      <p id="warning" class="glass toast warning" role="alert" hidden></p>
+    </div>
+    <div id="loading" class="glass card" role="status"><span class="spinner" aria-hidden="true"></span><span>Opening your memory…</span></div>
+
+    <!-- The dock: playback within thumb reach. -->
+    <section id="hud" class="glass dock" aria-label="Playback">
+      <fieldset id="timeline-controls" disabled>
+        <legend class="sr-only">Playback and takes</legend>
+        <div class="dock-grid">
+          <button id="restart" class="icon" aria-label="Back to the start" title="Back to the start">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 5.5v13" /><path d="M18 6.2 9.5 12l8.5 5.8z" /></svg>
+          </button>
+          <button id="play" class="play" aria-label="Play">
+            <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.6c0-.8.9-1.3 1.6-.9l9 5.9c.6.4.6 1.4 0 1.8l-9 5.9c-.7.4-1.6-.1-1.6-.9z" /></svg>
+            <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1.2" /><rect x="13.5" y="5" width="4" height="14" rx="1.2" /></svg>
+          </button>
+          <output id="time-now" class="time" aria-hidden="true">0:00</output>
+          <div class="scrubber">
+            <label class="sr-only" for="scrub">Memory time</label>
+            <input id="scrub" type="range" min="0" max="1000" step="1" value="0" />
+            <div id="gaps" aria-hidden="true"></div>
+            <div id="markers" aria-label="Takes along the timeline"></div>
+          </div>
+          <output id="time-total" class="time" aria-hidden="true">0:00</output>
+          <label class="take"><span class="sr-only">Take</span><select id="branches"><option value="original">Original</option></select></label>
+          <button id="more-toggle" class="icon" aria-label="View options" aria-expanded="false" aria-controls="more-sheet">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="18.5" cy="12" r="1.7" /></svg>
+          </button>
         </div>
       </fieldset>
-      <p id="status" role="status" aria-live="polite">Loading the local demo…</p>
-      <div class="help"><span>Drag to orbit · scroll to zoom · <kbd>Space</kbd> to pause · drag a paused object to throw</span><details><summary>Quest controls</summary><p>Enter VR, point at the floating panel and trigger to pause. Squeeze or pinch an object, move your hand, then release. Left stick moves; right stick snap-turns. A/X toggles playback; B/Y cycles takes. Hand tracking also needs browser/device permission.</p></details></div>
-      <button id="reload" hidden>Reload viewer</button>
     </section>
-    <section id="room-panel" aria-label="Party">
-      <div class="room-head">
-        <button id="room-toggle" aria-expanded="true" aria-controls="room-body"><span class="room-eyebrow">PARTY</span><span id="room-summary">Solo</span></button>
-        <span id="room-connection" role="status">Connecting…</span>
+
+    <!-- View options, above the dock. -->
+    <section id="more-sheet" class="glass popover" aria-label="View options" hidden>
+      <div id="more-toggles">
+        <label class="toggle" title="See the memory through the glasses, as it was recorded"><input id="eyes" type="checkbox" role="switch" /> <span>Wearer's view</span></label>
+        <label class="toggle" title="Stay near where the glasses went; what they never saw fades out"><input id="guided" type="checkbox" role="switch" /> <span>Guided path</span></label>
+        <label class="toggle" title="Show the physics shapes"><input id="debug" type="checkbox" role="switch" /> <span>Colliders</span></label>
+      </div>
+      <div class="popover-actions">
+        <button id="export" title="Download your takes as JSON">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11" /><path d="m7.5 10.5 4.5 4.5 4.5-4.5" /><path d="M5 19.5h14" /></svg>
+          Export takes
+        </button>
+      </div>
+      <details class="help">
+        <summary>How to use</summary>
+        <ul>
+          <li class="pointer-fine">Drag to look around, scroll to zoom. <kbd>Space</kbd> plays or pauses, <kbd>←</kbd> <kbd>→</kbd> step, <kbd>[</kbd> <kbd>]</kbd> switch takes.</li>
+          <li class="pointer-coarse">Drag the scene to look around, pinch to zoom, and use the pad to walk.</li>
+          <li>Pause, then drag an object and let go: it stays there, frozen with everything else, until you press Play. Each change makes a new take; the original is always kept.</li>
+          <li>On a Quest: Enter VR, point and pull the trigger to use the panel, and hold grip to grab. Drag the bar under the panel to move it; B or Y hides it.</li>
+        </ul>
+      </details>
+    </section>
+
+    <!-- The shared room: a sheet that leaves the memory visible behind it. -->
+    <dialog id="room-panel" class="glass sheet" aria-labelledby="room-heading">
+      <div class="sheet-head">
+        <span class="grabber" aria-hidden="true"></span>
+        <div class="sheet-title"><h2 id="room-heading">Watch together</h2><p id="room-connection" role="status">Connecting…</p></div>
+        <button id="room-close" class="icon" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" /></svg>
+        </button>
       </div>
       <div id="room-body">
-        <section id="auth-bar" aria-label="Account">
+        <section id="auth-bar" class="group" aria-label="Account">
           <div class="account-row"><span id="auth-status" role="status">Guest · ready to join</span><button id="auth-signout" hidden>Sign out</button></div>
           <div id="google-signin" aria-label="Sign in with Google">Loading Google sign-in…</div>
           <p id="auth-note"></p>
         </section>
-        <details open>
-          <summary>Play together</summary>
-          <label>Your name<input id="player-name" maxlength="40" autocomplete="nickname" /></label>
-          <label>Scene or video<select id="room-memories" aria-label="Memory library"></select></label>
-          <div class="row"><button id="room-create" class="primary" disabled>Create party</button><button id="upload-toggle" aria-expanded="false" aria-controls="upload-panel">Upload</button></div>
-          <div class="row"><input id="room-code" aria-label="Party code" placeholder="PARTY CODE" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false" /><button id="room-join" class="primary" disabled>Join</button></div>
-          <div id="party-scene-actions" hidden><button id="party-attach">Use selected scene / video</button><button id="party-cancel" hidden>Cancel pending scene</button></div>
+        <section class="group">
           <strong id="room-label">Explore solo or join a party</strong>
           <p id="party-role" role="status"></p>
-          <label id="party-speed-label" hidden>Playback speed<select id="party-speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+          <label id="party-speed-label" class="field" hidden>Playback speed<select id="party-speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
           <p id="party-scene-status" role="status">Synthetic demo available. Your video can be attached when a reconstruction worker is connected.</p>
           <progress id="party-progress" max="1" value="0" hidden aria-label="Scene reconstruction progress"></progress>
           <ul id="room-people" aria-label="People in this party"></ul>
           <div class="row"><button id="room-copy-link" disabled>Copy invite link</button><button id="room-leave" disabled>Leave</button></div>
-          <label id="party-invite-label" hidden>Anyone with this link can join<input id="party-invite" readonly aria-label="Party invite link" /></label>
+          <label id="party-invite-label" class="field" hidden>Anyone with this link can join<input id="party-invite" readonly aria-label="Party invite link" /></label>
+        </section>
+        <section class="group">
+          <label class="field">Your name<input id="player-name" maxlength="40" autocomplete="nickname" /></label>
+          <label class="field">Scene or video<select id="room-memories" aria-label="Memory library"></select></label>
+          <button id="room-create" class="primary wide" disabled>Create a party</button>
+          <div class="row join"><input id="room-code" aria-label="Party code" placeholder="Party code" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false" /><button id="room-join" class="primary" disabled>Join</button></div>
+          <div id="party-scene-actions" class="row" hidden><button id="party-attach">Use selected scene / video</button><button id="party-cancel" hidden>Cancel pending scene</button></div>
+        </section>
+        <details class="group" id="library-details">
+          <summary>Add a memory</summary>
+          <label class="field">memory.json link<input id="library-url" type="url" placeholder="Leave blank for the sample" /></label>
+          <div class="row"><button id="library-add" disabled>Add to library</button><button id="upload-toggle" aria-expanded="false" aria-controls="upload-panel">Upload a video</button></div>
+          <div id="upload-panel" hidden></div>
+          <p><a href="/capture.html">Capture test page</a></p>
         </details>
-        <details>
-          <summary>Load a finished memory</summary>
-          <label>memory.json URL<input id="library-url" type="url" placeholder="Blank = synthetic demo" /></label>
-          <button id="library-add" class="primary" disabled>Add to library</button>
-          <p>Finished pipeline scenes use the same memory.json contract. Add one here, then select it for your party.</p>
-        </details>
-        <div id="upload-panel" hidden></div>
-        <p><a href="/capture.html">Capture test · upload and play video</a></p>
         <p id="room-message" role="status"></p>
         <p id="library-errors" role="status"></p>
         <p id="room-error" role="alert"></p>
       </div>
-    </section>
-    <div id="joystick" role="group" aria-label="Drag to walk" title="Drag to walk"><span class="knob"></span><span class="joystick-label">WALK</span></div>
-    <div id="vr-entry"></div>
+    </dialog>
+
+    <div id="joystick" role="group" aria-label="Walk: drag inside the pad" title="Drag to walk"><span class="joystick-label">WALK</span><span class="knob"></span></div>
+    <button id="reload" class="glass pill" hidden>Reload viewer</button>
+    <aside id="xr-preview-note" class="glass pill" hidden>VR panel preview · the mouse stands in for a controller · <a href="?">Leave</a></aside>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

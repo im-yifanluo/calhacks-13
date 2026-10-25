@@ -55,7 +55,7 @@ export function desktopInput(canvas: HTMLCanvasElement, camera: THREE.Camera, co
     clearTimeout(pending.timer); press = null;
     const request = ++version;
     if (!await viewer.grab(pending.objectId)) { if (version === request) end(); return; }
-    if (version !== request || activePointer === null) { viewer.release(); return; }
+    if (version !== request || activePointer === null) { viewer.place(); return; }
     camera.getWorldDirection(normal);
     plane.setFromNormalAndCoplanarPoint(normal, grabPoint);
     offset.copy(viewer.held!.root.position).sub(grabPoint); lastMove = performance.now();
@@ -78,7 +78,8 @@ export function desktopInput(canvas: HTMLCanvasElement, camera: THREE.Camera, co
     ++version;
     if (press) { clearTimeout(press.timer); press = null; } // a tap: nothing was grabbed
     const pointerId = activePointer; activePointer = null;
-    viewer.release(); controls.enabled = true;
+    // Time is paused: the object stays where it was let go until Play, keeping the throw the drag gave it.
+    viewer.place(); controls.enabled = true;
     if (pointerId !== null && canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
   }
   for (const name of ["pointerup", "pointercancel", "lostpointercapture"] as const) {
@@ -114,11 +115,18 @@ export function desktopInput(canvas: HTMLCanvasElement, camera: THREE.Camera, co
   window.addEventListener("keyup", event => held.delete(event.code));
   window.addEventListener("blur", () => held.clear());
   window.addEventListener("keydown", event => {
-    if ((event.target as HTMLElement)?.matches("input, select, textarea, button")) return;
+    // Keys typed into the room sheet, a menu or a button are theirs (from Andrew Eng's frontend-phone).
+    if (event.target instanceof Element && event.target.closest("input, select, textarea, button, summary, dialog[open], [contenteditable='true']")) return;
     if (event.code === "Space") { event.preventDefault(); viewer.togglePlay(); }
     if (event.code === "ArrowLeft") { event.preventDefault(); viewer.seek(viewer.timeline.time - 0.5); }
     if (event.code === "ArrowRight") { event.preventDefault(); viewer.seek(viewer.timeline.time + 0.5); }
     if (WALK.has(event.code) || event.code.startsWith("Shift")) { if (WALK.has(event.code)) event.preventDefault(); held.add(event.code); }
+    if (event.code === "BracketLeft" || event.code === "BracketRight") {
+      // [ and ] step through the takes.
+      event.preventDefault();
+      const takes = viewer.timeline.branches, count = takes.length, step = event.code === "BracketRight" ? 1 : -1;
+      if (count > 1) viewer.selectBranch(takes[(takes.findIndex(b => b.id === viewer.timeline.activeId) + step + count) % count].id);
+    }
     if (event.code === "Escape") end();
   });
 }
