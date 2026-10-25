@@ -61,6 +61,34 @@ The command-line build uses `/tmp` because cloud-synced folders can attach Finde
 
 ## Names, scene status and the web library
 
+### Update an iPhone app that asks for `memos1`
+
+The website deploy does not update an installed native app. Pull `main` and rebuild
+**SceneCapture.xcodeproj → SceneCapture** for real glasses (or
+**SceneCaptureDemo.xcodeproj → SceneCaptureDemo** for the simulation). Install over
+the existing app using the same bundle identifier and signing team; do not uninstall
+it, because uninstalling removes local recordings. The updated app shows
+**Six-digit password sign-in enabled** under **Settings → About this build**.
+
+Choose **Settings → Use memos upload server**. In the website account panel, choose
+**Copy password**; paste exactly those six digits into the app's **6-digit password**
+field and tap **Sign in with saved password**. Keep leading zeros. Do not add a prefix.
+The app restores the website account's name, identity, and memories. Clipboard copies
+made by the native app expire after two minutes; copy again if the clipboard is empty.
+
+Sign-in refreshes the server's capabilities, accepts six-digit support independently
+of GPU configuration, and never tries to decode numeric passwords as legacy session
+credentials. Older servers get a clear six-digit-support message without replacing
+the saved account. Regression check on a Mac with Xcode:
+
+```bash
+node scripts/test-ios-password.mjs
+```
+
+This exercises the real `SceneLibrary.importAccount` and `copyPersonalKey` methods
+against an isolated local API, including leading zeros, surrounding whitespace,
+cached configuration changes, and servers without a reconstruction capability flag.
+
 After saving the server address, **Create password** registers your name with
 `register_account`, preserving any existing phone identity and its recordings. Or
 enter the six-digit password from web sign-in into **Sign in with saved password**. The app

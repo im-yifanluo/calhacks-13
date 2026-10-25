@@ -312,13 +312,16 @@ final class SceneLibrary: ObservableObject {
         savingProfile = true
         defer { savingProfile = false }
         do {
-            let destination = try await accountDestination()
+            // The server may have gained password support while this app was open.
+            let destination = try await accountDestination(refresh: true)
+            let body = try AccountKey.signInBody(personalKeyInput, expected: destination)
+            // A numeric password is never a locally decodable session credential.
+            // Reject unsupported servers here instead of sending it to the legacy decoder.
+            if body["password"] != nil && destination.passwordLength != 6 {
+                throw CaptureFailure.message("This server does not support six-digit passwords yet. In Settings, choose Use memos upload server, then try again.")
+            }
             let auth: ServerIdentity
             if usesPortableAPI {
-                let body = try AccountKey.signInBody(personalKeyInput, expected: destination)
-                if body["password"] != nil && destination.passwordLength != 6 {
-                    throw CaptureFailure.message("Update the upload service to enable six-digit passwords.")
-                }
                 let (data, response) = try await URLSession.shared.data(for: request("/api/account", method: "POST", body: body))
                 try check(data, response)
                 let restored = try JSONDecoder().decode(HostedAccount.self, from: data)
@@ -347,7 +350,7 @@ final class SceneLibrary: ObservableObject {
         savingProfile = true
         defer { savingProfile = false }
         do {
-            let destination = try await accountDestination()
+            let destination = try await accountDestination(refresh: true)
             guard destination.passwordLength == 6 else { throw CaptureFailure.message("Update the upload service to enable six-digit passwords.") }
             var auth = try await identity()
             if auth.password == nil {
@@ -372,7 +375,7 @@ final class SceneLibrary: ObservableObject {
         savingProfile = true
         defer { savingProfile = false }
         do {
-            let destination = try await accountDestination()
+            let destination = try await accountDestination(refresh: true)
             if usesPortableAPI {
                 let (data, response) = try await URLSession.shared.data(for: request("/api/account", method: "POST", body: ["displayName": name]))
                 try check(data, response)
