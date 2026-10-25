@@ -13,10 +13,11 @@ Track: an independent attempt at true 4D Gaussian splatting (4DGS) on the Ray-Ba
   2. **Bright walls are partly transparent.** 4DGaussians trains on a white background, so bright surfaces are learned see-through over white. On a black viewer background the same export scores 21.0 dB instead of 30.5 dB.
   3. **The files are big:** 880 MB for 17 s, against about 7 MB for the static room.
   4. **There is no separation into objects**, so nothing in the 4D splat can be grabbed or thrown.
-- **My split variant (run e) fixes problems 1 to 3.** Only Gaussians seeded on people deform, and training uses a random background.
-  - The room is exactly static, and the export is opaque.
-  - The payload drops to `static.spz` (4.5 MB) plus 0.79 MB per 10 Hz frame (144 MB for v59).
-  - It scores 26.0 dB on held-out frames on a black background, from a half-trained checkpoint (the run was cut short by the full disk).
+- **My split variant (run e, final) fixes problems 1 to 3.** Only Gaussians seeded on people deform, and training uses a random background. I retrained it to completion on the current clip, with the main pipeline's refined poses and exposure.
+  - Held-out: **29.2 dB, SSIM 0.913, LPIPS 0.213**; people pixels 25.9 dB, other pixels 29.5 dB. Scored in video space, against OpenCV frames of the current clip.
+  - The room does not move (median 0.0 cm, p90 2.2 cm), and the export is opaque.
+  - Payload: `static.spz` 3.4 MB plus 0.53 MB per 10 Hz frame, 93 MB for v59.
+  - Training took 33 min on one H200.
 - **v71** (39 s, stage then a crowded hall): 4DGS **28.7 dB / 0.905 / 0.218** against **18.0 dB / 0.777 / 0.389** for the static room at the same 97 held-out cameras. On people pixels: 25.7 vs 9.5 dB.
 - **The whole-frame PSNRs come from different frames.** v59's `input/clip.mp4` was re-normalized at 02:30Z with a darker tone map, after my runs had trained. Each method is scored against the frames it trained on. For a cross-check, the comparison image also reports PSNR after a global colour match.
 
@@ -69,7 +70,7 @@ Each method is scored against the frames it trained on: 4DGS against the clip as
 | a | 8.8 cm | 16.6 cm | 9.8 cm | 8.7 cm |
 | c | 7.1 cm | 14.7 cm | 9.2 cm | 6.9 cm |
 
-## Comparison image: `docs/fourd_vs_static_v59.jpg`
+## Comparison image (first version, run c; the docs image is now run e, see above)
 
 - **Columns:**
   1. The video frame (`ffmpeg -ss t` on the current `input/clip.mp4`).
@@ -116,7 +117,7 @@ Each method is scored against the frames it trained on: 4DGS against the clip as
 
 - **The room stays put.** A static splat is rock solid from any viewpoint in VR. 4DGaussians moves background Gaussians by a median 7 cm, to absorb pose and exposure errors, so off the recorded path the room shimmers. My held-out frames sit between training frames on the same path, which favours 4DGS. Novel-view quality in VR is untested, and probably worse than these numbers suggest.
 - **Objects and physics:** grabbable objects with colliders, a floor, a room collider. The 4D model is one undivided cloud, so you cannot grab and throw an object out of it.
-- **Size and streaming:** about 7 MB for the room, plus small ghost sequences and object splats. Vanilla 4DGS is 880 MB per 17 s at 10 Hz. The split (run e) brings it to 4.5 MB plus 139 MB, which is still about 20 times the layered payload.
+- **Size and streaming:** about 7 MB for the room, plus small ghost sequences and object splats. Vanilla 4DGS is 880 MB per 17 s at 10 Hz. The split (run e) brings it to 3.4 MB plus 93 MB, still about 14 times the layered payload.
 - **Opaque geometry:** 4DGS as shipped learns bright walls as semi-transparent over its white training background, which drops the export to 21 dB on black. The static pipeline does not have this problem. Training on a random background (run e) fixes it.
 - **Robustness on long, wide clips:** see v71 below.
 
@@ -129,28 +130,40 @@ Each method is scored against the frames it trained on: 4DGS against the clip as
   - Disk: about 3 GB of PLY plus 0.9 GB of spz per 17 s clip.
 - **Static pipeline:** gsplat MCMC training at 0.67 of the steps. The main session reports about 17 min per glasses clip on a shared GPU, and the output is about 7 MB.
 
-## Run e: static/dynamic split + random background (v59)
+## Run e: static/dynamic split + random background (v59, final)
 
 **Changes from run c** (patches in `patch_4dgaussians.py`, enabled by `FOURD_DYN_FLAG=1 FOURD_RANDBG=1`):
 
 - **Only people deform.** Init points backprojected from ViPE "person" pixels are flagged dynamic: 8.8k of 126k points, with the mask dilated by 6 px and sampled twice as densely. Only flagged Gaussians, and the children densification makes from them, go through the deformation field; the room is an ordinary static 3DGS. This uses 4DGaussians' own `_deformation_table`, which upstream carries through densification and pruning but never uses.
 - **Random background colour per training view.** The model can no longer hide bright walls as "transparent over white".
-- **It is not fully trained.** The run died at fine iteration ~10.3k of 14k when the /workspace volume hit its quota (see below), so these numbers are from the iteration-7000 checkpoint. There was no time to retrain before the 9 PM cut-off.
+- **Inputs match the main pipeline:**
+  - Frames: the current tone-mapped clip (`convert.py --refined --exposure`, data `A/data/v59e`).
+  - Poses: the main pipeline's pose refinement (the `cameras.json` vs `cameras.vipe.json` delta of the nearest keyframe, applied to every frame).
+  - Colour: training targets exposure-normalized as x = (y − b) / g from `world/exposure.json`. The export is therefore in the static room's colour space, and the viewer's wearer view re-exposes it with each keyframe's `e`.
+- **Training:** 3k coarse + 14k fine iterations, 33 min alone on pod B GPU 0 (03:42–04:16Z). Spz-only export with `post.py --keep_ply 0`.
+- **History:** a first run e on the old frames died at fine iteration ~10.3k when the disk filled. Its 7k checkpoint scored 25.99 / 0.886 / 0.245.
 
-| v59, 44 held-out frames | PSNR | SSIM | LPIPS | people px | non-people px |
+| v59, 44 held-out frames, video space (render re-exposed; GT = OpenCV frames of the current clip) | PSNR | SSIM | LPIPS | people px | other px |
 |---|---|---|---|---|---|
-| run e @7k, native renderer | 25.99 | 0.886 | 0.245 | 23.3 | 26.2 |
-| run e @7k, exported splats, **black** background | **25.98** | 0.886 | 0.245 | 23.3 | 26.2 |
-| run e @7k, exported splats, white background | 25.98 | 0.886 | 0.245 | 23.3 | 26.2 |
-| (run c, exported, black background) | 21.04 | 0.896 | 0.194 | 23.4 | 21.0 |
+| **run e, final** | **29.20** | **0.913** | **0.213** | **25.9** | **29.5** |
+| run c (vanilla; old frames; white background) | 30.51 | 0.934 | 0.163 | 25.1 | 31.1 |
+| run c, exported splats, black background | 21.04 | 0.896 | 0.194 | 23.4 | 21.0 |
+| main static room, `baked.ply`, same cameras | 18.24 | 0.794 | 0.338 | 9.1 | 20.0 |
 
-- **The export is now independent of the background:** fully opaque, and it renders the same on a dark viewer background.
-- **The room no longer moves:** non-person Gaussians have a median displacement of 0.0 cm, p90 5.5 cm (the p90 comes from dilated-mask edges flagged dynamic). Person Gaussians move a median 7.3 cm and p90 17.6 cm, as they should.
-- **Size:** 48.6k dynamic and 270k static Gaussians. The viewer payload is `static.spz` (4.5 MB) plus `frames_dyn/t_%04d.spz` (177 x 0.79 MB = 139 MB), against 890 MB for all-Gaussians-per-frame.
-- **Comparison-image rows with run e** (black background): mean 13.5 dB raw, 23.8 dB colour-matched, against 24.1 for run c and 20.6 for the main pipeline.
-- **Trade-off:**
-  - The background loses about 5 dB relative to run c, partly from half training. Mostly it is because a rigid room cannot absorb per-frame pose and exposure errors any more.
-  - It still beats the static pipeline's room on the same cameras (26.2 vs 20–22 dB on non-people pixels). This is the version worth putting in the viewer.
+- **Room motion** (`motion.json`): non-person Gaussians median 0.0 cm, p90 2.2 cm. Person Gaussians median 6.7 cm, p90 15.8 cm.
+- **Size:** 31.5k dynamic and 199.7k static Gaussians.
+- **Payload:**
+  - `static.spz`: 3.39 MB.
+  - `frames_dyn/t_0000..0176.spz`: 177 files of about 0.53 MB, 93 MB in total.
+  - For comparison, all-Gaussians-per-frame spz would be 693 MB (kept in `/workspace/4dgs/A/out/v59e_e/frames/`).
+- **Opaque:** trained on random backgrounds, so it renders the same on any viewer background.
+- **Comparison image** (`docs/fourd_vs_static_v59.jpg` is now run e, re-exposed with `exposure.json` and rendered on black). Means over the six rows:
+
+  | reference | main pipeline | 4DGS run e |
+  |---|---|---|
+  | ffmpeg `-ss` frame | 18.4 | 21.3 |
+  | ffmpeg frame, colour-matched | 20.6 | 27.6 |
+  | OpenCV frame (the decode both methods trained on) | 19.4 | 31.8 |
 
 ## v71 (39 s, stage then a crowded hall)
 
@@ -178,7 +191,7 @@ Each method is scored against the frames it trained on: 4DGS against the clip as
   - From now on: keep only spz (`post.py --keep_ply 0 --dyn_out 0`).
 - **Room wobble** (7 cm median) in vanilla 4DGaussians: fixed by the split (run e). The v71 export is still vanilla.
 - **Transparency from the white background:** fixed by the random-background training in run e. Runs a and c, and v71, were trained before the fix.
-- **Run e is half-trained** (7k of 14k fine iterations). Retrain it to completion: about 30 min alone on one H200.
+- **Run e is retrained to completion** (final numbers above). It has still not been viewed in the viewer or on Quest.
 - **Tone mismatch:** v59's clip was re-normalized after training. A retrain on the current clip would make the raw PSNRs comparable.
 - **Nothing has run in the viewer or on Quest:** I produced files only. 177 x 5 MB spz is too much to stream to Quest for one clip.
 - **The exported colour is baked for the recorded camera at each time,** so view-dependent effects are frozen. Fine for replay, slightly wrong from other viewpoints.
@@ -186,8 +199,8 @@ Each method is scored against the frames it trained on: 4DGS against the clip as
 
 ## Next steps
 
-1. Use the split model (run e) as the default, retrained to completion (about 30 min): static room Gaussians (one spz) plus dynamic people Gaussians per 10 Hz frame. Stream only the dynamic part, 0.8 MB per frame.
-2. Retrain on the current tone-mapped clip, with the main pipeline's refined poses and exposure.
+1. Use the split model (run e) as the default: `static.spz` (3.4 MB) loaded once, plus dynamic people Gaussians per 10 Hz frame (0.53 MB each). Stream only the dynamic part.
+2. Fix the stream colour tags at normalize, and score with the decoder used for training.
 3. Add a regularizer on deformation magnitude for Gaussians not on people, plus ViPE depth supervision, to reduce floaters off the recorded path.
 4. Try it in the viewer (Spark): load `static.spz` once and swap `frames_dyn/t_%04d.spz` per 100 ms.
 
@@ -200,11 +213,13 @@ Each method is scored against the frames it trained on: 4DGS against the clip as
   - `video_fixedcam.mp4`: camera frozen mid-clip while time plays.
   - `motion.json`
   - `compare_c.jpg`, `compare_c.json`
-  - `frames/`: `t_0000..0176.ply` and `.spz`, plus `frames.json`. All Gaussians per 10 Hz frame, in the world frame. 16.5 MB PLY or 5.0 MB spz each; 2.9 GB of PLY and 0.88 GB of spz in total.
-- **On the pod, v59 run e (split):** `/workspace/work/v59/4dgs/split/`
-  - `static.spz` (4.5 MB) and `static.ply`.
-  - `frames_dyn/t_%04d.spz` plus `frames.json`: 177 files, 139 MB in total.
-  - `metrics.json`, `renders/`, `compare_e.jpg`.
+  - `frames/`: `t_0000..0176.spz` plus `frames.json`. All Gaussians per 10 Hz frame, in the world frame, 5.0 MB each and 0.88 GB in total. The PLYs were deleted for disk space.
+- **On the pod, v59 run e (final split):** `/workspace/work/v59/4dgs/split/`
+  - `static.spz`: 3.4 MB.
+  - `frames_dyn/t_0000..0176.spz`: 93 MB in total.
+  - `frames_dyn/frames.json`
+  - `metrics.json`, `motion.json`, `renders/`, `compare_e.jpg`, `compare_e.json`.
+- **v59 run c spz:** `frames/t_*.spz`. Its PLYs were deleted for disk space.
 - **On the pod, v71:** `/workspace/work/v71/4dgs/`
   - `metrics.json`, `renders/`, `video.mp4`, `video_fixedcam.mp4`.
   - `frames/t_0000..0387.spz` plus `frames.json` (1.9 GB, PLYs not kept).

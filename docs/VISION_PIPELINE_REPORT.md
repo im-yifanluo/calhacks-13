@@ -286,7 +286,7 @@ code: `pipeline/fourd/`; side-by-side image: [fourd_vs_static_v59.jpg](fourd_vs_
 | v59 (speaker at the podium), 44 held-out frames, recorded camera | PSNR | SSIM | LPIPS | people px | other px |
 |---|---|---|---|---|---|
 | 4DGS, vanilla (run c) | **30.5** | **0.934** | **0.163** | 25.1 | 31.1 |
-| 4DGS, split room / people + random background (run e, half-trained) | 26.0 | 0.886 | 0.245 | 23.3 | 26.2 |
+| 4DGS, split room / people + random background (run e, retrained to completion 9:18 PM) | 29.2 | 0.913 | 0.213 | 25.9 | 29.5 |
 | Layered pipeline, static room (`baked.ply`) | 18.2 | 0.794 | 0.338 | 9.1 | 20.0 |
 
 v71 (stage, then a crowded hall), 97 held-out cameras: 4DGS 28.7 / 0.905 / 0.218 against 18.0 / 0.777 / 0.389 for
@@ -300,9 +300,10 @@ What it means:
   from anywhere else). It trains over white, so bright walls come out see-through (21 dB instead of 30.5 on a dark
   background). The export is 880 MB for 17 s. Nothing in it is an object, so nothing can be grabbed or thrown.
 - **The split variant fixes three of the four**: only Gaussians seeded on people deform, training uses a random
-  background. The room is exactly static (median motion 0.0 cm), the export is opaque, and the payload is
-  `static.spz` (4.5 MB) plus 0.8 MB per 10 Hz frame (144 MB for v59), for about 5 dB less. It was half-trained when
-  the shared volume filled up; a retrain to completion was started at 8:45 PM.
+  background. Retrained to completion (33 min on one H200): the room is exactly static (median motion 0.0 cm, p90
+  2.2 cm), the export is opaque, and the payload is `static.spz` (3.4 MB) plus 0.53 MB per 10 Hz frame (93 MB for
+  v59), for 1.3 dB less than vanilla. On the pod: `/workspace/work/v59/4dgs/split/` (`static.spz`, `frames_dyn/`,
+  `frames_dyn/frames.json`).
 - **Caveat on the numbers**: held-out frames sit between training frames on the same path, which favours 4DGS, and
   nobody has looked at either from a new viewpoint in VR. The two methods were trained on different tone-mappings of
   the same clip (the colour fix landed between them), so the image's raw per-row PSNRs are not comparable; after a
@@ -420,8 +421,12 @@ In the order we hit it. Every fix is in the code and the runbook.
 - **Phantom box in the demo scene**: a prop whose carve finds too few Gaussians falls back to a primitive drawn in
   front of the object still in the room; for the giant teddy that was an opaque tan box. Fixed by data (the teddy is
   a fixture in `manual_specs.json`); the general rule, drop or hide such props, is in §5.
-- **Scoring decode check**: the agent suspected the scorer's ffmpeg decode was darker than the OpenCV frames the
-  trainer sees; measured on the current clips the two differ by about 2 levels of 255, so the scores stand.
+- **Decoders disagree on the tone-mapped clips**: the 4DGS agent found the pod's OpenCV and ffmpeg 16 levels apart
+  on the same frame (the clips still carry HLG/BT.2020 tags after the LUT). Measured at the end of the night on the
+  rotunda, frame 312: the training JPEG the pod's OpenCV produced averages RGB 111/114/115, the laptop's ffmpeg
+  (what `compare` and the judges see) 106/109/110, the laptop's OpenCV 107/110/111: a uniform +4.5-level offset
+  in training, worth about 0.1 dB, not the warm cast. Fix next: decode frames with one tool everywhere (ffmpeg,
+  which S1 already uses) and strip the HLG tags after tone mapping.
 
 ## 5. What to improve next (in order of value)
 
