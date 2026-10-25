@@ -1,9 +1,10 @@
-/** Passwords contain a host-signed credential, never a public identity alone. */
+/** Local session credential. The six-digit sign-in password is resolved by the upload API. */
 export interface AccountKey {
   server: string;
   database: string;
   identity: string;
   token: string;
+  password?: string;
 }
 const PREFIX = "memos1.";
 const MAX_KEY_LENGTH = 16384;
@@ -40,7 +41,10 @@ export function decodeAccountKey(input: string, expected = databaseSettings()): 
   } catch { throw new Error("This password is incomplete or damaged. Paste your saved password again."); }
   if (data.server !== expected.server || data.database !== expected.database)
     throw new Error("This password belongs to a different memos server. Open the site where you created it.");
-  return { server: data.server, database: data.database, identity: data.identity, token: data.token };
+  if (data.password !== undefined && (typeof data.password !== 'string' || !/^[0-9]{6}$/.test(data.password)))
+    throw new Error('Invalid saved password.');
+  return { server: data.server, database: data.database, identity: data.identity, token: data.token,
+    ...(data.password ? { password: data.password } : {}) };
 }
 export function savedAccount(): AccountKey | undefined {
   try {

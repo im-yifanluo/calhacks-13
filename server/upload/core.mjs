@@ -89,6 +89,7 @@ export function makeHandler({
   accountConfig,
   registerAccount,
   getAccount,
+  passwords,
   maxUploadBytes = 2 * 1024 ** 3,
   pipelineEnabled = true,
 }) {
@@ -117,7 +118,8 @@ export function makeHandler({
     }
     if (route.pathname === "/api/health") return send(200, { status: "ok" });
     if (route.pathname === "/api/account/config" && req.method === "GET" && accountConfig)
-      return send(200, { version: 1, ...accountConfig, keyPrefix: "memos1.", maxUploadBytes, pipelineAvailable: pipelineEnabled });
+      return send(200, { version: passwords ? 2 : 1, ...accountConfig, keyPrefix: "memos1.",
+        ...(passwords ? { passwordLength: 6 } : {}), maxUploadBytes, pipelineAvailable: pipelineEnabled });
     if (
       req.method === "POST" &&
       route.pathname === "/api/identity" &&
@@ -132,7 +134,8 @@ export function makeHandler({
     const connectionsRoute = req.method === "GET" && route.pathname === "/api/connections" && connections;
     const profileRoute = route.pathname === "/api/profile" &&
       ((req.method === "GET" && getProfile) || (req.method === "POST" && setProfile));
-    const accountRoute = route.pathname === "/api/account" && accountConfig && getAccount && registerAccount &&
+    const passwordRoute = route.pathname === "/api/account/password" && req.method === "POST";
+    const accountRoute = (route.pathname === "/api/account" || passwordRoute) && accountConfig && getAccount && registerAccount &&
       ["GET", "POST"].includes(req.method);
     const listing =
       req.method === "GET" &&
@@ -146,7 +149,7 @@ export function makeHandler({
         ))
     )
       return send(404, { error: "Not found" });
-    if (!(accountRoute && req.method === "POST") && !req.headers.authorization?.startsWith("Bearer "))
+    if (!(accountRoute && req.method === "POST" && !passwordRoute) && !req.headers.authorization?.startsWith("Bearer "))
       return send(401, { error: "Connect to SpacetimeDB first" });
     try {
       const body = listing || connectionsRoute || ((profileRoute || accountRoute) && req.method === "GET")
@@ -154,13 +157,18 @@ export function makeHandler({
         : await json(req);
       // POST /account either creates/promotes an identity or restores an existing password.
       let credential;
-      const restoring = accountRoute && req.method === "POST" && body.personalKey !== undefined;
-      const creating = accountRoute && req.method === "POST" && !restoring;
+      const client = req.socket?.remoteAddress || 'unknown'; // Never trust arbitrary forwarding headers.
+      const restoring = accountRoute && req.method === "POST" && !passwordRoute && (body.personalKey !== undefined || body.password !== undefined);
+      const creating = accountRoute && req.method === "POST" && !passwordRoute && !restoring;
       const name = creating ? accountName(body) : undefined;
       if (restoring) {
-        if (req.headers.authorization || body.identity !== undefined || body.name !== undefined || body.displayName !== undefined)
-          throw new ApiError(400, "Send only personalKey when restoring an account");
-        credential = decodePersonalKey(body.personalKey, accountConfig);
+        if (req.headers.authorization || body.identity !== undefined || body.name !== undefined || body.displayName !== undefined ||
+            (body.personalKey !== undefined && body.password !== undefined))
+          throw new ApiError(400, "Send only password when restoring an account");
+        if (body.password !== undefined) {
+          if (!passwords) throw new ApiError(503, 'Six-digit passwords are not configured on this server');
+          credential = await passwords.restore(body.password, client);
+        } else credential = decodePersonalKey(body.personalKey, accountConfig);
       } else if (creating && !req.headers.authorization) {
         if (body.identity !== undefined) throw new ApiError(401, "An existing identity requires authentication");
         const created = await registerIdentity();
@@ -176,7 +184,14 @@ export function makeHandler({
         if (profile.provider !== "key" || !profile.displayName)
           throw new ApiError(401, "This identity has no registered password account");
         const result = { ...accountConfig, ...profile };
-        if (req.method === "POST") Object.assign(result, { token: credential.token, personalKey: encodePersonalKey(credential) });
+        if (passwordRoute) {
+          if (!passwords) throw new ApiError(503, 'Six-digit passwords are not configured on this server');
+          return send(200, { password: await passwords.issue(credential, client) });
+        }
+        if (req.method === "POST") {
+          Object.assign(result, { token: credential.token, personalKey: encodePersonalKey(credential) });
+          if (passwords) result.password = restoring && body.password !== undefined ? body.password : await passwords.issue(credential, client);
+        }
         return send(200, result);
       }
       if (connectionsRoute) {
@@ -249,6 +264,7 @@ export function makeHandler({
         memory,
       });
     } catch (error) {
+      if (error instanceof ApiError && error.status === 429) res.setHeader('Retry-After', '900');
       if (systemError(error)) console.error("Upload request failed:", error);
       send(error instanceof ApiError ? error.status : 400, {
         error:
@@ -261,7 +277,8 @@ export function makeHandler({
 }
 export function databaseConfig(env = process.env) {
   const settings = accountSettings(env);
-  const base = settings.server;
+  // The account names the public browser destination; server-side verification uses the internal host.
+  const base = accountSettings({ STDB_HTTP_URL: env.STDB_HTTP_URL, STDB_DATABASE: env.STDB_DATABASE }).server;
   const url = `${base}/v1/database/${encodeURIComponent(env.STDB_DATABASE)}`;
   return {
     accountConfig: settings,

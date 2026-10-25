@@ -2,6 +2,7 @@
 import { makeHandler, databaseConfig, ticket, readTicket } from "./core.mjs";
 import { pipelineRequest, sceneKey } from './pipeline.mjs';
 import { sceneImportRequest, importedSceneKey } from './scene-import.mjs';
+import { passwordVault, r2PasswordStore } from './passwords.mjs';
 
 export const HOSTED_MAX_UPLOAD_BYTES = 90 * 1024 ** 2;
 const videoKey = /^videos\/[a-f0-9]{64}\/[a-f0-9-]{36}\.(mp4|mov|webm)$/;
@@ -10,12 +11,13 @@ const result = (status, data, headers = {}) => Response.json(data, {
 });
 
 /** Keep the HTTP-independent account/upload logic identical to server/upload/service.mjs. */
-export async function fetchHandler(handler, request) {
+export async function fetchHandler(handler, request, clientAddress = 'unknown') {
   const headers = new Headers(); let status = 200, body = null;
   const url = new URL(request.url);
   await handler({
     method: request.method, url: url.pathname + url.search,
     headers: Object.fromEntries(request.headers),
+    socket: { remoteAddress: clientAddress },
     async *[Symbol.asyncIterator]() {
       if (!request.body) return;
       const reader = request.body.getReader();
@@ -44,8 +46,11 @@ function settings(env) {
 
 export function hostedConfig(env) {
   const config = settings(env);
+  const database = databaseConfig(env);
   return {
-    ...databaseConfig(env), secret: env.UPLOAD_SIGNING_SECRET,
+    ...database, secret: env.UPLOAD_SIGNING_SECRET,
+    passwords: passwordVault({ store: r2PasswordStore(env.ACCOUNT_PASSWORDS || env.BUCKET),
+      secret: env.UPLOAD_SIGNING_SECRET, settings: database.accountConfig }),
     assetBase: `${config.origin}/media`, allowedOrigins: config.allowedOrigins,
     pipelineIdentity: env.PIPELINE_IDENTITY || "", pipelineEnabled: config.pipelineEnabled,
     maxUploadBytes: HOSTED_MAX_UPLOAD_BYTES,
@@ -131,7 +136,7 @@ export async function handleHostedRequest(request, env) {
     if (path.startsWith('/api/pipeline/')) return await pipelineRequest(request, env);
     if (path === "/api/uploads/put") return await putVideo(request, env, config);
     if (path.startsWith("/media/")) return await getVideo(request, env);
-    return await fetchHandler(makeHandler(hostedConfig(env)), request);
+    return await fetchHandler(makeHandler(hostedConfig(env)), request, request.headers.get('CF-Connecting-IP') || 'unknown');
   } catch {
     return result(503, { error: "Upload service unavailable; please retry" });
   }

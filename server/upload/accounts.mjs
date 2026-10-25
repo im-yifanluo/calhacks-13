@@ -4,9 +4,9 @@ export class ApiError extends Error {
 }
 
 export function accountSettings(env) {
-  const url = new URL(env.STDB_HTTP_URL);
+  const url = new URL(env.ACCOUNT_SERVER_URL || env.STDB_PUBLIC_URL || env.STDB_HTTP_URL);
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash)
-    throw new Error("STDB_HTTP_URL must be an HTTP(S) server URL without credentials or query parameters");
+    throw new Error("Account server must be an HTTP(S) URL without credentials or query parameters");
   if (!env.STDB_DATABASE) throw new Error("STDB_DATABASE is required");
   return { server: url.href.replace(/\/$/, ""), database: env.STDB_DATABASE };
 }

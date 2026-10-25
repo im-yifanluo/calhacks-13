@@ -24,14 +24,16 @@ const env = {
   VITE_STDB_DATABASE: database,
   STDB_PORT: process.env.STDB_PORT || "3055",
   PUBLIC_ORIGIN: origin,
+  ACCOUNT_SERVER_URL: process.env.ACCOUNT_SERVER_URL || process.env.STDB_PUBLIC_URL ||
+    (process.env.VITE_STDB_URL ? process.env.VITE_STDB_URL.replace(/^ws/, 'http').replace(/\/$/, '') : `${origin}/stdb`),
   LOCAL_HTTP: https ? "0" : "1",
   VITE_PORT: port,
   ...(lan ? { VITE_HOST: "0.0.0.0" } : {}),
 };
 console.log(
-  `Party demo: ${origin}\nDatabase: ${database} on port ${env.STDB_PORT}\nPublish the current module before joining. Google is optional; see docs/PARTIES.md.`,
+  `Party demo: ${origin}\nDatabase: ${database} on port ${env.STDB_PORT}\nPublish the current module before joining. Six-digit passwords use the upload service; see docs/PARTIES.md.`,
 );
-if (lan) console.log("Open this same address on the Mac and iPhone using the same Wi-Fi. Keep the Mac awake. Guest parties work over HTTP; Google sign-in, camera capture and immersive VR need trusted HTTPS.");
+if (lan) console.log("Open this same address on the Mac and iPhone using the same Wi-Fi. Keep the Mac awake. Guest parties work over HTTP; account sign-in, camera capture and immersive VR need trusted HTTPS.");
 const children = [
   spawn(process.execPath, ["server/upload/local.mjs"], {
     cwd: root,

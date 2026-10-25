@@ -50,7 +50,7 @@ struct PendingCapture: Codable, Identifiable {
     var filename: String { "\(id.uuidString).\(fileExtension == "mov" ? "mov" : "mp4")" }
     var contentType: String { fileExtension == "mov" ? "video/quicktime" : "video/mp4" }
 }
-struct ServerIdentity: Codable { let identity: String; let token: String; var personalKey: String? = nil }
+struct ServerIdentity: Codable { let identity: String; let token: String; var personalKey: String? = nil; var password: String? = nil }
 private struct UserProfile: Codable { let identity: String; let displayName: String; let provider: String? }
 private struct MemoryList: Decodable { let memories: [SavedScene] }
 private struct CompletedUpload: Decodable { let memory: SavedScene }
@@ -313,13 +313,23 @@ final class SceneLibrary: ObservableObject {
         defer { savingProfile = false }
         do {
             let destination = try await accountDestination()
-            let key = try AccountKey.decode(personalKeyInput, expected: destination)
-            let auth = ServerIdentity(identity: key.identity, token: key.token, personalKey: try key.encoded())
+            let auth: ServerIdentity
             if usesPortableAPI {
-                let (data, response) = try await URLSession.shared.data(for: request("/api/account", method: "POST", body: ["personalKey": try key.encoded()]))
+                let body = try AccountKey.signInBody(personalKeyInput, expected: destination)
+                if body["password"] != nil && destination.passwordLength != 6 {
+                    throw CaptureFailure.message("Update the upload service to enable six-digit passwords.")
+                }
+                let (data, response) = try await URLSession.shared.data(for: request("/api/account", method: "POST", body: body))
                 try check(data, response)
                 let restored = try JSONDecoder().decode(HostedAccount.self, from: data)
-                guard try restored.validatedKey(expected: destination).identity == key.identity else { throw AccountKey.KeyError.invalid }
+                let key = try restored.validatedKey(expected: destination)
+                if let legacy = body["personalKey"] {
+                    guard try AccountKey.decode(legacy, expected: destination).identity == key.identity else { throw AccountKey.KeyError.invalid }
+                }
+                auth = ServerIdentity(identity: key.identity, token: key.token, personalKey: restored.personalKey, password: restored.password)
+            } else {
+                let key = try AccountKey.decode(personalKeyInput, expected: destination)
+                auth = ServerIdentity(identity: key.identity, token: key.token, personalKey: try key.encoded())
             }
             // The configured backend verifies the host-signed token before we replace Keychain state.
             let profile = try await fetchProfile(auth)
@@ -338,11 +348,16 @@ final class SceneLibrary: ObservableObject {
         defer { savingProfile = false }
         do {
             let destination = try await accountDestination()
-            let auth = try await identity()
-            let key = AccountKey(server: destination.server, database: destination.database,
-                                 identity: auth.identity.replacingOccurrences(of: "0x", with: "").lowercased(), token: auth.token)
-            let encoded = try key.encoded()
-            _ = try AccountKey.decode(encoded, expected: destination)
+            guard destination.passwordLength == 6 else { throw CaptureFailure.message("Update the upload service to enable six-digit passwords.") }
+            var auth = try await identity()
+            if auth.password == nil {
+                let (data, response) = try await URLSession.shared.data(for: request("/api/account/password", method: "POST",
+                    body: ["identity": auth.identity.replacingOccurrences(of: "0x", with: "")], identity: auth))
+                try check(data, response)
+                auth.password = (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["password"] as? String
+            }
+            guard let encoded = auth.password, AccountKey.isPassword(encoded) else { throw AccountKey.KeyError.password }
+            try identities.save(auth, for: savedEndpoint)
             #if canImport(UIKit)
             UIPasteboard.general.setItems([["public.utf8-plain-text": encoded]],
                 options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(120)])
@@ -363,7 +378,7 @@ final class SceneLibrary: ObservableObject {
                 try check(data, response)
                 let account = try JSONDecoder().decode(HostedAccount.self, from: data)
                 let key = try account.validatedKey(expected: destination)
-                try identities.save(ServerIdentity(identity: key.identity, token: key.token, personalKey: account.personalKey), for: savedEndpoint)
+                try identities.save(ServerIdentity(identity: key.identity, token: key.token, personalKey: account.personalKey, password: account.password), for: savedEndpoint)
                 applyProfile(UserProfile(identity: key.identity, displayName: account.displayName, provider: account.provider))
                 profileMessage = "Welcome, \(account.displayName). Your ID is saved on this iPhone."
                 return

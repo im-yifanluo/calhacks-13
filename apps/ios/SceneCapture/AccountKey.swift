@@ -5,6 +5,7 @@ struct AccountDestination: Codable, Equatable {
     let database: String
     var maxUploadBytes: Int? = nil
     var pipelineAvailable: Bool? = nil
+    var passwordLength: Int? = nil
     var usesPortableAccountAPI: Bool { pipelineAvailable != nil }
 }
 
@@ -16,12 +17,14 @@ struct HostedAccount: Decodable {
     let personalKey: String
     let server: String
     let database: String
+    var password: String? = nil
 
     func validatedKey(expected: AccountDestination) throws -> AccountKey {
         let key = try AccountKey.decode(personalKey, expected: expected)
         guard key.identity == identity.replacingOccurrences(of: "0x", with: "").lowercased(),
               (token == nil || key.token == token), server == expected.server, database == expected.database,
-              provider == "key", !displayName.isEmpty else { throw AccountKey.KeyError.invalid }
+              provider == "key", !displayName.isEmpty,
+              (password == nil || AccountKey.isPassword(password!)) else { throw AccountKey.KeyError.invalid }
         return key
     }
 }
@@ -32,6 +35,16 @@ struct AccountKey: Codable, Equatable {
     let database: String
     let identity: String
     let token: String
+
+    static func isPassword(_ value: String) -> Bool {
+        value.utf8.count == 6 && value.range(of: "^[0-9]{6}$", options: .regularExpression) != nil
+    }
+    static func signInBody(_ input: String, expected: AccountDestination) throws -> [String: String] {
+        let value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isPassword(value) { return ["password": value] }
+        if value.hasPrefix("memos1.") { _ = try decode(value, expected: expected); return ["personalKey": value] }
+        throw KeyError.password
+    }
 
     func encoded() throws -> String {
         "memos1." + (try JSONEncoder().encode(self)).base64EncodedString()
@@ -54,9 +67,10 @@ struct AccountKey: Codable, Equatable {
         return key
     }
     enum KeyError: LocalizedError {
-        case invalid, destination
+        case invalid, destination, password
         var errorDescription: String? {
             switch self {
+            case .password: return "Enter exactly six digits."
             case .invalid: return "Paste the complete password starting with memos1. A party code is different."
             case .destination: return "This password belongs to a different server or database. Check your server address."
             }

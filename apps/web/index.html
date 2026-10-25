@@ -132,13 +132,21 @@
             <form id="account-create" novalidate>
               <label for="account-name">Sign-in name</label>
               <div class="row"><input id="account-name" maxlength="40" autocomplete="nickname" placeholder="Your name" /><button type="submit" data-account-action="create">Sign in with name</button></div>
-              <p>Get a generated password to keep this identity and sign in on another device.</p>
+              <p>Get a generated six-digit password to keep this identity and sign in on another device.</p>
             </form>
-            <details><summary>I have a password</summary>
+            <details><summary>I have a six-digit password</summary>
               <form id="account-login" novalidate>
                 <label for="account-key-input">Password</label>
-                <input id="account-key-input" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="16384" placeholder="Paste your memos1. password" />
+                <input id="account-key-input" type="password" inputmode="numeric" pattern="[0-9]{6}" autocomplete="current-password" spellcheck="false" maxlength="6" minlength="6" placeholder="6-digit password" />
                 <button type="submit" data-account-action="login">Sign in with password</button>
+              </form>
+            </details>
+            <details><summary>Restore an older saved account</summary>
+              <form id="account-legacy-login" novalidate>
+                <label for="account-legacy-input">Old saved credential</label>
+                <input id="account-legacy-input" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="16384" placeholder="Paste your old memos1. credential" />
+                <button type="submit" data-account-action="restore">Restore account</button>
+                <p>After signing in, choose Copy password to get your six-digit password.</p>
               </form>
             </details>
           </div>

@@ -1,10 +1,10 @@
 # Deployable phone upload API
 
-This is the repository's Node service in `server/upload`, with the iPhone account routes added. It supports both the website's `memos1.` passwords and the original SpacetimeDB token + identity protocol. Video bytes go to local disk in tests or S3/R2 in deployment; SpacetimeDB stores the account and memory metadata. No database schema change is required.
+This is the repository's Node service in `server/upload`, with the iPhone account routes added. It supports six-digit account passwords, legacy `memos1.` session credentials, and the original SpacetimeDB token + identity protocol. Video bytes go to local disk in tests or S3/R2 in deployment; SpacetimeDB stores the account and memory metadata. No database schema change is required.
 
 **Live API:** https://memos.alightdell64.chatgpt.site — configure this HTTPS origin on the iPhone, with no `/api` suffix. All five expected paths are deployed on the same origin as the website. The deployment runs this repository's shared `server/upload/core.mjs` and account implementation through `server/upload/worker.mjs` on Cloudflare Workers, using a Sites-managed durable R2 bucket. The standalone Node entrypoint remains available for S3/R2 deployments. This is the same service logic and protocol, with a different HTTP/storage adapter.
 
-The API and website both use `https://maincloud.spacetimedb.com`, database `jerry-memory-replay-phone-20261024`, and the same `register_account` reducer and `profile` table. A `memos1.` password created on either client restores the same identity. The API and storage do not depend on a running laptop.
+The API and website both use `https://maincloud.spacetimedb.com`, database `jerry-memory-replay-phone-20261024`, and the same `register_account` reducer and `profile` table. A six-digit password created on either updated client restores the same identity after the API and clients are deployed together. The API and storage do not depend on a running laptop.
 
 The hosted transport accepts **90 MiB (94,371,840 bytes)** per clip. `GET /api/account/config` reports `maxUploadBytes` and `pipelineAvailable:false`. Omit `pipeline` or send `false` to store a recording; explicit `true` returns 503 until a real worker identity is configured. No 3D reconstruction is claimed. The standalone Node/S3 service retains its 2 GiB limit.
 
@@ -84,19 +84,23 @@ For browser uploads, configure bucket CORS for PUT/GET/HEAD from `https://memos.
 
 ## Phone contract
 
-The app and website call the generated `memos1.` sign-in credential a **password**. Existing saved credentials still work. For compatibility with installed phone apps and existing accounts, the API fields `personalKey` and `keyPrefix`, the database value `provider: "key"`, and the credential format remain unchanged. This wording change does not introduce user-chosen passwords or password resets.
+The user-facing **password** is exactly six ASCII digits, including leading zeros (for example, `000007`). It is a string, never a JSON number. `POST /api/account` exchanges it for the existing host-signed session credential. Use that long session credential for uploads and WebSockets; do not send six digits as an upload bearer token. Existing `memos1.` credentials and `provider: "key"` profiles remain compatible. Names are still display labels, and two accounts with the same name get different passwords.
 
-All API responses are JSON with `Cache-Control: no-store`. Errors have `{"error":"message"}`. Expected error statuses: 400 invalid request/reducer rejection, 401 missing/rejected/mismatched credentials, 403 wrong origin or another user's receipt, 404 unknown route, 413 oversized JSON, and 502 for explicit account-backend failures. A failed upload completion may be retried with the same receipt.
+Deploy this upload service and the updated viewer together. The returned account server must match the browser's `VITE_STDB_URL` (with HTTP(S) scheme). For the default Vite `/stdb` proxy, set `ACCOUNT_SERVER_URL=<viewer-origin>/stdb` while keeping `STDB_HTTP_URL` pointed at the internal database; `npm run party:dev` sets this automatically. This public alias never changes where the API verifies tokens. `/api/account/config` advertises `version:2,passwordLength:6`. Older servers are reported as needing an update, rather than silently generating long passwords. Previously signed-in users choose **Copy password** or **Save password file** to allocate their six-digit password without changing their identity or memories. Signed-out users can choose **Restore an older saved account** and paste the old credential first.
+
+All API responses are JSON with `Cache-Control: no-store`. Errors have `{"error":"message"}`. Expected error statuses: 429 login/creation limit, 503 unavailable password storage, 400 invalid request/reducer rejection, 401 missing/rejected/mismatched credentials, 403 wrong origin or another user's receipt, 404 unknown route, 413 oversized JSON, and 502 for explicit account-backend failures. A failed upload completion may be retried with the same receipt.
 
 | Method and path | Request | Response |
 |---|---|---|
-| `GET /api/account/config` | No authentication | `{version:1,server,database,keyPrefix:"memos1.",maxUploadBytes:2147483648}` |
+| `GET /api/account/config` | No authentication | `{version:2,server,database,passwordLength:6,keyPrefix:"memos1.",maxUploadBytes:2147483648}` |
 | `POST /api/account` | `{displayName:"Jerry"}` or `{name:"Jerry"}` | Registered account plus password/token (example below) |
-| `POST /api/account` | `{personalKey:"memos1.…"}` | Restores that verified identity and registered name; does not create an account |
-| `GET /api/account` | Bearer password | `{server,database,identity,displayName,provider:"key"}` |
+| `POST /api/account` | `{password:"000007"}` | Restores that verified identity and registered name; does not create an account |
+| `POST /api/account` | `{personalKey:"memos1.…"}` | Legacy account restoration; also returns its six-digit password |
+| `POST /api/account/password` | Authenticated session + `{identity:"<64 hex>"}` for raw JWT, or `{}` for portable bearer | `{password:"000007"}` for the verified registered account |
+| `GET /api/account` | Bearer session credential | `{server,database,identity,displayName,provider:"key"}` |
 | `POST /api/uploads/presign` | Bearer auth + video metadata | Signed PUT URL, headers, receipt, request ID, source URL, expiry |
 | `POST /api/uploads/complete` | Bearer auth + `{receipt:"…"}` | Confirmed database memory and request ID |
-| `GET /api/memories` | Bearer password | `{memories:[...]}` for the authenticated identity |
+| `GET /api/memories` | Bearer session credential | `{memories:[...]}` for the authenticated identity |
 
 Account creation/restoration response (placeholders):
 
@@ -108,13 +112,14 @@ Account creation/restoration response (placeholders):
   "displayName": "Jerry",
   "provider": "key",
   "token": "<SpacetimeDB JWT>",
-  "personalKey": "memos1.<base64url payload>"
+  "personalKey": "memos1.<base64url payload>",
+  "password": "000007"
 }
 ```
 
-Save `personalKey` in the iPhone Keychain. Send it as `Authorization: Bearer memos1.…`; never put it in a URL. The API unwraps it, checks its destination against server configuration, verifies the token with that SpacetimeDB host, and uses `register_account`/`profile` for the same name-and-password account as the website. Names are not unique; the password identifies the person. A registered name stays fixed. Restoring an account requires a registered `provider:"key"` profile; a public identity alone cannot sign in. `GET /api/account` does not echo credentials.
+Save `personalKey` and `password` in the iPhone Keychain. Only display/copy `password` to the user. Send it as `Authorization: Bearer memos1.…`; never put it in a URL. The API unwraps it, checks its destination against server configuration, verifies the token with that SpacetimeDB host, and uses `register_account`/`profile` for the same name-and-password account as the website. Names are not unique; the password identifies the person. A registered name stays fixed. Restoring an account requires a registered `provider:"key"` profile; a public identity alone cannot sign in. `GET /api/account` does not echo credentials.
 
-For compatibility, `Authorization: Bearer <raw JWT>` also works when `identity` (64 hex, no `0x`) is supplied in each POST body or GET query. To promote the old iPhone guest identity without losing its uploads, POST `/api/account` with `{identity,displayName}` using its raw token. A password can optionally include the same identity field; conflicting identities are rejected. Existing `/api/identity` and `/api/profile` routes remain available, but `/api/profile` alone does not register a password account.
+For compatibility, `Authorization: Bearer <raw JWT>` also works when `identity` (64 hex, no `0x`) is supplied in each POST body or GET query. To promote the old iPhone guest identity without losing its uploads, POST `/api/account` with `{identity,displayName}` using its raw token. A request authenticated with the portable session credential can optionally include the same identity field; conflicting identities are rejected. Existing `/api/identity` and `/api/profile` routes remain available, but `/api/profile` alone does not register a password account.
 
 ### Upload and independently verify
 
@@ -157,7 +162,7 @@ For compatibility, `Authorization: Bearer <raw JWT>` also works when `identity` 
    }
    ```
 
-4. GET `/api/memories` with the same password. Confirm a row with the same `requestId` and `memory.id`, then play/download its `sourceUrl`. Retrying completion must return the same row, not create another. IDs and durations are JSON strings to preserve integer precision. `status` can advance while the worker runs.
+4. GET `/api/memories` with the returned `personalKey` bearer credential. Confirm a row with the same `requestId` and `memory.id`, then play/download its `sourceUrl`. Retrying completion must return the same row, not create another. IDs and durations are JSON strings to preserve integer precision. `status` can advance while the worker runs.
 5. Import the same password on the memos website. With identical server/database settings, its profile identity matches the uploaded row's owner. Uploaded video is visible as a recording; a 3D view requires a real worker to set `manifestUrl` and `ready`. This API does not reconstruct video.
 
 ## Hosted build and regression tests
@@ -177,3 +182,17 @@ The account-scoped memory response also includes `pipeline: true|false`, derived
 `npm run test:pipeline` runs the actual native queue and worker transport using the standalone `server/upload/wrangler.jsonc` configuration, so no private Sites checkout is needed. It verifies retry recovery, worker assignment, publication, `ready` subscriptions and failure reporting with substituted reconstruction stages. Real GPU acceptance is a separate `npm run test:pipeline:live -- --clip /absolute/clip.mp4` command.
 
 See [RUNPOD_INTEGRATION.md](RUNPOD_INTEGRATION.md) for the worker-authenticated multipart scene API, setup, and tests. The website now filters its library to the current owner; sign in with the phone’s same password to see its recording. Local scene imports are also account-scoped but remain on that browser. The live worker remains unconfigured until the Runpod setup steps are completed.
+
+## Password persistence and deployment
+
+Six-digit passwords are randomly generated, unique per database, and stable across replicas/restarts. Allocation retries collisions. The registry is capped at 10,000 accounts for this demo. Passwords and host tokens are AES-256-GCM encrypted under a purpose-specific key derived from `UPLOAD_SIGNING_SECRET` and the database destination. The object name is also derived with HMAC. Conditional storage writes serialize allocation and attempt counters across replicas; failed authentication is counted before responding. No password/token is added to a public SpacetimeDB table.
+
+- Node local mode requires Node 22.13+ (the pinned 22.23.2 works) for built-in SQLite and uses `.accounts.sqlite` (mode 0600) under `LOCAL_UPLOAD_DIR` and the existing `.signing-secret`. Keep that directory on persistent storage and back up both files together.
+- Node S3/R2 mode uses `ACCOUNT_PASSWORD_BUCKET` when supplied, otherwise `S3_BUCKET`. Prefer a dedicated private bucket. It must support conditional `If-Match` / `If-None-Match` writes.
+- Cloudflare uses the optional private R2 binding `ACCOUNT_PASSWORDS`, otherwise the existing `BUCKET`. The public `/media/` handler rejects `_private/accounts/` paths. The encrypted registry and attempt counters persist in R2, not Worker memory. R2 [limits writes to one per second per object](https://developers.cloudflare.com/r2/platform/limits/); the adapter backs off on throttling and re-reads before retrying. Already-issued passwords are read without rewriting the registry when the session token is unchanged. This single-registry design is for small demos, not high-throughput authentication.
+
+Keep the signing secret, bucket/disk, and database destination stable across deployments. Changing any of them makes the previous password registry inaccessible. Existing authenticated devices/legacy credentials can still obtain a new password, but a six-digit password alone cannot recover a lost registry. Storage failures and write conflicts fail closed with 503; they never create a temporary in-memory account.
+
+Login and new-password allocation each allow five attempts per source address per 15 minutes, plus 30 globally per minute. Counters are shared by replicas and survive restart; successful logins count too. Node uses the socket address (forwarding headers cannot spoof it); Cloudflare uses its platform-provided `CF-Connecting-IP`. A Node reverse proxy therefore shares one client limit unless a separately validated client-address integration is added. Requests using already-issued session tokens do not use the six-digit login limit. The short code remains lower-entropy demo authentication, not equivalent to a long password or MFA; the global limit also means a sustained guessing attack can temporarily deny new sign-ins.
+
+Verification: `npm test` covers format, leading zeros, migration, collisions, concurrent replicas, encrypted persistence, throttling and failed storage. `npm run test:upload-api` exercises six-digit restore before and after a real Node API restart, the real local database, an actual MP4 upload and owner-scoped listing. `UPLOAD_TEST_R2=1 npm run test:upload-api` repeats the path against the actual Cloudflare Worker with local R2 emulation. These checks do not deploy the public site.

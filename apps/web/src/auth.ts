@@ -1,9 +1,11 @@
 import { DbConnection, tables } from "./module_bindings";
 import type { Multiplayer } from "./net/index";
-import { accountStorageKey, databaseSettings, decodeAccountKey, encodeAccountKey, forgetAccount, saveAccount, savedAccount, type AccountKey } from "./account-key";
+import { accountStorageKey, databaseSettings, decodeAccountKey, forgetAccount, saveAccount, savedAccount, type AccountKey } from "./account-key";
+import { accountPassword, createPasswordAccount, isPassword, restorePassword } from './account-api';
 
 /** Verify with the configured host before replacing any currently signed-in identity. */
 export function verifySignInKey(input: string, timeoutMs = 15000): Promise<{ account: AccountKey; name: string }> {
+  if (isPassword(input.trim())) return restorePassword(input);
   const account = decodeAccountKey(input);
   const { uri, database } = databaseSettings();
   return new Promise((resolve, reject) => {
@@ -70,6 +72,8 @@ export function mountAuth(net: Multiplayer): void {
     signedOut.hidden = registered || !!account;
     signout.hidden = !registered && !account;
     signout.disabled = busy;
+    element<HTMLButtonElement>('account-copy-key').disabled = busy;
+    element<HTMLButtonElement>('account-save-key').disabled = busy;
     if (playerName) playerName.readOnly = registered || !!account;
     if (registered) {
       if ((playerName?.value ?? rememberedName) !== profile.displayName) rememberName(profile.displayName);
@@ -88,9 +92,9 @@ export function mountAuth(net: Multiplayer): void {
     busy = true; render(); show("Creating your password…");
     void (async () => {
       try {
-        await net.callConnected(() => net.connection!.reducers.registerAccount({ name: displayName }));
+        await net.callConnected(async () => {});
         const { server, database } = databaseSettings();
-        const account = { server, database, identity: net.identity!.toHexString(), token: net.token };
+        const { account } = await createPasswordAccount(displayName, { server, database, identity: net.identity!.toHexString(), token: net.token });
         const persistent = saveAccount(account);
         window.dispatchEvent(new Event('memos-account-changed'));
         rememberName(displayName);
@@ -99,13 +103,12 @@ export function mountAuth(net: Multiplayer): void {
       finally { busy = false; render(); }
     })();
   };
-  login.onsubmit = event => {
-    event.preventDefault();
+  const signIn = (input: string) => {
     if (busy) return;
     busy = true; render(); show("Checking your password…");
     void (async () => {
       try {
-        const verified = await verifySignInKey(key.value);
+        const verified = await verifySignInKey(input);
         // Invalid passwords never sign out the existing guest or account.
         if (net.ready && net.room) await net.attempt(() => net.connection!.reducers.leaveRoom({}), null);
         saveAccount(verified.account);
@@ -117,28 +120,57 @@ export function mountAuth(net: Multiplayer): void {
       finally { busy = false; render(); }
     })();
   };
-  const personalKey = () => {
-    const account = savedAccount();
-    if (account) return encodeAccountKey(account);
+  login.onsubmit = event => {
+    event.preventDefault();
+    if (!isPassword(key.value.trim())) return show('Enter exactly six digits.', true);
+    signIn(key.value);
+  };
+  const legacyLogin = element<HTMLFormElement>('account-legacy-login');
+  legacyLogin.onsubmit = event => {
+    event.preventDefault();
+    signIn(element<HTMLInputElement>('account-legacy-input').value);
+  };
+  const personalKey = async () => {
+    let account = savedAccount();
+    const wasSaved = !!account;
     const profile = net.identity && net.connection?.db.profile.identity.find(net.identity);
-    if (!net.ready || profile?.provider !== "key") throw new Error("Save a name first to create your password.");
-    const { server, database } = databaseSettings();
-    return encodeAccountKey({ server, database, identity: net.identity!.toHexString(), token: net.token });
+    if (!account) {
+      if (!net.ready || profile?.provider !== "key") throw new Error("Save a name first to create your password.");
+      const { server, database } = databaseSettings();
+      account = { server, database, identity: net.identity!.toHexString(), token: net.token };
+    }
+    const password = await accountPassword(account);
+    if ((wasSaved && savedAccount()?.identity !== account.identity) || (!wasSaved && net.identity?.toHexString() !== account.identity))
+      throw new Error('Your account changed. Please try again.');
+    if (account.password !== password) saveAccount({ ...account, password });
+    return password;
   };
   element<HTMLButtonElement>("account-copy-key").onclick = () => {
+    if (busy) return;
+    busy = true; render();
     void (async () => {
-      try { await navigator.clipboard.writeText(personalKey()); show("Password copied. Keep it private."); }
-      catch { show("Copy is unavailable here. Use Save password file instead.", true); }
+      try {
+        // Preserve Safari's click activation while a legacy account gets its short password.
+        if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+          await navigator.clipboard.write([new ClipboardItem({ 'text/plain': personalKey().then(password => new Blob([password], { type: 'text/plain' })) })]);
+        } else await navigator.clipboard.writeText(await personalKey());
+        show("Password copied. Keep it private.");
+      }
+      catch (error) { show(error instanceof Error ? error.message : "Copy is unavailable here. Use Save password file instead.", true); }
+      finally { busy = false; render(); }
     })();
   };
-  element<HTMLButtonElement>("account-save-key").onclick = () => {
+  element<HTMLButtonElement>("account-save-key").onclick = async () => {
+    if (busy) return;
+    busy = true; render();
     try {
-      const url = URL.createObjectURL(new Blob([personalKey() + "\n"], { type: "text/plain" }));
+      const url = URL.createObjectURL(new Blob([await personalKey() + "\n"], { type: "text/plain" }));
       const link = document.createElement("a");
       link.href = url; link.download = "memos-password.txt"; link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       show("Password file downloaded. Store it somewhere private.");
     } catch (error) { show(error instanceof Error ? error.message : "Could not save your password.", true); }
+    finally { busy = false; render(); }
   };
   signout.onclick = () => {
     if (busy) return;

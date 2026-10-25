@@ -288,13 +288,14 @@ struct UserProfileView: View {
                 }.buttonStyle(.borderedProminent)
                 Text("Already signed in on the web? Paste that password below to keep the same account.").font(.caption)
             }
-            SecureField("memos1.… password", text: $library.personalKeyInput)
+            SecureField("6-digit password", text: $library.personalKeyInput)
+                .keyboardType(.numberPad)
                 .textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder)
             Button("Sign in with saved password") { Task { await library.importAccount() } }
                 .disabled(!library.pending.isEmpty || library.personalKeyInput.isEmpty)
             Text(library.profileMessage).font(.caption)
             if !library.userID.isEmpty { Text("User ID: \(library.userID)").font(.caption2.monospaced()).textSelection(.enabled) }
-            Text("Your password works on phone, web and Quest. Keep it private. A registered name cannot be changed.").font(.caption).foregroundStyle(.secondary)
+            Text("Your six-digit password works on phone, web and Quest. Keep it private. You can also paste an older saved credential to restore your account.").font(.caption).foregroundStyle(.secondary)
         }.disabled(library.savingProfile || library.checking || library.uploading || library.captureActive)
     }
 }

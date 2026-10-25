@@ -27,7 +27,7 @@ If a task touches another person's files, ask them first or open the PR with the
 | I7 | Viewer ↔ DB | WebSocket subscription; reducers: sign-in `register_account`, `set_display_name`; party `create_party`, `join_room`, `leave_room`, `transfer_leadership`, `attach_party_memory`; time (leader only) `set_paused`, `seek`, `set_playback_speed`, `set_branch`, `fork_branch`; interaction `grab`, `move_object`, `release`, `save_branch_keyframes`; presence `set_pose`; clock `sample_clock` | Jerry (server and client) |
 
 **Sign-in (changed tonight):** Google sign-in is gone. People sign in with a **name**; `register_account` binds it to
-a **password** (`memos1.…`, stored by the browser/phone) so the same identity works on another device. Guests can
+a **six-digit password** (resolved by the upload API; session credentials stay in browser storage/Keychain) so the same identity works on another device. Guests can
 still set a display name with `set_display_name`; a name registered to a password can't be changed that way.
 
 ## How we work from now on

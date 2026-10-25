@@ -16,6 +16,8 @@ import { pathToFileURL } from "node:url";
 import { databaseConfig, makeHandler, ticket, readTicket } from "./service.mjs";
 import { connectionConfig } from "./connections.mjs";
 import { sceneStorage } from "./scenes.mjs";
+import { passwordVault } from './passwords.mjs';
+import { localPasswordStore } from './passwords-local.mjs';
 
 const validKey = /^videos\/[a-f0-9]{64}\/[a-f0-9-]{36}\.(mp4|mov|webm)$/i;
 export async function localStorage({ directory, secret, publicOrigin }) {
@@ -176,6 +178,7 @@ export async function createLocalHandler(env = process.env) {
   }
   const origin = new URL(env.PUBLIC_ORIGIN || "http://127.0.0.1:5173").origin;
   const databaseEnv = {
+    ACCOUNT_SERVER_URL: env.ACCOUNT_SERVER_URL || env.STDB_PUBLIC_URL,
     STDB_HTTP_URL: env.STDB_HTTP_URL || `http://127.0.0.1:${env.STDB_PORT || 3055}`,
     STDB_DATABASE: env.STDB_DATABASE || "memory-replay",
   };
@@ -209,6 +212,8 @@ export async function createLocalHandler(env = process.env) {
     ...db,
     ...storage,
     secret,
+    passwords: passwordVault({ store: localPasswordStore(join(directory, '.accounts.sqlite')),
+      secret, settings: db.accountConfig }),
     assetBase: origin + "/api/local-media",
     allowedOrigins,
     pipelineIdentity,

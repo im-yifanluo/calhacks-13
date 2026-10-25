@@ -23,7 +23,7 @@ The **Party** tab opens the shared viewer using the saved server address. Create
 
 In Settings choose **Use memos upload server** (`https://memos.alightdell64.chatgpt.site`, no `/api` suffix). In Capture paste the password from your existing memos website account. In Memories choose **Upload as [name]** on a saved local clip. Never paste a password into chat or logs.
 
-The hosted service advertises `pipelineAvailable: false` and a 90 MiB limit through `/api/account/config`. The app uses its portable-credential API: `POST /api/account` with `displayName` or `personalKey`, `GET /api/account` for the profile, and the full `memos1.` password as the bearer credential. Passwords remain in Keychain. The older local service retains its JWT/profile flow. The hosted upload ticket's `expiresIn` is converted into a persisted expiry; raw PUT requests include file length and never carry account authorization. Upload-only tests skip reconstruction quality thresholds and send `pipeline:false`; source bytes are not transcoded by the uploader. Real processing uploads retain the quality checks.
+The hosted service advertises `pipelineAvailable: false` and a 90 MiB limit through `/api/account/config`. The app uses its portable-credential API: `POST /api/account` with `displayName` or a six-digit `password` (legacy `personalKey` restoration also works), `GET /api/account` for the profile, and the returned `personalKey` session credential as the bearer credential. Passwords remain in Keychain. The older local service retains its JWT/profile flow. The hosted upload ticket's `expiresIn` is converted into a persisted expiry; raw PUT requests include file length and never carry account authorization. Upload-only tests skip reconstruction quality thresholds and send `pipeline:false`; source bytes are not transcoded by the uploader. Real processing uploads retain the quality checks.
 
 An opt-in live check creates a separate test account and tiny generated clip, restores the account, uploads with processing disabled, lists the memory and compares downloaded bytes:
 
@@ -63,9 +63,9 @@ The command-line build uses `/tmp` because cloud-synced folders can attach Finde
 
 After saving the server address, **Create password** registers your name with
 `register_account`, preserving any existing phone identity and its recordings. Or
-paste the `memos1.…` password from web sign-in into **Sign in with saved password**. The app
-checks the password's server/database, then asks the backend to authenticate it before
-replacing the Keychain credential. Names registered to passwords cannot be renamed.
+enter the six-digit password from web sign-in into **Sign in with saved password**. The app
+checks the returned session's server/database and asks the backend to authenticate it before
+replacing the Keychain credential. Names registered to passwords cannot be renamed. Copying an older account allocates its six-digit password without changing identity; older saved credentials can still be pasted to restore it.
 **Copy password** makes an expiring local clipboard copy; save it privately and
 paste it into the browser on iPhone or Quest to access the same account. No passwords are
 included in viewer links, logs, or video metadata. A party code is a separate thing.

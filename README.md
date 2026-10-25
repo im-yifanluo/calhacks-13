@@ -12,7 +12,7 @@ Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves 
 
 **Phone app:** open `apps/ios/SceneCaptureDemo.xcodeproj` for a native iPhone/Simulator demo with **On** and **Off**, automatic upload, database + SHA-256 verification, offline playback and retry. [Installation and test instructions](docs/PHONE_APP.md). The separate glasses SDK project requires Meta's supported Xcode toolchain. Web library: `/library.html` (name-based guest profile, upload, processing status and ready scene links). Diagnostics: `/capture.html`. [Frontend flow and identity details](docs/FRONTEND_FLOW.md).
 
-**Parties and password sign-in:** [Setup and test guide](docs/PARTIES.md). Create a party with a synthetic scene, share its invite link, and let the leader control time. The native phone app has a Party tab. Enter a name to receive a private sign-in password, or paste a saved password to restore your name on another device. Guest parties still work immediately. `npm run party:dev` starts the web/upload pair for the dedicated local party database.
+**Parties and password sign-in:** [Setup and test guide](docs/PARTIES.md). Create a party with a synthetic scene, share its invite link, and let the leader control time. The native phone app has a Party tab. Enter a name to receive a private six-digit sign-in password, or enter a saved password to restore your name on another device. Guest parties still work immediately. `npm run party:dev` starts the web/upload pair for the dedicated local party database.
 
 ## Status (Sat Oct 24)
 
@@ -43,10 +43,10 @@ Full roles, interface owners and working rules: [docs/TEAM.md](docs/TEAM.md). Sy
 
 ## Part 1 · Everyone (5 minutes)
 
-You need **Node 22.12 or newer** (`.nvmrc` pins 22.23.2) and **git**.
+You need **Node 22 LTS (22.13+) or Node 24+** (`.nvmrc` pins 22.23.2) and **git**.
 
 ```bash
-node -v            # should print v22.12 or higher. If not: brew install node (or nvm install)
+node -v            # use the pinned Node 22 LTS, or Node 24+. If not: brew install node (or nvm install)
 git clone https://github.com/im-yifanluo/calhacks-13.git memory-replay && cd memory-replay
 npm install
 LOCAL_HTTP=1 npm run dev
