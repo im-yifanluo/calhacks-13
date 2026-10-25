@@ -25,7 +25,6 @@
     "tunnel": "cloudflared tunnel --url https://localhost:5173 --no-tls-verify",
     "ios:generate": "python3 scripts/generate_xcode_project.py",
     "ios:demo:build": "xcodebuild -project apps/ios/SceneCaptureDemo.xcodeproj -scheme SceneCaptureDemo -configuration Debug -sdk iphonesimulator -derivedDataPath /tmp/memreplay-ios-demo build",
-    "auth:configure": "node scripts/configure-google.mjs",
     "test:party": "tsx scripts/test-party.ts",
     "party:dev": "node scripts/party-dev.mjs",
     "party:lan": "node scripts/party-dev.mjs --lan"

@@ -43,6 +43,7 @@ import GrabReducer from "./grab_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import LeaveRoomReducer from "./leave_room_reducer";
 import MoveObjectReducer from "./move_object_reducer";
+import RegisterAccountReducer from "./register_account_reducer";
 import ReleaseReducer from "./release_reducer";
 import SampleClockReducer from "./sample_clock_reducer";
 import SaveBranchKeyframesReducer from "./save_branch_keyframes_reducer";
@@ -216,6 +217,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("leave_room", LeaveRoomReducer),
   __reducerSchema("move_object", MoveObjectReducer),
+  __reducerSchema("register_account", RegisterAccountReducer),
   __reducerSchema("release", ReleaseReducer),
   __reducerSchema("sample_clock", SampleClockReducer),
   __reducerSchema("save_branch_keyframes", SaveBranchKeyframesReducer),

@@ -6,9 +6,6 @@ import {
   type ReducerCtx,
 } from "spacetimedb/server";
 
-import { GOOGLE_CLIENT_ID } from "./google-config";
-import { googleClaimError, isGoogleIssuer } from "./google-auth";
-
 const pose = {
   px: t.f32(),
   py: t.f32(),
@@ -203,40 +200,38 @@ function validPose(
 const NO_ROOM = 0n;
 function authenticate(ctx: Ctx) {
   const jwt = ctx.senderAuth.jwt;
-  if (!jwt) return;
-  const error = googleClaimError(
-    jwt.issuer,
-    jwt.audience,
-    jwt.fullPayload,
-    Number(ctx.timestamp.microsSinceUnixEpoch) / 1e6,
-    GOOGLE_CLIENT_ID,
-  );
-  if (error) fail(error);
+  if (jwt?.issuer === "https://accounts.google.com" || jwt?.issuer === "accounts.google.com")
+    fail("Google sign-in has been replaced. Sign in with a name and personal key.");
 }
 function updateProfile(ctx: Ctx) {
   authenticate(ctx);
-  const jwt = ctx.senderAuth.jwt;
-  const google = !!jwt && isGoogleIssuer(jwt.issuer);
-  const name = ctx.db.profile.identity.find(ctx.sender)?.displayName ?? (
-    google && typeof jwt.fullPayload.name === "string"
-      ? clip(jwt.fullPayload.name.trim(), 40)
-      : "");
-  const row = {
+  // Reconnects must preserve a registered name. Keys stay with the client; the
+  // host verifies their signed identity before any reducer can run.
+  if (!ctx.db.profile.identity.find(ctx.sender)) ctx.db.profile.insert({
     identity: ctx.sender,
-    provider: google ? "google" : "guest",
-    displayName: name,
-  };
-  if (ctx.db.profile.identity.find(ctx.sender))
-    ctx.db.profile.identity.update(row);
-  else ctx.db.profile.insert(row);
+    provider: "guest",
+    displayName: "",
+  });
 }
-/** A display name labels the authenticated sender; it never selects another account. */
+/** A display name labels the signed-in sender; it never selects another account, and a name registered to a
+ *  personal key (register_account) stays fixed. */
 export const setDisplayName = db.reducer({ displayName: t.string() }, (ctx, { displayName }) => {
-  authenticate(ctx);
-  const name = text(displayName, 40);
   updateProfile(ctx);
+  const name = text(displayName, 40);
   const profile = ctx.db.profile.identity.find(ctx.sender)!;
+  if (profile.provider === "key" && profile.displayName !== name)
+    fail("This key already belongs to a registered name");
   ctx.db.profile.identity.update({ ...profile, displayName: name });
+});
+export const registerAccount = db.reducer({ name: t.string() }, (ctx, { name }) => {
+  updateProfile(ctx);
+  name = text(name, 40);
+  const existing = ctx.db.profile.identity.find(ctx.sender)!;
+  if (existing.provider === "key" && existing.displayName !== name)
+    fail("This key already belongs to a registered name");
+  ctx.db.profile.identity.update({ ...existing, provider: "key", displayName: name });
+  const p = ctx.db.player.identity.find(ctx.sender);
+  if (p) ctx.db.player.identity.update({ ...p, name });
 });
 function player(ctx: Ctx) {
   authenticate(ctx);
@@ -340,7 +335,8 @@ function revertEmptyTake(ctx: Ctx, o: ObjectRow) {
 }
 function enter(ctx: Ctx, roomId: bigint, name: string, device: string) {
   updateProfile(ctx);
-  name = text(name, 40);
+  const profile = ctx.db.profile.identity.find(ctx.sender)!;
+  name = profile.provider === "key" ? profile.displayName : text(name, 40);
   if (!["phone", "quest", "desktop"].includes(device)) fail("Unknown device");
   clearOwnership(ctx);
   const existing = ctx.db.player.identity.find(ctx.sender);

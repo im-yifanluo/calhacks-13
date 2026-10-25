@@ -15,6 +15,7 @@ import {
   playerColor,
   RELOAD_GUARD_KEY,
   rememberRoomManifest,
+  resolveManifestUrl,
   roomCode,
   roomUrl,
   sameManifest,
@@ -102,6 +103,23 @@ test("party registration produces distinct request IDs on LAN HTTP without rando
 });
 
 describe("room URLs and manifests", () => {
+  test("a renamed site resolves old scene links and cached room manifests on its new origin", () => {
+    vi.stubEnv("VITE_ASSET_ORIGIN_ALIASES", "https://old.example");
+    try {
+      const base = "https://memos.example/ABC1234";
+      const old = "https://old.example/demo/memory.json?take=1";
+      const current = "https://memos.example/demo/memory.json?take=1";
+      expect(resolveManifestUrl(old, base)).toBe(current);
+      expect(sameManifest(old, current, base)).toBe(true);
+      expect(loadedManifest(base, { getItem: () => old })).toBe(current);
+      expect(resolveManifestUrl("https://cdn.example/memory.json", base)).toBe("https://cdn.example/memory.json");
+      expect(resolveManifestUrl("https://old.example.evil.test/memory.json", base)).toBe("https://old.example.evil.test/memory.json");
+      expect(resolveManifestUrl("http://old.example/memory.json", base)).toBe("http://old.example/memory.json");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   test("the loaded manifest is ?memory=, else the demo default, made absolute", () => {
     expect(loadedManifest(page)).toBe(`${page}demo/memory.json`);
     expect(loadedManifest(`${page}?memory=/local/a/memory.json&room=X`)).toBe(

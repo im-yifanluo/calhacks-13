@@ -113,6 +113,18 @@ export function roomCode(href: string): string {
 
 const ROOM_MANIFEST_KEY = "memreplay-room-manifest:";
 
+/** Explicit former origins of this app, for scene records saved before a hostname rename. */
+export function resolveManifestUrl(value: string, base: string): string {
+  const url = new URL(value, base);
+  const aliases = (import.meta.env.VITE_ASSET_ORIGIN_ALIASES ?? "").split(",").map((origin: string) => origin.trim());
+  if (aliases.includes(url.origin)) {
+    const current = new URL(base);
+    url.protocol = current.protocol;
+    url.host = current.host;
+  }
+  return url.href;
+}
+
 /** Only a hint for the next load. The database always checks and replaces it after joining. */
 export function rememberRoomManifest(storage: Pick<Storage, "setItem">, code: string, manifest: string): void {
   storage.setItem(ROOM_MANIFEST_KEY + normalizeCode(code), manifest);
@@ -123,11 +135,11 @@ export function loadedManifest(href: string, storage?: Pick<Storage, "getItem">)
   const url = new URL(href);
   const code = roomCode(href);
   const roomManifest = code ? storage?.getItem(ROOM_MANIFEST_KEY + code) : null;
-  return new URL(roomManifest ?? url.searchParams.get("memory") ?? DEFAULT_MANIFEST, url).href;
+  return resolveManifestUrl(roomManifest ?? url.searchParams.get("memory") ?? DEFAULT_MANIFEST, href);
 }
 
 export function sameManifest(a: string, b: string, base: string): boolean {
-  return new URL(a, base).href === new URL(b, base).href;
+  return resolveManifestUrl(a, base) === resolveManifestUrl(b, base);
 }
 
 /**
@@ -409,6 +421,7 @@ export class Session {
     toggle: $<HTMLButtonElement>("room-toggle"),
     summary: $("room-summary"),
     connection: $("room-connection"),
+    reconnect: $<HTMLButtonElement>("room-reconnect"),
     name: $<HTMLInputElement>("player-name"),
     memories: $<HTMLSelectElement>("room-memories"),
     create: $<HTMLButtonElement>("room-create"),
@@ -477,6 +490,7 @@ export class Session {
     ui.create.onclick = () => void this.create();
     ui.attach.onclick = () => void this.attachScene();
     ui.cancel.onclick = () => void this.act("scene", "Could not cancel", () => this.net.connection!.reducers.attachPartyMemory({ memoryId: 0n }));
+    ui.reconnect.onclick = () => this.net.reconnect();
     ui.speed.onchange = () => void this.act("clock", "Could not change speed", () => this.net.connection!.reducers.setPlaybackSpeed({ speed: Number(ui.speed.value) }));
     ui.invite.onclick = () => ui.invite.select();
     ui.joinForm.onsubmit = (event) => {
@@ -605,8 +619,9 @@ export class Session {
     kind: string,
     what: string,
     action: () => Promise<unknown>,
+    waitForConnection = false,
   ): Promise<boolean> {
-    const error = await this.net.attempt(action, null);
+    const error = await this.net.attempt(action, null, waitForConnection);
     if (error) this.panel.show(`${what}: ${error}`, { kind, error: true });
     else this.panel.resolve(kind);
     return !error;
@@ -618,12 +633,12 @@ export class Session {
     if (!response.ok) throw new Error(`Demo manifest returned ${response.status}`);
     const manifest = await response.json() as MemoryManifest;
     validateManifest(manifest);
-    const existing = this.net.memories.find(m => m.manifestUrl === manifestUrl && m.status === "ready" && m.title === manifest.title);
+    const existing = this.net.memories.find(m => sameManifest(m.manifestUrl, manifestUrl, location.href) && m.status === "ready" && m.title === manifest.title);
     if (existing) return existing.id;
     const requestId = memoryRequestId();
-    await this.net.connection!.reducers.createMemory({ requestId, title: manifest.title,
+    await this.net.callConnected(() => this.net.connection!.reducers.createMemory({ requestId, title: manifest.title,
       sourceUrl: "", manifestUrl, pipelineIdentity: this.net.identity!,
-      durationUs: BigInt(Math.round(manifest.timeline.durationSec * 1e6)) });
+      durationUs: BigInt(Math.round(manifest.timeline.durationSec * 1e6)) }));
     const row = this.net.memories.find(m => m.requestId === requestId);
     if (!row) throw new Error("Demo registration did not arrive; try again");
     return row.id;
@@ -631,15 +646,16 @@ export class Session {
 
   private async create(): Promise<void> {
     if (this.busy) return;
-    const selected = this.net.memories.find(m => String(m.id) === this.ui.memories.value);
+    const selection = this.ui.memories.value;
     this.busy = true;
     this.render();
     const ok = await this.act("room", "Could not create a party", async () => {
+      const selected = this.net.memories.find(m => String(m.id) === selection);
       const memoryId = selected?.status === "ready" ? selected.id : await this.demoMemory();
-      await this.net.connection!.reducers.createParty({ memoryId, ...this.who() });
+      await this.net.callConnected(() => this.net.connection!.reducers.createParty({ memoryId, ...this.who() }));
       if (selected && selected.status !== "ready")
-        await this.net.connection!.reducers.attachPartyMemory({ memoryId: selected.id });
-    });
+        await this.net.callConnected(() => this.net.connection!.reducers.attachPartyMemory({ memoryId: selected.id }));
+    }, true);
     this.busy = false;
     if (ok) this.entered(false);
     this.render();
@@ -661,7 +677,7 @@ export class Session {
 
   private async join(code: string, fromUrl: boolean): Promise<void> {
     const joinCode = normalizeCode(code);
-    if (this.busy || this.navigating || !this.net.ready) return;
+    if (this.busy || this.navigating) return;
     if (!/^[A-Z0-9]{7}$/.test(joinCode)) {
       const message = "Enter the host’s 7-character party code (letters and numbers).";
       if (fromUrl) this.abandonJoin(message);
@@ -675,8 +691,9 @@ export class Session {
     this.busy = true;
     this.render();
     const error = await this.net.attempt(
-      () => this.net.connection!.reducers.joinRoom({ joinCode, ...this.who() }),
+      () => this.net.callConnected(() => this.net.connection!.reducers.joinRoom({ joinCode, ...this.who() })),
       null,
+      true,
     );
     this.busy = false;
     if (!error) {
@@ -846,12 +863,12 @@ export class Session {
     this.adding = true;
     this.render();
     try {
-      const manifestUrl = new URL(
+      const manifestUrl = resolveManifestUrl(
         this.ui.libraryUrl.value.trim() || DEFAULT_MANIFEST,
         location.href,
-      ).href;
+      );
       const existing = this.net.memories.find(
-        (m) => m.manifestUrl === manifestUrl && m.status === "ready",
+        (m) => sameManifest(m.manifestUrl, manifestUrl, location.href) && m.status === "ready",
       );
       if (existing) {
         this.ui.memories.value = existing.id.toString();
@@ -987,6 +1004,7 @@ export class Session {
   private render(): void {
     const { net, ui, panel } = this;
     setText(ui.connection, net.status);
+    ui.reconnect.hidden = net.ready;
     // One message at a time: the newest, in red when it is an error.
     setText(ui.message, panel.error ? "" : panel.text);
     setText(ui.error, panel.error ? panel.text : "");
@@ -1044,14 +1062,14 @@ export class Session {
             item.append(transfer);
           }
           const profile = net.connection?.db.profile.identity.find(p.identity);
-          if (profile?.provider === "google") item.append(" · Google");
+          if (profile?.provider === "key") item.append(" · saved identity");
           return item;
         }),
       );
     }
     const idle = net.ready && !this.busy && !this.navigating;
-    ui.create.disabled = !idle;
-    ui.create.textContent = this.busy ? "Working…" : "Create party";
+    ui.create.disabled = this.busy || this.navigating;
+    ui.create.textContent = this.busy ? net.ready ? "Working…" : "Connecting…" : "Create party";
     ui.sceneActions.hidden = !net.party || !net.isLeader;
     ui.attach.disabled = !idle;
     ui.cancel.hidden = !net.pendingMemory;
@@ -1072,7 +1090,8 @@ export class Session {
       ? `${pending.title} · ${pending.status} ${Math.round(pending.progress * 100)}%. ${pending.status === "uploaded" ? "Waiting for a reconstruction worker. " : ""}${pending.error || "The current scene stays available until the new one is ready."}`
       : net.party ? `Viewing ${net.memory?.title}. ${net.memory?.manifestUrl.includes("/demo/memory.json") ? "Synthetic demo; not reconstructed from video." : ""}`
       : "Synthetic demo available. Create a party and share its link. No reconstruction worker is required to test multiplayer.");
-    ui.join.disabled = !idle;
+    ui.join.disabled = this.busy || this.navigating;
+    ui.join.textContent = this.busy && !net.ready ? "Connecting…" : "Join party";
     ui.solo.hidden = !!this.room || !!this.urlRoom;
     ui.libraryAdd.disabled = !net.ready || this.adding;
     ui.libraryAdd.textContent = this.adding ? "Adding…" : "Add to library";

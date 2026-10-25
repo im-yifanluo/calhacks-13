@@ -9,14 +9,14 @@ Record a moment on Ray-Ban Meta glasses. We rebuild it as a 3D scene that moves 
 
 **Phone app:** open `apps/ios/SceneCaptureDemo.xcodeproj` for a native iPhone/Simulator demo with **On** and **Off**, automatic upload, database + SHA-256 verification, offline playback and retry. [Installation and test instructions](docs/PHONE_APP.md). The separate glasses SDK project requires Meta's supported Xcode toolchain. Web library: `/library.html` (name-based guest profile, upload, processing status and ready scene links). Diagnostics: `/capture.html`. [Frontend flow and identity details](docs/FRONTEND_FLOW.md).
 
-**Parties and Google sign-in:** [Setup and test guide](docs/PARTIES.md). Create a party with a synthetic scene, share its invite link, and let the leader control time. The native phone app has a Party tab. Google requires your own web client ID; guest parties work immediately. `npm run party:dev` starts the web/upload pair for the dedicated local party database.
+**Parties and personal-key sign-in:** [Setup and test guide](docs/PARTIES.md). Create a party with a synthetic scene, share its invite link, and let the leader control time. The native phone app has a Party tab. Enter a name to receive a private sign-in key, or paste a saved key to restore your name on another device. Guest parties still work immediately. `npm run party:dev` starts the web/upload pair for the dedicated local party database.
 
 ## Status (Sat Oct 24)
 
 | Part | State |
 |---|---|
 | Viewer: splats, physics, VR controls, timeline replay, people ghosts, audio (Nikko) | Merged. Checked in a desktop browser; never run on a Quest. |
-| Multiplayer: parties, leader clock, invite links, avatars, shared takes | Local database and multi-client tests pass. Google sign-in is implemented; configuring a web client ID and testing real Google consent remains required. |
+| Multiplayer: parties, leader clock, invite links, avatars, shared takes | Local database and multi-client tests pass. Name-and-key sign-in replaces Google; the shared cloud database remembers registered names. |
 | Upload service and capture test page (Jerry) | Merged. Uploads to local disk or S3/R2 and registers the clip in SpacetimeDB. |
 | Vision pipeline (`pipeline/`) | Built and run on all 5 sample clips (iPhone): video → ViPE → world frame → room splat, collider, people ghosts, grabbable props → `memory.json`, plus a static walk-through file (`memory.static.json`) per clip. `memreplay worker` picks up uploads; not yet run against a live SpacetimeDB. |
 | Native iPhone app | Standalone On/Off demo builds for Simulator. Full Meta SDK target and physical glasses remain unverified. See [docs/PHONE_APP.md](docs/PHONE_APP.md). |
@@ -81,7 +81,7 @@ Port 3055 avoids Docker, which often holds 3000/3001. Set `STDB_PORT=<port>` to 
 1. In **PARTY**, enter a name, keep **Synthetic demo · ready to play** selected and press **Create party**.
 2. Use **Copy invite link** and open it in another tab/device, or enter the seven-character code and press **Join**.
 3. The leader controls playback, seeking, speed and take selection. Other members follow the clock and can explore/grab objects while paused.
-4. Use **Make leader** to transfer control. A leader's last disconnect elects another connected member. See [the complete party/Google test](docs/PARTIES.md).
+4. Use **Make leader** to transfer control. A leader's last disconnect elects another connected member. See [the complete party/key sign-in test](docs/PARTIES.md).
 
 The server root `/` is a solo session. Joining or creating a party uses `/ROOMCODE`; opening or refreshing that address rejoins it. Existing `?room=<code>` invitations remain supported. If SpacetimeDB restarts, pages reconnect within about 5 s. Joining a room drops takes you made solo; **Leave** returns to `/`. The database selects the room's scene; asset URLs stay out of the shared room address. Production hosting needs SPA fallback for direct room paths. See [the hosted demo guide](docs/ONLINE_DEMO.md). In dev builds, `window.__memreplay` exposes the viewer state for debugging.
 
@@ -168,7 +168,6 @@ The app, SpacetimeDB (`/stdb`) and the upload service (`/api`) share that one li
 | `npm run typecheck` | Type-check the module and the web app |
 | `npm run party:dev` | Start web + upload with matching party database/origin settings; publish first |
 | `npm run test:party` | Live party authority, presence, clock, handoff and worker-contract test |
-| `npm run auth:configure -- CLIENT_ID` | Configure the public Google web client ID for both web and database builds |
 | `npm run test:integration` | Live multiplayer test against a running SpacetimeDB (`STDB_DATABASE`, `STDB_WS_URL` or `STDB_PORT`) |
 | `npm run tunnel` | Public HTTPS link for phones and judges |
 | `npm run stdb:start` | Local SpacetimeDB on port 3055 (`STDB_PORT` overrides) |
