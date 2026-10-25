@@ -398,3 +398,26 @@ test("S3 completion before the PUT reports a missing upload", async () => {
     await new Promise<void>((resolve) => storage.close(() => resolve()));
   }
 });
+
+test("profile API binds names to a verified token and rejects another user's ID", async () => {
+  let displayName = "";
+  const server = createServer(makeHandler({
+    allowedOrigins: [],
+    verify: async (id: string, auth: string) => id === owner && auth === "Bearer valid",
+    getProfile: async (id: string) => ({ identity: id, displayName }),
+    setProfile: async (name: string, auth: string) => { expect(auth).toBe("Bearer valid"); displayName = name; },
+  }));
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${(server.address() as any).port}/api/profile`;
+  const post = (identity: string, name: string) => fetch(base, { method: "POST", headers: { Authorization: "Bearer valid", "Content-Type": "application/json" }, body: JSON.stringify({ identity, displayName: name }) });
+  try {
+    expect((await fetch(base + `?identity=${owner}`)).status).toBe(401);
+    expect((await post("b".repeat(64), "Stolen")).status).toBe(401);
+    expect((await post(owner, " ")).status).toBe(400);
+    expect((await post(owner, "a".repeat(41))).status).toBe(400);
+    const response = await post(owner, "  Nikko  ");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ identity: owner, displayName: "Nikko" });
+    expect(await (await fetch(base + `?identity=${owner}`, { headers: { Authorization: "Bearer valid" } })).json()).toEqual({ identity: owner, displayName: "Nikko" });
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+});

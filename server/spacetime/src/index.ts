@@ -217,10 +217,10 @@ function updateProfile(ctx: Ctx) {
   authenticate(ctx);
   const jwt = ctx.senderAuth.jwt;
   const google = !!jwt && isGoogleIssuer(jwt.issuer);
-  const name =
+  const name = ctx.db.profile.identity.find(ctx.sender)?.displayName ?? (
     google && typeof jwt.fullPayload.name === "string"
       ? clip(jwt.fullPayload.name.trim(), 40)
-      : "";
+      : "");
   const row = {
     identity: ctx.sender,
     provider: google ? "google" : "guest",
@@ -230,6 +230,14 @@ function updateProfile(ctx: Ctx) {
     ctx.db.profile.identity.update(row);
   else ctx.db.profile.insert(row);
 }
+/** A display name labels the authenticated sender; it never selects another account. */
+export const setDisplayName = db.reducer({ displayName: t.string() }, (ctx, { displayName }) => {
+  authenticate(ctx);
+  const name = text(displayName, 40);
+  updateProfile(ctx);
+  const profile = ctx.db.profile.identity.find(ctx.sender)!;
+  ctx.db.profile.identity.update({ ...profile, displayName: name });
+});
 function player(ctx: Ctx) {
   authenticate(ctx);
   const p = ctx.db.player.identity.find(ctx.sender);

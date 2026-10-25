@@ -296,3 +296,20 @@ test("without Web Locks (an insecure origin) the stored token is used as before"
   const broken = { request: () => Promise.reject(new DOMException("denied", "SecurityError")) } as unknown as Locks;
   expect((await claimStoredToken(copy, key, broken)).token).toBe("token-a");
 });
+
+test("library guest ID survives a new tab session without sharing a multiplayer player token", () => {
+  const builds = recordBuilds();
+  const session = tab("library-test");
+  const persistent = storage();
+  vi.stubGlobal("localStorage", persistent);
+  const first = new Multiplayer(true); nets.push(first); first.connect();
+  builds[0].on.onConnect(builds[0].conn, new Identity(1n), "library-guest");
+  expect(persistent.getItem("memreplay-library-token:library-test")).toBe("library-guest");
+  expect(session.getItem("memreplay-token:library-test")).toBeNull();
+  first.dispose();
+  tab("library-test");
+  const second = new Multiplayer(true); nets.push(second); second.connect();
+  expect(builds[1].token).toBe("library-guest");
+  const viewer = multiplayer(undefined); viewer.connect();
+  expect(builds[2].token).toBeUndefined();
+});

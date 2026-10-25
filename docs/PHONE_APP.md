@@ -36,6 +36,24 @@ xcrun simctl launch YOUR_SIMULATOR_UUID com.memreplay.SceneCaptureDemo
 
 The command-line build uses `/tmp` because cloud-synced folders can attach Finder metadata that breaks ad-hoc signing. If Xcode reports **resource fork / Finder information** during signing, set its Derived Data location outside iCloud/Dropbox, or use the command above. Do not work around it by disabling signing.
 
+## Names, scene status and the web library
+
+The current UI adds a name-based guest profile. After saving the server address,
+enter your name and tap **Continue with this name** before recording. Returning
+users retain the same Keychain identity. Settings lets you change the name without
+changing your ID. First-time setup requires the upload service; once configured,
+recordings can still queue locally during an outage.
+
+**Memories** shows reconstruction status and offers **Open in 3D** and a share link
+when the worker supplies a valid manifest. It refreshes every five seconds while
+the app is active. **Web viewer URL** in Settings is optional when upload and web
+hosting share an origin. For separate hosting, both services must use the same DB.
+The web library is `/library.html`. See [FRONTEND_FLOW.md](FRONTEND_FLOW.md).
+
+The earlier simulator verification below predates these UI additions. This Mac
+currently has Command Line Tools only; the new Swift sources were syntax-checked,
+not rebuilt for iPhone/Simulator.
+
 ## Install on your iPhone
 
 1. Connect your iPhone to the Mac, open **SceneCaptureDemo.xcodeproj**, and select the phone as the run destination. In **Signing & Capabilities**, select your Apple development team and a unique bundle identifier. Follow Xcode's pairing and Developer Mode prompts, then Cmd-R.
@@ -43,7 +61,7 @@ The command-line build uses `/tmp` because cloud-synced folders can attach Finde
 3. In app **Settings**, enter that exact `.local` origin, tap **Save server**, then **Test connection**. `127.0.0.1` on a physical phone means the phone, not the Mac. A trusted HTTPS app origin works too; a self-signed HTTPS server is not trusted automatically.
 4. Repeat On → wait → Off → PASS → Play stored video. Keep the app foreground through verification. New recordings use the current storage origin; old records retain their old URLs.
 
-No server? You can still demonstrate On/Off, save a real MP4, play it offline and export it from **Saved videos**. The UI reports **Upload pending**, not PASS. Configure the server later and tap **Retry uploads**.
+After initial name setup, no server? You can still demonstrate On/Off, save a real MP4, play it offline and export it from **Saved videos**. The UI reports **Upload pending**, not PASS. Configure the server later and tap **Retry uploads**.
 
 ## Prove recovery and persistence
 

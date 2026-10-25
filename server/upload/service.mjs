@@ -85,6 +85,8 @@ export function makeHandler({
   pipelineIdentity,
   registerIdentity,
   listMemories,
+  getProfile,
+  setProfile,
 }) {
   return async (req, res) => {
     const origin = req.headers.origin;
@@ -120,12 +122,14 @@ export function makeHandler({
         return send(502, { error: "Could not connect to SpacetimeDB" });
       }
     }
+    const profileRoute = route.pathname === "/api/profile" &&
+      ((req.method === "GET" && getProfile) || (req.method === "POST" && setProfile));
     const listing =
       req.method === "GET" &&
       route.pathname === "/api/memories" &&
       listMemories;
     if (
-      !listing &&
+      !listing && !profileRoute &&
       (req.method !== "POST" ||
         !["/api/uploads/presign", "/api/uploads/complete"].includes(
           route.pathname,
@@ -136,13 +140,21 @@ export function makeHandler({
     if (!auth?.startsWith("Bearer "))
       return send(401, { error: "Connect to SpacetimeDB first" });
     try {
-      const body = listing
+      const body = listing || (profileRoute && req.method === "GET")
         ? { identity: route.searchParams.get("identity") }
         : await json(req);
       if (!/^[a-f0-9]{64}$/i.test(body.identity ?? ""))
         return send(401, { error: "Invalid identity" });
       if (!(await verify(body.identity, auth)))
         return send(401, { error: "Identity/token mismatch" });
+      if (profileRoute) {
+        if (req.method === "POST") {
+          if (typeof body.displayName !== "string" || !body.displayName.trim() || body.displayName.trim().length > 40)
+            throw new Error("Name must be 1–40 characters");
+          await setProfile(body.displayName.trim(), auth);
+        }
+        return send(200, await getProfile(body.identity, auth));
+      }
       if (listing)
         return send(200, { memories: await listMemories(body.identity, auth) });
       if (route.pathname === "/api/uploads/presign") {
@@ -290,13 +302,31 @@ export function databaseConfig(env = process.env) {
       if (!response.ok) throw new Error("Identity registration failed");
       return response.json();
     },
+    setProfile: async (displayName, auth) => {
+      const response = await fetch(`${url}/call/set_display_name`, {
+        method: "POST", headers: { Authorization: auth, "Content-Type": "application/json" },
+        body: JSON.stringify([displayName]), signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) throw new Error("Could not save your name");
+    },
+    getProfile: async (identity, auth) => {
+      if (!/^[a-f0-9]{64}$/i.test(identity)) throw new Error("Invalid identity");
+      const response = await fetch(`${url}/sql`, {
+        method: "POST", headers: { Authorization: auth },
+        body: `SELECT display_name FROM profile WHERE identity = 0x${identity}`,
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) throw new Error("Could not load your profile");
+      const [result] = await response.json();
+      return { identity, displayName: result.rows[0]?.[0] ?? "" };
+    },
     listMemories: async (identity, auth) => {
       if (!/^[a-f0-9]{64}$/i.test(identity))
         throw new Error("Invalid identity");
       const response = await fetch(`${url}/sql`, {
         method: "POST",
         headers: { Authorization: auth },
-        body: `SELECT id, title, source_url, status, duration_us, request_id, pipeline_identity FROM memory WHERE owner = 0x${identity}`,
+        body: `SELECT id, title, source_url, status, duration_us, request_id, pipeline_identity, manifest_url, progress, error FROM memory WHERE owner = 0x${identity}`,
         signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) throw new Error("Database lookup failed");
@@ -315,6 +345,9 @@ export function databaseConfig(env = process.env) {
           durationUs,
           requestId,
           pipelineIdentity,
+          manifestUrl,
+          progress,
+          error,
         ]) => ({
           id: String(id),
           title,
@@ -323,6 +356,9 @@ export function databaseConfig(env = process.env) {
           durationUs: String(durationUs),
           requestId,
           pipelineIdentity: hex(pipelineIdentity),
+          manifestUrl,
+          progress,
+          error,
         }),
       );
     },

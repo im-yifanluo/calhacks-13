@@ -141,6 +141,14 @@ export async function claimStoredToken(
 }
 
 export class Multiplayer extends EventTarget {
+  /** Library-only guest persistence. Viewer tabs retain separate player identities. */
+  constructor(private persistentLibraryGuest = false) { super(); }
+  private get tokenStorage() { return this.persistentLibraryGuest ? localStorage : sessionStorage; }
+  private rememberToken(key: string, token: string) {
+    if (googleCredential()) return;
+    if (!this.persistentLibraryGuest) this.hold(token);
+    this.tokenStorage.setItem(key, token);
+  }
   connection?: DbConnection;
   identity?: Identity;
   token = "";
@@ -176,15 +184,15 @@ export class Multiplayer extends EventTarget {
   }
   connect() {
     if (this.disposed) return;
-    const key = (this.key = `memreplay-token:${import.meta.env.VITE_STDB_DATABASE || "memory-replay"}`);
+    const key = (this.key = `memreplay-${this.persistentLibraryGuest ? "library-" : ""}token:${import.meta.env.VITE_STDB_DATABASE || "memory-replay"}`);
     const google = googleCredential();
     if (google) {
       if (credentialExpired(google)) { this.ready = false; this.status = "Google session expired — sign in again"; this.changed(); return; }
       return this.open(key, google);
     }
-    const storage = sessionStorage;
+    const storage = this.tokenStorage;
     const stored = storage.getItem(key) || undefined;
-    if (!stored || this.held?.token === stored) return this.open(key, stored);
+    if (this.persistentLibraryGuest || !stored || this.held?.token === stored) return this.open(key, stored);
     void claimStoredToken(storage, key, this.locks)
       .catch(() => ({ token: stored, release: () => {} }))
       .then(({ token, release }) => {
@@ -226,7 +234,7 @@ export class Multiplayer extends EventTarget {
         this.identity = identity;
         this.token = token;
         // Lock before storing: a tab duplicated from now on copies the token and must find it taken.
-        if (!googleCredential()) { this.hold(token); sessionStorage.setItem(key, token); }
+        this.rememberToken(key, token);
         const changed = this.changed;
         for (const table of [
           conn.db.memory,
@@ -276,7 +284,7 @@ export class Multiplayer extends EventTarget {
         this.token = token;
         this.bestRtt = Infinity;
         this.status = "Resynchronizing…";
-        if (!googleCredential()) { this.hold(token); sessionStorage.setItem(key, token); }
+        this.rememberToken(key, token);
         this.changed();
       })
       // The SDK passes the next attempt number only when it will retry (automatic reconnect
@@ -302,7 +310,7 @@ export class Multiplayer extends EventTarget {
           this.status = "Google sign-in rejected — sign in again";
         } else if (storedToken && tokenRejected(error)) {
           // The server rejects this tab's saved identity: forget it and join as a new guest.
-          sessionStorage.removeItem(key);
+          this.tokenStorage.removeItem(key);
           this.held?.release();
           this.held = undefined;
           this.status = "Saved session expired — connecting as a new guest…";

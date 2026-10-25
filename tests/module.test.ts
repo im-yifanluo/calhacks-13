@@ -758,3 +758,19 @@ test("a take someone else forked, or one forked before this grab, stays the room
   call(alice, mod.leaveRoom);
   expect(clock(r)).toEqual(before);
 });
+
+test("guest names label unique sender IDs, survive reconnect, and never transfer memories", () => {
+  call(alice, mod.setDisplayName, { displayName: "  Nikko  " });
+  call(bob, mod.setDisplayName, { displayName: "Nikko" });
+  expect(me(alice).isEqual(me(bob))).toBe(false);
+  expect(h.db.profile.identity.find(me(alice))?.displayName).toBe("Nikko");
+  expect(h.db.profile.identity.find(me(bob))?.displayName).toBe("Nikko");
+  const saved = memory(alice);
+  call(alice, mod.setDisplayName, { displayName: "New name" });
+  call(alice, mod.onConnect);
+  expect(h.db.profile.identity.find(me(alice))?.displayName).toBe("New name");
+  expect(h.db.profile.identity.find(me(bob))?.displayName).toBe("Nikko");
+  expect(h.db.memory.id.find(saved.id)?.owner.isEqual(me(alice))).toBe(true);
+  expect(() => call(alice, mod.setDisplayName, { displayName: " " })).toThrow();
+  expect(() => call(alice, mod.setDisplayName, { displayName: "a".repeat(41) })).toThrow();
+});
