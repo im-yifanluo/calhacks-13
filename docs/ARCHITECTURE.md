@@ -1,5 +1,7 @@
 # memos: system design
 
+Who owns which part and interface: [TEAM.md](TEAM.md).
+
 **Ship the scene, sync the state.** The GPU turns the video into scene files once. Every device downloads them and renders locally. Only small shared state (clock, grabs, poses) travels live, so many people share one memory with no rendering server.
 
 ![Architecture](architecture/arch.png)
@@ -23,7 +25,7 @@
 | I4 | Worker ↔ DB | Poll with SQL `status = 'uploaded'`, then `set_memory_status [id, status, progress, manifestUrl, error]`. Statuses: uploaded, processing, ready (or failed). |
 | I5 | Worker ↔ storage | Read `videos/<owner>/<requestId>.<ext>`. Write `memories/<memoryId>/` once: `memory.json`, splats, collider, audio. |
 | I6 | Viewer ← storage | Load `memory.json` (schema in `packages/shared/src/manifest.ts`). Bucket is public-read with CORS. |
-| I7 | Viewer ↔ DB | WebSocket subscription. Reducers: party (`create_party`, `join_room`), time (leader only: `seek`, `set_paused`, `set_playback_speed`), interaction (`grab`, `release`), presence (`set_pose`). |
+| I7 | Viewer ↔ DB | WebSocket subscription. Reducers: sign-in (`register_account`, `set_display_name`; name + personal key, no Google), party (`create_party`, `join_room`), time (leader only: `seek`, `set_paused`, `set_playback_speed`), interaction (`grab`, `release`), presence (`set_pose`). |
 
 **Rules**
 - Files never go in the database. The DB holds state and links; storage holds bytes.
