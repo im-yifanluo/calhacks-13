@@ -264,7 +264,7 @@ struct PartyView: View {
                 }
                 Section("From a recording to a scene") {
                     Text("Finish recording with Off and wait for upload verification. Follow processing in Memories, then open the finished scene or choose it in the party lobby. The synthetic demo stays available while reconstruction runs.")
-                    Text("The party opens in your browser. Copy your personal key from Settings and paste it into web sign-in to use the same account and recordings. Your party code is separate.")
+                    Text("The party opens in your browser. Copy your password from Settings and paste it into web sign-in to use the same account and recordings. Your party code is separate.")
                     Text("A reconstruction worker is still required to turn video into a 3D scene.").foregroundStyle(.secondary)
                 }
             }.navigationTitle("Party")
@@ -277,24 +277,25 @@ struct UserProfileView: View {
         VStack(alignment: .leading, spacing: 10) {
             if library.profileReady {
                 Text("Signed in as \(library.displayName)").font(.headline)
-                Button("Copy personal key") { Task { await library.copyPersonalKey() } }
+                Button("Copy password") { Task { await library.copyPersonalKey() } }
                     .buttonStyle(.bordered)
             } else {
                 Text("Create your account").font(.headline)
                 TextField("Your name", text: $library.displayName).textFieldStyle(.roundedBorder)
                     .textContentType(.nickname).autocorrectionDisabled().accessibilityLabel("Your name")
-                Button(library.savingProfile ? "Signing in…" : "Create personal key") {
+                Button(library.savingProfile ? "Signing in…" : "Create password") {
                     Task { await library.saveProfile() }
                 }.buttonStyle(.borderedProminent)
-                Text("Already signed in on the web? Paste that personal key below to keep the same account.").font(.caption)
+                Text("Already signed in on the web? Paste that password below to keep the same account.").font(.caption)
             }
-            SecureField("memos1.… personal key", text: $library.personalKeyInput)
+            SecureField("6-digit password", text: $library.personalKeyInput)
+                .keyboardType(.numberPad)
                 .textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder)
-            Button("Sign in with saved key") { Task { await library.importAccount() } }
+            Button("Sign in with saved password") { Task { await library.importAccount() } }
                 .disabled(!library.pending.isEmpty || library.personalKeyInput.isEmpty)
             Text(library.profileMessage).font(.caption)
             if !library.userID.isEmpty { Text("User ID: \(library.userID)").font(.caption2.monospaced()).textSelection(.enabled) }
-            Text("Your personal key works on phone, web and Quest. Keep it private. A registered name cannot be changed.").font(.caption).foregroundStyle(.secondary)
+            Text("Your six-digit password works on phone, web and Quest. Keep it private. You can also paste an older saved credential to restore your account.").font(.caption).foregroundStyle(.secondary)
         }.disabled(library.savingProfile || library.checking || library.uploading || library.captureActive)
     }
 }
@@ -322,7 +323,7 @@ struct SettingsView: View {
                     Text(library.message)
                 }
                 Section("How to test") {
-                    Text("1. Choose Use memos upload server, then sign in in Capture with your website personal key.")
+                    Text("1. Choose Use memos upload server, then sign in in Capture with your website password.")
                     Text("2. In Memories, choose Upload as your name on a local clip. The hosted server currently accepts clips up to 90 MiB for storage testing, without GPU processing.")
                     Text("3. Wait for PASS: the database record and downloaded video must match your recording.")
                     Text("4. Local clips remain available offline and can be exported. New recordings upload automatically when signed in.")

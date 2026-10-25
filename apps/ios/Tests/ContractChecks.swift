@@ -6,6 +6,12 @@ import Foundation
 @main struct ContractChecks {
     static func main() async throws {
         let expected = AccountDestination(server: "https://app.test/stdb", database: "memos")
+        let shortLogin = try AccountKey.signInBody("000007", expected: expected)
+        precondition(shortLogin == ["password": "000007"])
+        for invalid in ["12345", "1234567", "abcdef", "１２３４５６"] {
+            do { _ = try AccountKey.signInBody(invalid, expected: expected); fatalError("Invalid password accepted") }
+            catch AccountKey.KeyError.password {}
+        }
         let key = AccountKey(server: expected.server, database: expected.database,
                              identity: String(repeating: "a", count: 64), token: "header.payload.signature")
         // Browser encoder: UTF-8 JSON, base64url without padding, memos1 prefix.
@@ -13,6 +19,8 @@ import Foundation
         let browserKey = "memos1." + Data(browserJSON.utf8).base64EncodedString()
             .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
         let decoded = try AccountKey.decode(browserKey, expected: expected)
+        let legacyLogin = try AccountKey.signInBody(browserKey, expected: expected)
+        precondition(legacyLogin == ["personalKey": browserKey])
         precondition(decoded == key)
         let roundTrip = try AccountKey.decode(key.encoded(), expected: expected)
         precondition(roundTrip == key)

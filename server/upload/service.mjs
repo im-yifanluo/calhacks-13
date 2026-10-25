@@ -8,6 +8,8 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { connectionConfig } from "./connections.mjs";
 import { makeHandler, databaseConfig } from "./core.mjs";
+import { passwordVault } from './passwords.mjs';
+import { s3PasswordStore } from './passwords-s3.mjs';
 export { ticket, readTicket, metadata, makeHandler, databaseConfig } from "./core.mjs";
 
 export function productionConfig(env = process.env) {
@@ -45,6 +47,7 @@ export function productionConfig(env = process.env) {
     region: env.S3_REGION || "auto",
     forcePathStyle: env.S3_FORCE_PATH_STYLE === "true",
   });
+  const database = databaseConfig(env);
   return {
     secret: env.UPLOAD_SIGNING_SECRET,
     assetBase: env.ASSET_BASE_URL,
@@ -52,7 +55,9 @@ export function productionConfig(env = process.env) {
     allowedOrigins: (
       env.UPLOAD_ALLOWED_ORIGINS || "https://localhost:5173"
     ).split(",").map(value => value.trim()).filter(Boolean),
-    ...databaseConfig(env),
+    ...database,
+    passwords: passwordVault({ store: s3PasswordStore(s3, env.ACCOUNT_PASSWORD_BUCKET || env.S3_BUCKET),
+      secret: env.UPLOAD_SIGNING_SECRET, settings: database.accountConfig }),
     connections: connectionConfig(env, {
       backend: "s3", assetBaseUrl: env.ASSET_BASE_URL,
       scenePrefix: "memories/<memoryId>-<requestId>/", writeScene: "memreplay publish <work-dir> --to s3",

@@ -27,7 +27,7 @@ async function query<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) =
   } finally { db.close(); }
 }
 export async function saveImportedScene(scene: ImportedScene, account = sceneAccount(savedAccount())) {
-  if (!account) throw new Error('Sign in with your name or personal key before importing a memory.');
+  if (!account) throw new Error('Sign in with your name or password before importing a memory.');
   const existing = await query<OwnedScene | undefined>('readonly', store => store.get(scene.id));
   if (existing && !belongsToAccount(existing, account)) throw new Error('This import belongs to another account. Import the original package again.');
   return query('readwrite', store => store.put({ ...scene, account }));

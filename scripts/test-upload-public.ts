@@ -30,7 +30,7 @@ assert.equal(decodeAccountKey(account.personalKey, { ...config, uri: config.serv
 assert.equal((await call('/api/account', { personalKey: account.personalKey })).identity, account.identity);
 assert.equal((await call('/api/account', undefined, account.personalKey)).provider, 'key');
 await call('/api/memories', undefined, 'invalid', 401);
-console.log('PASS public HTTPS and account create/restore/get; same website database and personal-key format');
+console.log('PASS public HTTPS and account create/restore/get; same website database and password format');
 const bytes = await readFile('apps/ios/CameraAccess/TestResources/plant.mp4');
 if (!state.prepared || (!state.completed && state.prepared.receiptExpiresAt <= Date.now())) {
   state.prepared = await call('/api/uploads/presign', { name: 'plant.mp4', type: 'video/mp4', size: bytes.length,

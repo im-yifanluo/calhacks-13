@@ -113,7 +113,7 @@ The demo scene `apps/web/public/mock/memory.json` uses primitive objects (a ball
 | Vite proxy | `/stdb` (HTTP + WebSocket) → SpacetimeDB (`STDB_URL` or `STDB_PORT`); `/api` → upload service (`UPLOAD_URL` or `UPLOAD_PORT`, default 8788). Dev port `VITE_PORT`, default 5173. |
 | HTTPS in dev | On by default (self-signed, for LAN IPs). `LOCAL_HTTP=1` serves plain http on 127.0.0.1 only, for the Quest over `adb reverse` and for tunnels. |
 | Browser env | `VITE_STDB_URL`, `VITE_STDB_DATABASE` (default `memory-replay`), `VITE_UPLOAD_API` |
-| Node | ≥ 22.12 (`.nvmrc` pins 22.23.2) |
+| Node | ≥ 22.13 (`.nvmrc` pins 22.23.2) |
 | Tests | `npm test` = vitest (`tests/*.test.ts`) + the viewer's node tests; `npm run test:integration` needs a running SpacetimeDB |
 
 ---

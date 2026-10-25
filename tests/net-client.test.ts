@@ -161,7 +161,7 @@ describe("connection", () => {
     next.connect();
     const rejected = Object.assign(new Error("Rejected"), { name: "WebSocketTokenError", status: 401 });
     builds[1].on.onConnectError({}, rejected);
-    expect(next.status).toContain("Personal key rejected");
+    expect(next.status).toContain("Password rejected");
     expect(builds).toHaveLength(2);
     expect(session.getItem(accountStorageKey())).toContain("memos1.");
   });
@@ -318,7 +318,7 @@ describe("connection recovery", () => {
     expect(builds).toHaveLength(3);
   });
 
-  test("rejected personal keys never retry as a guest", async () => {
+  test("rejected passwords never retry as a guest", async () => {
     const { builds, net } = setup();
     net.dispose();
     const credential = "header.payload.signature";
@@ -329,7 +329,7 @@ describe("connection recovery", () => {
     signedIn.reconnect();
     await vi.advanceTimersByTimeAsync(60000);
     expect(builds).toHaveLength(2);
-    await expect(signedIn.callConnected(async () => {})).rejects.toThrow("Personal key rejected");
+    await expect(signedIn.callConnected(async () => {})).rejects.toThrow("Password rejected");
     expect(sessionStorage.getItem(accountStorageKey())).toContain("memos1.");
   });
 });

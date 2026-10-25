@@ -39,7 +39,7 @@ async function main(): Promise<void> {
   let importedSource: import("./loader").MemorySource & { dispose: () => void } | undefined;
   if (importId) {
     const stored = await getImportedScene(importId);
-    if (!stored) throw new Error('This import is not saved for your signed-in account on this browser. Sign in with its personal key in the library, or import the .memos.zip again.');
+    if (!stored) throw new Error('This import is not saved for your signed-in account on this browser. Sign in with its password in the library, or import the .memos.zip again.');
     const { localSceneSource } = await import('./scene-bundle');
     importedSource = localSceneSource(stored);
     addEventListener('pagehide', () => importedSource?.dispose(), { once: true });

@@ -94,10 +94,13 @@ try {
   };
   const config = await call("/api/account/config");
   assert.equal(config.server, dbBase); assert.equal(config.database, database);
+  assert.equal(config.passwordLength, 6);
   const account = await call("/api/account", { displayName: "Phone API test" });
+  assert.match(account.password, /^[0-9]{6}$/);
   const decoded = decodeAccountKey(account.personalKey, { server: dbBase, database, uri: dbBase.replace("http:", "ws:") });
   assert.equal(decoded.identity, account.identity); assert.equal(decoded.token, account.token);
-  const restored = await call("/api/account", { personalKey: encodeAccountKey(decoded) });
+  const restored = await call("/api/account", { password: account.password });
+  assert.equal((await call('/api/account', { personalKey: encodeAccountKey(decoded) })).password, account.password);
   assert.equal(restored.identity, account.identity); assert.equal(restored.displayName, "Phone API test");
   assert.equal((await call("/api/account", undefined, account.personalKey)).provider, "key");
   await call("/api/account", { personalKey: encodeAccountKey({ ...decoded, database: "wrong-db" }) }, undefined, 401);
@@ -122,6 +125,7 @@ try {
   assert.equal(put.status, 200);
   // Restart between PUT and completion: persisted receipts and storage survive a deploy/restart.
   await stop(api); api = await startApi();
+  assert.equal((await call('/api/account', { password: account.password })).identity, account.identity);
   const completed = await call("/api/uploads/complete", { receipt: prepared.receipt }, account.personalKey);
   assert.equal(completed.status, "uploaded");
   const repeated = await call("/api/uploads/complete", { receipt: prepared.receipt }, account.personalKey);

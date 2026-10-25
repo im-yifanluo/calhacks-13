@@ -2,7 +2,7 @@
 
 ## Physical iPhone acceptance · October 24
 
-Verified on Nikko's iPhone with real Meta glasses: registration, developer-software update handoff, camera preview, local MP4 recording/playback, website personal-key sign-in, hosted upload and independent download integrity. Database row #6 matched the phone's MP4 by SHA-256; the backend teammate confirmed it belongs to the intended NikkoTest user. Picture and duration were confirmed by playback. **Audio remains unresolved:** the user heard no sound; this does not establish whether audio is absent, silent or muted. Audio debugging is deferred. Hosted tests use `pipeline:false`; GPU reconstruction was not tested. New signed-out clips remain local until explicitly uploaded after sign-in.
+Verified on Nikko's iPhone with real Meta glasses: registration, developer-software update handoff, camera preview, local MP4 recording/playback, website password sign-in, hosted upload and independent download integrity. Database row #6 matched the phone's MP4 by SHA-256; the backend teammate confirmed it belongs to the intended NikkoTest user. Picture and duration were confirmed by playback. **Audio remains unresolved:** the user heard no sound; this does not establish whether audio is absent, silent or muted. Audio debugging is deferred. Hosted tests use `pipeline:false`; GPU reconstruction was not tested. New signed-out clips remain local until explicitly uploaded after sign-in.
 
 The native buttons are **Record** and **Stop & save**. Starting a glasses session or preview alone does not record. Record starts saving frames; Stop & save finalizes the MP4 (the glasses target also records SDK audio). Without sign-in, the clip stays on the phone and appears in **Memories → On this phone**, where it can be played or exported. These clips do not enter the upload queue or block later account/server setup. After signing in, choose **Upload as [name]** on a local clip to associate it with that account and queue it explicitly.
 
@@ -17,13 +17,13 @@ There are two native iPhone projects, with shared recording, upload, library and
 
 The demo's `[SIMULATION]` clips presign with `pipeline: false` and verify that the returned database row belongs to the uploader's test queue. They never request reconstruction. An imported real MP4 is a normal upload, even from the demo app. Neither app implements reconstruction; uploads remain `uploaded` until a separate worker processes them.
 
-The **Party** tab opens the shared viewer using the saved server address. Create a party or enter a seven-character invite code; name-and-key sign-in and leader-controlled playback run in the system browser. See [PARTIES.md](PARTIES.md) for setup and testing. Finish recording/upload before switching to the browser.
+The **Party** tab opens the shared viewer using the saved server address. Create a party or enter a seven-character invite code; name-and-password sign-in and leader-controlled playback run in the system browser. See [PARTIES.md](PARTIES.md) for setup and testing. Finish recording/upload before switching to the browser.
 
 ## Hosted iPhone upload test
 
-In Settings choose **Use memos upload server** (`https://memos.alightdell64.chatgpt.site`, no `/api` suffix). In Capture paste the personal key from your existing memos website account. In Memories choose **Upload as [name]** on a saved local clip. Never paste a private key into chat or logs.
+In Settings choose **Use memos upload server** (`https://memos.alightdell64.chatgpt.site`, no `/api` suffix). In Capture paste the password from your existing memos website account. In Memories choose **Upload as [name]** on a saved local clip. Never paste a password into chat or logs.
 
-The hosted service advertises `pipelineAvailable: false` and a 90 MiB limit through `/api/account/config`. The app uses its portable-key API: `POST /api/account` with `displayName` or `personalKey`, `GET /api/account` for the profile, and the full `memos1.` key as the bearer credential. Keys remain in Keychain. The older local service retains its JWT/profile flow. The hosted upload ticket's `expiresIn` is converted into a persisted expiry; raw PUT requests include file length and never carry account authorization. Upload-only tests skip reconstruction quality thresholds and send `pipeline:false`; source bytes are not transcoded by the uploader. Real processing uploads retain the quality checks.
+The hosted service advertises `pipelineAvailable: false` and a 90 MiB limit through `/api/account/config`. The app uses its portable-credential API: `POST /api/account` with `displayName` or a six-digit `password` (legacy `personalKey` restoration also works), `GET /api/account` for the profile, and the returned `personalKey` session credential as the bearer credential. Passwords remain in Keychain. The older local service retains its JWT/profile flow. The hosted upload ticket's `expiresIn` is converted into a persisted expiry; raw PUT requests include file length and never carry account authorization. Upload-only tests skip reconstruction quality thresholds and send `pipeline:false`; source bytes are not transcoded by the uploader. Real processing uploads retain the quality checks.
 
 An opt-in live check creates a separate test account and tiny generated clip, restores the account, uploads with processing disabled, lists the memory and compares downloaded bytes:
 
@@ -34,7 +34,7 @@ xcrun swiftc -parse-as-library apps/ios/SceneCapture/AccountKey.swift \
 /tmp/memos-hosted-checks --live
 ```
 
-On October 24 this check passed against the public API. It leaves a clearly labeled synthetic test memory and account on the service; it does not use a person's footage or sign-in key. Physical iPhone upload remains a separate acceptance step.
+On October 24 this check passed against the public API. It leaves a clearly labeled synthetic test memory and account on the service; it does not use a person's footage or sign-in password. Physical iPhone upload remains a separate acceptance step.
 
 ## Fast demo on your Mac
 
@@ -61,13 +61,13 @@ The command-line build uses `/tmp` because cloud-synced folders can attach Finde
 
 ## Names, scene status and the web library
 
-After saving the server address, **Create personal key** registers your name with
+After saving the server address, **Create password** registers your name with
 `register_account`, preserving any existing phone identity and its recordings. Or
-paste the `memos1.…` key from web sign-in into **Sign in with saved key**. The app
-checks the key's server/database, then asks the backend to authenticate it before
-replacing the Keychain credential. Names registered to keys cannot be renamed.
-**Copy personal key** makes an expiring local clipboard copy; save it privately and
-paste it into the browser on iPhone or Quest to access the same account. No keys are
+enter the six-digit password from web sign-in into **Sign in with saved password**. The app
+checks the returned session's server/database and asks the backend to authenticate it before
+replacing the Keychain credential. Names registered to passwords cannot be renamed. Copying an older account allocates its six-digit password without changing identity; older saved credentials can still be pasted to restore it.
+**Copy password** makes an expiring local clipboard copy; save it privately and
+paste it into the browser on iPhone or Quest to access the same account. No passwords are
 included in viewer links, logs, or video metadata. A party code is a separate thing.
 Pending clips bind to their original account/server; finish uploads before switching.
 Account/server changes are disabled while recording. **Keep on phone only** stops
@@ -76,11 +76,11 @@ an unwanted upload retry while retaining the clip for playback/export.
 The upload service adds `GET /api/account/config` → `{server,database}` and
 `POST /api/account` → `{identity,displayName,provider}` (body `{identity,name}`,
 Bearer token required). Existing `/api/profile` and guest naming remain compatible.
-Set **ACCOUNT_SERVER_URL** to the exact public SpacetimeDB base used by web keys:
+Set **ACCOUNT_SERVER_URL** to the exact public SpacetimeDB base used by web passwords:
 `https://YOUR-WEB-HOST/stdb` for the same-origin proxy, or the HTTP(S) equivalent
 of `VITE_STDB_URL` without its trailing slash. Local upload defaults to
 `PUBLIC_ORIGIN/stdb`; use the same public hostname on desktop and phone when making
-keys. Production falls back to `STDB_HTTP_URL` if neither public setting is given,
+passwords. Production falls back to `STDB_HTTP_URL` if neither public setting is given,
 so explicitly configure it when that address is internal. Both app and web need the
 same `STDB_DATABASE`. Restart the upload service after updating it.
 
@@ -148,7 +148,7 @@ STDB_DATABASE=YOUR-LOCAL-TEST-DATABASE node scripts/test-phone-account.mjs
 ```
 
 The native checks encode real files, accept 24/25/30 fps video with audio, reject silent/15 fps/
-low-resolution files, and exercise browser-compatible key encoding/decoding. The
-live API check verifies registration, key reuse, immutable names, and identity/token
+low-resolution files, and exercise browser-compatible password encoding/decoding. The
+live API check verifies registration, password reuse, immutable names, and identity/token
 mismatch rejection. Neither test proves SDK hardware delivery or successful RunPod
 reconstruction; test those with an actual paired phone and glasses.

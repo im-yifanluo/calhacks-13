@@ -30,19 +30,19 @@ After authenticated pod setup below, run the **real acceptance check** on the Ma
 npm run test:pipeline:live -- --clip /absolute/path/to/glasses-recording.mp4
 ```
 
-It creates a dedicated test account, uses the real phone upload queue, waits up to two hours for the running GPU worker, checks `ready` in both the account API and website WebSocket subscription, validates `memory.json` with the website's validator, and requires nonempty reconstructed splats plus every referenced asset to be publicly readable. It never substitutes stages or falls back to storage-only mode. `--api https://your-api.example` and `--timeout-seconds 7200` override the target and wait. Evidence is written to ignored `data/pipeline-acceptance-*/result.json`; `account.json` alongside it is mode 0600 and contains the test account's personal key, so keep it private. A failed or timed-out check stays failed; it never counts an upload alone as completion. This executes the app's network/queue code on macOS; a final physical-phone capture still requires the rebuilt app on an iPhone.
+It creates a dedicated test account, uses the real phone upload queue, waits up to two hours for the running GPU worker, checks `ready` in both the account API and website WebSocket subscription, validates `memory.json` with the website's validator, and requires nonempty reconstructed splats plus every referenced asset to be publicly readable. It never substitutes stages or falls back to storage-only mode. `--api https://your-api.example` and `--timeout-seconds 7200` override the target and wait. Evidence is written to ignored `data/pipeline-acceptance-*/result.json`; `account.json` alongside it is mode 0600 and contains the test account's password, so keep it private. A failed or timed-out check stays failed; it never counts an upload alone as completion. This executes the app's network/queue code on macOS; a final physical-phone capture still requires the rebuilt app on an iPhone.
 
 The standalone Cloudflare entrypoint `server/upload/cloudflare.mjs` and `wrangler.jsonc` let the same API run without the Sites checkout. Set the documented runtime values and R2 binding before deployment. The existing memos website continues using the shared core through `sites-worker.ts`; do not create a second SpacetimeDB database for a separate phone API.
 
 ---
 
-The phone sends a raw video to `https://memos.alightdell64.chatgpt.site` using the existing account/presign/PUT/complete contract in [UPLOAD_API.md](UPLOAD_API.md). Completion registers the authenticated uploader as `memory.owner` in `jerry-memory-replay-phone-20261024`. The website's personal library filters by that owner. Use the **same personal key** on the phone and website; matching names do not imply the same identity.
+The phone sends a raw video to `https://memos.alightdell64.chatgpt.site` using the existing account/presign/PUT/complete contract in [UPLOAD_API.md](UPLOAD_API.md). Completion registers the authenticated uploader as `memory.owner` in `jerry-memory-replay-phone-20261024`. The website's personal library filters by that owner. Use the **same password** on the phone and website; matching names do not imply the same identity.
 
 The confirmed phone recording is memory **#6, “Nikko end-to-end test 01”**, 17.185556 seconds, 13,499,271 bytes, SHA-256 `5c4953296a3d007c7799196187569322488e4288edd20f6d4cd8b2607b4a404e`. Its bytes were independently read from hosted R2 and matched the phone's screenshot. It is a stored video, not a reconstructed scene.
 
 ## Data flow
 
-1. Phone → upload service (I2): personal-key auth, presigned raw PUT, completion receipt.
+1. Phone → upload service (I2): password auth, presigned raw PUT, completion receipt.
 2. Upload service → SpacetimeDB (I3): `create_memory` with owner, source URL and assigned pipeline identity.
 3. Runpod → SpacetimeDB (I4): one `memreplay worker` polls its assigned `uploaded` rows and reports progress through `set_memory_status`.
 4. Runpod downloads the allowed source video and runs the existing S1–S7 reconstruction pipeline.
@@ -78,7 +78,7 @@ Upload a short new clip with `pipeline:true` once the worker is active. Previous
 
 ## Worker storage protocol
 
-All `/api/pipeline/*` calls require `Authorization: Bearer <PIPELINE_TOKEN>`. The API verifies the token with SpacetimeDB and checks that the memory is assigned to this worker and currently `processing`. User account keys cannot publish pipeline assets.
+All `/api/pipeline/*` calls require `Authorization: Bearer <PIPELINE_TOKEN>`. The API verifies the token with SpacetimeDB and checks that the memory is assigned to this worker and currently `processing`. User account passwords cannot publish pipeline assets.
 
 | Method/path | Request | Response |
 | --- | --- | --- |

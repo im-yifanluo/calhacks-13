@@ -46,7 +46,7 @@ The authenticated JSON report includes:
 
 The response is HTTP **503** if a required database read fails, **401** for missing/mismatched credentials and **403** for a disallowed browser origin. `/api/health` remains a process-liveness check only. A healthy database alone cannot prove bucket permissions, public asset URLs, CORS, a running worker or a device's internet connection.
 
-For an existing client, use its current SpacetimeDB identity/token; do not send a `memos1.…` personal-key wrapper as the bearer token. Browser code already uses `net.identity.toHexString()` and `net.token`. This diagnostic endpoint exposes no worker token, bucket secret or local filesystem path. Keep the upload-service allowlist restricted to your intended app origins.
+For an existing client, use its current SpacetimeDB identity/token; do not send a `memos1.…` session wrapper as the bearer token. Browser code already uses `net.identity.toHexString()` and `net.token`. This diagnostic endpoint exposes no worker token, bucket secret or local filesystem path. Keep the upload-service allowlist restricted to your intended app origins.
 
 ## Local service and worker wiring
 

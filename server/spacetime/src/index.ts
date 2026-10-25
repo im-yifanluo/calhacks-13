@@ -201,7 +201,7 @@ const NO_ROOM = 0n;
 function authenticate(ctx: Ctx) {
   const jwt = ctx.senderAuth.jwt;
   if (jwt?.issuer === "https://accounts.google.com" || jwt?.issuer === "accounts.google.com")
-    fail("Google sign-in has been replaced. Sign in with a name and personal key.");
+    fail("Google sign-in has been replaced. Sign in with a name and password.");
 }
 function updateProfile(ctx: Ctx) {
   authenticate(ctx);
@@ -214,13 +214,13 @@ function updateProfile(ctx: Ctx) {
   });
 }
 /** A display name labels the signed-in sender; it never selects another account, and a name registered to a
- *  personal key (register_account) stays fixed. */
+ *  password (register_account) stays fixed. */
 export const setDisplayName = db.reducer({ displayName: t.string() }, (ctx, { displayName }) => {
   updateProfile(ctx);
   const name = text(displayName, 40);
   const profile = ctx.db.profile.identity.find(ctx.sender)!;
   if (profile.provider === "key" && profile.displayName !== name)
-    fail("This key already belongs to a registered name");
+    fail("This password already belongs to a registered name");
   ctx.db.profile.identity.update({ ...profile, displayName: name });
 });
 export const registerAccount = db.reducer({ name: t.string() }, (ctx, { name }) => {
@@ -228,7 +228,7 @@ export const registerAccount = db.reducer({ name: t.string() }, (ctx, { name }) 
   name = text(name, 40);
   const existing = ctx.db.profile.identity.find(ctx.sender)!;
   if (existing.provider === "key" && existing.displayName !== name)
-    fail("This key already belongs to a registered name");
+    fail("This password already belongs to a registered name");
   ctx.db.profile.identity.update({ ...existing, provider: "key", displayName: name });
   const p = ctx.db.player.identity.find(ctx.sender);
   if (p) ctx.db.player.identity.update({ ...p, name });

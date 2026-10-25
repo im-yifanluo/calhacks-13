@@ -3,7 +3,7 @@ import CryptoKit
 import Foundation
 
 /// Explicit live integration check: creates a test account and a tiny synthetic clip.
-/// Never reads a user's personal key or footage. Never requests GPU processing.
+/// Never reads a user's password or footage. Never requests GPU processing.
 @main struct HostedUploadChecks {
     static func main() async throws {
         guard CommandLine.arguments.contains("--live") else {
@@ -36,7 +36,7 @@ import Foundation
         precondition(restoredKey == key)
         let profile = try JSONSerialization.jsonObject(with: await send("/api/account", key: account.personalKey)) as! [String: Any]
         precondition(profile["identity"] as? String == account.identity && profile["provider"] as? String == "key")
-        print("PASS hosted account creation, portable-key restore, authenticated profile")
+        print("PASS hosted account creation, password restore, authenticated profile")
 
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
         defer { try? FileManager.default.removeItem(at: file) }

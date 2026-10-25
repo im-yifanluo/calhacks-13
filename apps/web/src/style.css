@@ -315,7 +315,7 @@ body.idle #topbar > * { pointer-events: none; }
 #party-current-code { font: 700 22px ui-monospace, monospace; letter-spacing: 0.13em; user-select: all; }
 #party-code-share button { flex: none; }
 
-/* Name and personal-key sign-in (stdb/jerry-p4). */
+/* Name and password sign-in (stdb/jerry-p4). */
 #auth-notice.error { color: var(--danger); }
 #account-id, #account-key-input { font-family: ui-monospace, monospace; }
 #room-reconnect[hidden] { display: none; }
