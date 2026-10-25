@@ -8,10 +8,9 @@ and **how to change things without stepping on each other**.
 
 | Person | Owns (code) | Responsible for | Interfaces they own |
 |---|---|---|---|
-| **Jerry** | `server/spacetime/` (module), `server/upload/`, `apps/ios/SceneCapture*`, `apps/web/src/auth.ts`, `account-key.ts`, party UI in `session.ts` | Database rules and reducers, parties and leadership, name/key sign-in, the upload service, **the phone app** (glasses capture → upload), the hosted demo and cloud setup (Maincloud, HTTPS hosts, R2) | I1, I2, I3, I7 (server side) |
-| **Nikko** | `apps/web/src/viewer.ts`, `physics.ts`, `timeline.ts`, `tracks.ts`, `loader.ts`; `apps/web/library.html` + `library*.ts` | **The viewer engine** (load scene, physics, grab/throw, takes, replay), the memory library page, porting the durable upload queue from `apps/ios/CameraAccess` into SceneCapture | I6 (reader), I7 (client: grabs, takes) |
-| **Yifan** | `pipeline/`, `packages/shared/` (scene format), `apps/web/src/net/adapter.ts`, glass UI and VR panel (`main.ts`, `index.html`, `style.css`, `ui.ts`, `vr-panel.ts`, `input-xr.ts`, `guided.ts`, `exposure.ts`) | **Video → scene** on Runpod, the GPU worker, the scene format, the viewer's UI on phone/desktop/Quest, keeping `main` green (merges, integration tests) | I4, I5, I6 (writer), I7 (client UI) |
-| **Andrew** | `origin/frontend-quest`, `origin/frontend-phone`, `origin/pipe/motion-extraction-2` (not merged, see below) | **Quest testing and the demo clip**: test multi-headset parties, record the demo footage (guide in `pipeline/README.md` §3), port the prop-motion fix into the pipeline with Yifan | — (tester; files changes through the owners above) |
+| **Nikko** | `apps/ios/`, `server/upload/` | **Glasses and upload.** The phone app: Meta glasses capture through the DAT SDK, the durable upload queue (ported from `apps/ios/CameraAccess`), and the upload service it talks to. | I1, I2 (both sides), I3 (caller) |
+| **Jerry** | `server/spacetime/`, cloud accounts, then `apps/web/` | **Hosting first:** the Maincloud database, the R2 bucket, the upload service and the viewer on HTTPS, plus the database rules (reducers, parties, leadership, name/key sign-in). **Then the viewer:** party and VR fixes, multi-headset testing, the phone/desktop UI. | I3 (reducer), I5 (bucket), I6 (reader), I7 (both sides) |
+| **Yifan** | `pipeline/`, `packages/shared/` (scene format), the Runpod pods | **Pipeline.** Video → scene, the GPU worker, the scene format, the demo scenes. No UI work. | I4, I5 (worker), I6 (writer) |
 
 If a task touches another person's files, ask them first or open the PR with them as reviewer.
 
@@ -19,13 +18,13 @@ If a task touches another person's files, ask them first or open the PR with the
 
 | # | Between | Contract | Owner(s) |
 |---|---|---|---|
-| I1 | Glasses → phone app | Meta DAT SDK 1.0.1; MP4/MOV ≥ 1280 px, 30 fps, audio | Jerry |
-| I2 | Phone → upload service → R2 | `POST /api/uploads/presign` `{identity, name, type, size, title, durationSec}` → `{putUrl, receipt, requestId}`; `PUT putUrl` (15 min); `POST /api/uploads/complete` `{identity, receipt}` (60 min); `Authorization: Bearer <SpacetimeDB token>` | Jerry (both sides) |
-| I3 | Upload service → DB | `create_memory {requestId, title, sourceUrl, pipelineIdentity, durationUs}` → memory row `uploaded` | Jerry |
+| I1 | Glasses → phone app | Meta DAT SDK 1.0.1; MP4/MOV ≥ 1280 px, 30 fps, audio | Nikko |
+| I2 | Phone → upload service → R2 | `POST /api/uploads/presign` `{identity, name, type, size, title, durationSec}` → `{putUrl, receipt, requestId}`; `PUT putUrl` (15 min); `POST /api/uploads/complete` `{identity, receipt}` (60 min); `Authorization: Bearer <SpacetimeDB token>` | Nikko (both sides) |
+| I3 | Upload service → DB | `create_memory {requestId, title, sourceUrl, pipelineIdentity, durationUs}` → memory row `uploaded` | Nikko (caller) · Jerry (reducer) |
 | I4 | GPU worker ↔ DB | poll `SELECT * FROM memory WHERE status = 'uploaded'`; `set_memory_status [id, status, progress, manifestUrl, error]`; uploaded → processing → ready / failed | Yifan (worker) · Jerry (reducer) |
-| I5 | GPU worker ↔ R2 | read `videos/<owner>/<requestId>.<ext>`; write `memories/<memoryId>/` once (`memory.json`, splats, collider, audio) | Yifan |
-| I6 | Viewer ← R2 | `memory.json` schema: `packages/shared/src/manifest.ts` = `pipeline/memreplay/manifest.py` | Yifan (writer) · Nikko (reader) |
-| I7 | Viewer ↔ DB | WebSocket subscription; reducers: sign-in `register_account`, `set_display_name`; party `create_party`, `join_room`, `leave_room`, `transfer_leadership`, `attach_party_memory`; time (leader only) `set_paused`, `seek`, `set_playback_speed`, `set_branch`, `fork_branch`; interaction `grab`, `move_object`, `release`, `save_branch_keyframes`; presence `set_pose`; clock `sample_clock` | Jerry (server) · Nikko (engine calls) · Yifan (UI/adapter) |
+| I5 | GPU worker ↔ R2 | read `videos/<owner>/<requestId>.<ext>`; write `memories/<memoryId>/` once (`memory.json`, splats, collider, audio) | Yifan (worker) · Jerry (bucket) |
+| I6 | Viewer ← R2 | `memory.json` schema: `packages/shared/src/manifest.ts` = `pipeline/memreplay/manifest.py` | Yifan (writer) · Jerry (reader) |
+| I7 | Viewer ↔ DB | WebSocket subscription; reducers: sign-in `register_account`, `set_display_name`; party `create_party`, `join_room`, `leave_room`, `transfer_leadership`, `attach_party_memory`; time (leader only) `set_paused`, `seek`, `set_playback_speed`, `set_branch`, `fork_branch`; interaction `grab`, `move_object`, `release`, `save_branch_keyframes`; presence `set_pose`; clock `sample_clock` | Jerry (server and client) |
 
 **Sign-in (changed tonight):** Google sign-in is gone. People sign in with a **name**; `register_account` binds it to
 a **personal key** (`memos1.…`, stored by the browser/phone) so the same identity works on another device. Guests can
@@ -49,15 +48,14 @@ still set a display name with `set_display_name`; a name registered to a key can
 
 | Branch | Why | What to do |
 |---|---|---|
-| `origin/frontend-quest`, `origin/frontend-phone` (Andrew) | Built on a 9-hour-old `main`; they rewrite `input-xr.ts`, `style.css` and add a second VR panel (`xr-panel.ts`), all superseded by the merged glass UI and VR panel (PR #4, tested on a Quest 3S, which already credits these fixes) | Don't merge. Open small PRs against `main` for anything still missing. |
-| `origin/pipe/motion-extraction-2` (Andrew) | A pipeline fix (prop motion separation, colour tags) on an old `main`; overlaps files with pipeline runs in progress tonight | Andrew + Yifan port it onto current `main` after tonight's runs, with tests. |
-| `apps/ios/CameraAccess` (Nikko, merged) | A second phone app that duplicates SceneCapture | Keep as reference only; port its upload-queue durability into SceneCapture, then delete it. |
+| `origin/frontend-quest`, `origin/frontend-phone` | Built on an old `main`; they rewrite `input-xr.ts` and `style.css` and add a second VR panel, all superseded by the merged glass UI and VR panel (PR #4, which already credits their fixes) | Don't merge. Jerry may cherry-pick anything still useful into `apps/web`. |
+| `origin/pipe/motion-extraction-2` | A pipeline fix (prop motion separation, colour tags) on an old `main` | Yifan ports it onto current `main` after tonight's runs, with tests. |
+| `apps/ios/CameraAccess` (merged) | A second phone app that duplicates SceneCapture | Reference only: Nikko ports its upload-queue durability into SceneCapture, then deletes it. |
 
 ## What's left before the demo (owner)
 
-1. Cloud: Maincloud database, R2 bucket (public read, CORS), upload service and viewer on HTTPS (**Jerry**).
+1. Hosting: Maincloud database, R2 bucket (public read, CORS), upload service and viewer on HTTPS (**Jerry**).
 2. GPU worker running on Runpod, one real upload end to end (**Yifan**).
-3. SceneCapture on a real iPhone with the glasses, durable upload queue (**Jerry, Nikko**).
-4. Viewer party fixes: VR controls respect the leader, no junk take from a guest's catch, stale takes hidden after a
-   scene switch (**Nikko, Yifan**).
-5. Demo clip recorded and run through the pipeline; multi-headset party test (**Andrew**).
+3. Phone app on a real iPhone with the glasses (DAT SDK), durable upload queue (**Nikko**).
+4. Viewer party fixes: VR controls respect the leader, no junk take from a guest's catch, stale takes hidden after a scene switch; multi-headset test (**Jerry**, after hosting).
+5. Demo clip recorded by everyone, run through the pipeline (**Yifan**).

@@ -31,11 +31,13 @@ What's fixed and what's still open: [docs/INTEGRATION.md](docs/INTEGRATION.md) �
 
 ## Who does what
 
+Full roles, interface owners and working rules: [docs/TEAM.md](docs/TEAM.md). System design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 | Person | Owns | Folders |
 |---|---|---|
-| **Vision (one person)** | The whole pipeline: one glasses clip in, `memory.json` out, plus the worker that picks up uploads. Owns the GPU pod. | `pipeline/` |
-| **P3 · XR client** | Quest rendering, grab + physics, timeline in VR, people ghosts, audio. Next: test on the Quest (controls, frame rate, load time). | `apps/web/` |
-| **P4 · Multiplayer & phone** | SpacetimeDB module, network adapter, room panel, phone controls, upload, demo | `server/`, `apps/web/src/net/`, `apps/web/src/session.ts` |
+| **Nikko** | Glasses and upload: the phone app (Meta glasses capture, durable upload queue) and the upload service | `apps/ios/`, `server/upload/` |
+| **Jerry** | Hosting first (Maincloud database, R2 bucket, upload service and viewer on HTTPS) and the database rules; then the web viewer (Quest, phone, desktop) | `server/spacetime/`, `apps/web/` |
+| **Yifan** | The pipeline: video → scene on Runpod, the GPU worker, the scene format | `pipeline/`, `packages/shared/` |
 
 ---
 
@@ -52,7 +54,7 @@ LOCAL_HTTP=1 npm run dev
 
 Open http://127.0.0.1:5173. The local demo uses a procedural splat floor, a moving ball and a can, with no downloads. Pause, drag an object, release to throw, then play the new take. Select **Original** to return to the untouched recording. Load another scene with `?memory=<manifest-url>`; `?memory=/mock/memory.json` loads a demo scene whose splat comes from sparkjs.dev (needs internet).
 
-**Exploring a reconstructed memory.** The recorded camera path is drawn on the floor. `?mode=free` (default) lets you go anywhere; `?mode=guided`, or the **Guided path** toggle, keeps you within 0.75 m of the path and fogs the view as you look where the camera never looked, because a scene from one hand-held camera is only reliable there. Stretches where tracking was lost fade to black in guided and wearer's view. **Wearer's view** replays the recording's own camera. On a laptop, walk with **W/A/S/D** (or the up/down arrows), **Q/E** to go down/up, **Shift** to run; drag to look around. `?lod=0` draws every Gaussian (for comparisons; slower). `/status/index.html` shows pipeline progress and links to every scene (reads `/memories/status.json`).
+**Exploring a reconstructed memory.** The recorded camera path is drawn on the floor. A recorded memory opens in **follow** mode (no `?mode=`, or `?mode=follow`; `apps/web/src/follow.ts`): while it plays you are carried along the wearer's path at their eye height and drag to look anywhere (the headset turns your head in VR), with the viewer's own field of view and no exposure replay. Pause (Space, the Play button, A/X in VR) and you can roam anywhere with the usual walking controls, and grab and throw as before; Play glides you back onto the path at the current time in about 0.6 s, keeping your look direction. `?mode=free` lets you go anywhere while it plays; `?mode=guided`, or the **Guided path** toggle, keeps you within 0.75 m of the path and fogs the view as you look where the camera never looked, because a scene from one hand-held camera is only reliable there. Stretches where tracking was lost fade to black in guided, follow and wearer's view. **Wearer's view** replays the recording's own camera. The chip above the dock shows the view and switches follow → free → wearer's view; the ⋯ menu has the same switches (**Follow the walk**, **Wearer's view**, **Guided path**). On a laptop, walk with **W/A/S/D** (or the up/down arrows), **Q/E** to go down/up, **Shift** to run; drag to look around. `?lod=0` draws every Gaussian (for comparisons; slower). `/status/index.html` shows pipeline progress and links to every scene (reads `/memories/status.json`).
 
 Plain `npm run dev` serves **HTTPS** with a self-signed certificate on every network interface, for opening the laptop's LAN IP from a headset or phone. `LOCAL_HTTP=1` serves plain http on 127.0.0.1 only.
 

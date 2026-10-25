@@ -46,6 +46,8 @@
 
     <!-- The dock: playback within thumb reach. -->
     <section id="hud" class="glass dock" aria-label="Playback">
+      <!-- Which view you are in (follow the walk, free camera, wearer's view); a click switches to the next. -->
+      <button id="view-mode" type="button" title="View: follow the walk, free camera or wearer's view. Click to switch." hidden><span class="dot" aria-hidden="true"></span><span class="sr-only">View: </span><span id="view-mode-label">Following the walk</span></button>
       <fieldset id="timeline-controls" disabled>
         <legend class="sr-only">Playback and takes</legend>
         <div class="dock-grid">
@@ -75,6 +77,7 @@
     <!-- View options, above the dock. -->
     <section id="more-sheet" class="glass popover" aria-label="View options" hidden>
       <div id="more-toggles">
+        <label class="toggle" title="While it plays, walk the recorded path and look anywhere; pause to roam"><input id="follow" type="checkbox" role="switch" /> <span>Follow the walk</span></label>
         <label class="toggle" title="See the memory through the glasses, as it was recorded"><input id="eyes" type="checkbox" role="switch" /> <span>Wearer's view</span></label>
         <label class="toggle" title="Stay near where the glasses went; what they never saw fades out"><input id="guided" type="checkbox" role="switch" /> <span>Guided path</span></label>
         <label class="toggle" title="Show the physics shapes"><input id="debug" type="checkbox" role="switch" /> <span>Colliders</span></label>
@@ -89,6 +92,7 @@
         <summary>How to use</summary>
         <ul>
           <li id="hide-ui-help">Use Hide UI at the top (or press <kbd>H</kbd>) to clear the view. A faint Show UI button stays available; tap it, double-tap the scene, or press <kbd>H</kbd> / <kbd>Esc</kbd> to restore controls. This also works in Wearer's view.</li>
+          <li>Follow the walk (the default for hosted recordings): while it plays you move along the recorded path and drag to look anywhere. Pause<span class="pointer-fine"> (<kbd>Space</kbd>)</span> to roam freely; Play glides you back onto the path. The chip above the dock switches to a free camera or the wearer's view.</li>
           <li class="pointer-fine">Drag to look around, scroll to zoom. <kbd>Space</kbd> plays or pauses, <kbd>←</kbd> <kbd>→</kbd> step, <kbd>[</kbd> <kbd>]</kbd> switch takes.</li>
           <li class="pointer-coarse">Drag the scene to look around, pinch to zoom, and use the pad to walk.</li>
           <li>The Camera button switches between free look and following the recorded wearer's view.</li>
