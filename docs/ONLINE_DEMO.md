@@ -22,6 +22,17 @@ Production hosting must serve `index.html` for room paths, including refreshes. 
 
 Each device still needs working internet. A slow first download or a disconnected client is possible, but the phone no longer depends on the Mac's outbound tunnel. This is a public synthetic demo. Google sign-in is not configured, and the hosted copy hides capture/upload controls because no hosted upload service is connected. Existing local recordings were not copied to the cloud.
 
+### Connection recovery
+
+The site connects to the shared cloud database automatically. The owner does not need to stay signed in or keep a browser open. Refresh once after this update to load the new client.
+
+- If a connection drops, the app retries automatically. Returning to the page or restoring internet checks the connection again; an unanswered clock sample replaces a stale socket.
+- **Create party** and **Join party** show **Connecting…** while waiting up to 15 seconds for a usable connection. If internet is still unavailable, the app explains that and lets you try again. **Reconnect** also appears beside the connection status.
+- A resumed party keeps its code and resynchronizes with the shared database. Leadership can still transfer while a participant is disconnected.
+- A reducer is retried only if the SDK confirms it was never sent. Calls whose result is unknown are not replayed, avoiding duplicate party creation. Expired or rejected Google credentials still require signing in again; the app never silently replaces a Google identity with a guest.
+
+Verification: all 109 runnable Vitest tests and 75 viewer tests passed (two Node Web Locks cases skipped), including connection loss, stalled handshakes, delayed subscription readiness, rejected authentication, safe retry, timeout, and disposal. A browser connected through a temporary local fault proxy to Maincloud verified that creating a party while offline waits and completes after reconnection, and that an existing party returns to **Connected** at the same room path after another disconnect. The test proxy was isolated from the public site. Physical iPhone sleep/wake recovery has not yet been tested.
+
 ### Party-code checks
 
 - The code field starts blank and appears at the top of the party panel, including a fresh phone visit. **Join party** or the keyboard's Enter/Go submits it. Guests do not need Google sign-in.

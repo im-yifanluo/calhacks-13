@@ -1,6 +1,6 @@
 import { googleCredential, credentialExpired } from "../auth";
 import { DbConnection, tables } from "../module_bindings";
-import type { Identity } from "spacetimedb";
+import { DisconnectedError, type Identity } from "spacetimedb";
 import type {
   Memory,
   Room,
@@ -49,6 +49,9 @@ export function tokenRejected(error: unknown): boolean {
  * unreachable for up to about 25 s.
  */
 export const RECONNECT_MAX_DELAY_MS = 5000;
+export const CONNECTION_WAIT_MS = 15000;
+const CONNECTION_WATCHDOG_MS = 20000;
+const HEARTBEAT_TIMEOUT_MS = 8000;
 /** Delay before rebuilding after the n-th failed first connection (the SDK only retries established ones). */
 export const initialRetryDelayMs = (failures: number) =>
   Math.min(RECONNECT_MAX_DELAY_MS, 1000 * 2 ** Math.max(0, failures - 1));
@@ -154,6 +157,11 @@ export class Multiplayer extends EventTarget {
   private bestRtt = Infinity;
   private clockTimer?: ReturnType<typeof setInterval>;
   private retryTimer?: ReturnType<typeof setTimeout>;
+  private watchdog?: ReturnType<typeof setTimeout>;
+  private heartbeat?: ReturnType<typeof setTimeout>;
+  private connecting = false;
+  private generation = 0;
+  private authBlocked = false;
   private initialFailures = 0;
   private disposed = false;
   /** The token this page holds the lock for. */
@@ -162,6 +170,17 @@ export class Multiplayer extends EventTarget {
   private key = "";
   private poseAt = 0;
   private queued = false;
+  constructor() {
+    super();
+    globalThis.window?.addEventListener?.("online", this.resume);
+    globalThis.window?.addEventListener?.("pageshow", this.resume);
+    globalThis.document?.addEventListener?.("visibilitychange", this.resume);
+  }
+  private resume = () => {
+    if (this.disposed || globalThis.document?.visibilityState === "hidden") return;
+    if (!this.ready || !this.connection?.isActive) this.reconnect();
+    else this.syncClock();
+  };
   private changed = () => {
     if (this.queued) return;
     this.queued = true;
@@ -175,11 +194,21 @@ export class Multiplayer extends EventTarget {
     return this.failure?.message ?? "";
   }
   connect() {
-    if (this.disposed) return;
+    if (this.disposed || this.authBlocked || this.connecting || (this.ready && this.connection?.isActive)) return;
+    this.connecting = true;
+    this.ready = false;
+    const generation = ++this.generation;
+    const previous = this.connection;
+    this.connection = undefined;
+    previous?.disconnect();
+    clearTimeout(this.retryTimer);
+    clearTimeout(this.heartbeat);
+    this.heartbeat = undefined;
+    this.watchConnection();
     const key = (this.key = `memreplay-token:${import.meta.env.VITE_STDB_DATABASE || "memory-replay"}`);
     const google = googleCredential();
     if (google) {
-      if (credentialExpired(google)) { this.ready = false; this.status = "Google session expired — sign in again"; this.changed(); return; }
+      if (credentialExpired(google)) { this.blockAuth("Google session expired — sign in again"); return; }
       return this.open(key, google);
     }
     const storage = sessionStorage;
@@ -188,7 +217,7 @@ export class Multiplayer extends EventTarget {
     void claimStoredToken(storage, key, this.locks)
       .catch(() => ({ token: stored, release: () => {} }))
       .then(({ token, release }) => {
-        if (this.disposed) return release();
+        if (this.disposed || generation !== this.generation) return release();
         if (token) this.hold(token, release);
         else {
           this.status = "This identity is open in another tab — connecting as a new guest…";
@@ -196,6 +225,37 @@ export class Multiplayer extends EventTarget {
         }
         this.open(key, token);
       });
+  }
+  /** Replace a stalled socket, keeping this visitor's identity and the shared database. */
+  reconnect() {
+    if (this.disposed || this.authBlocked) return;
+    this.connecting = false;
+    this.ready = false;
+    this.status = "Reconnecting…";
+    this.changed();
+    this.connect();
+  }
+  private blockAuth(message: string) {
+    this.authBlocked = true;
+    this.connecting = false;
+    this.ready = false;
+    clearTimeout(this.retryTimer);
+    clearTimeout(this.watchdog);
+    this.status = message;
+    this.changed();
+  }
+  private watchConnection() {
+    clearTimeout(this.watchdog);
+    this.watchdog = setTimeout(() => this.reconnect(), CONNECTION_WATCHDOG_MS);
+  }
+  private retry() {
+    if (this.disposed || this.authBlocked) return;
+    this.connecting = false;
+    const delay = initialRetryDelayMs(++this.initialFailures);
+    this.status = `Can't reach the multiplayer server — retrying in ${seconds(delay)} s`;
+    clearTimeout(this.retryTimer);
+    this.retryTimer = setTimeout(() => this.connect(), delay);
+    this.changed();
   }
   /** Keep the lock for `token` (taking it now if no release is given) and let go of any other. */
   private hold(token: string, release?: () => void) {
@@ -221,8 +281,11 @@ export class Multiplayer extends EventTarget {
       .withToken(storedToken)
       .withAutomaticReconnect({ maxDelayMs: RECONNECT_MAX_DELAY_MS })
       .onConnect((conn, identity, token) => {
+        if (this.connection !== connection || this.disposed) return;
         connected = true;
+        this.connecting = false;
         this.initialFailures = 0;
+        this.bestRtt = Infinity;
         this.identity = identity;
         this.token = token;
         // Lock before storing: a tab duplicated from now on copies the token and must find it taken.
@@ -249,6 +312,8 @@ export class Multiplayer extends EventTarget {
           .subscriptionBuilder()
           // Also runs after every automatic reconnect, once the cache is replayed.
           .onApplied(() => {
+            if (this.connection !== connection || this.disposed || !conn.isActive) return;
+            clearTimeout(this.watchdog);
             this.ready = true;
             this.status = "Connected";
             this.resolve("connection");
@@ -257,7 +322,12 @@ export class Multiplayer extends EventTarget {
             if (!this.clockTimer)
               this.clockTimer = setInterval(() => this.syncClock(), 30000);
           })
-          .onError((ctx) => this.report(ctx.event, "connection"))
+          .onError((ctx) => {
+            if (this.connection !== connection || this.disposed) return;
+            this.ready = false;
+            this.report(ctx.event, "connection");
+            this.retry();
+          })
           .subscribe([
             tables.memory,
             tables.room,
@@ -272,6 +342,8 @@ export class Multiplayer extends EventTarget {
           ]);
       })
       .onAutomaticReconnect((_conn, identity, token) => {
+        if (this.connection !== connection || this.disposed) return;
+        this.ready = false;
         this.identity = identity;
         this.token = token;
         this.bestRtt = Infinity;
@@ -284,23 +356,26 @@ export class Multiplayer extends EventTarget {
       .onDisconnect((_ctx, error, nextAttempt, nextDelayMs) => {
         if (this.connection !== connection || this.disposed) return;
         this.ready = false;
-        this.status =
-          nextAttempt === undefined
-            ? "Disconnected — reload to reconnect"
-            : `Connection lost — reconnecting in ${seconds(nextDelayMs ?? 0)} s…`;
+        if (this.authBlocked) return;
+        if (nextAttempt === undefined) this.retry();
+        else {
+          this.status = `Connection lost — reconnecting in ${seconds(nextDelayMs ?? 0)} s…`;
+          this.watchConnection();
+        }
         if (error) this.report(error, "connection");
         this.changed();
       })
       .onConnectError((_ctx, error, nextAttempt, nextDelayMs) => {
         if (this.connection !== connection || this.disposed) return;
         this.ready = false;
-        if (nextAttempt !== undefined) {
+        this.connecting = false;
+        if (googleCredential() && storedToken && tokenRejected(error)) {
+          this.blockAuth("Google sign-in rejected — sign in again");
+        } else if (error.name === "IdentityChangedError") {
+          this.blockAuth("Your identity changed — reload to sign in again");
+        } else if (nextAttempt !== undefined) {
           this.status = `Reconnecting… (attempt ${nextAttempt}, next in ${seconds(nextDelayMs ?? 0)} s)`;
-        } else if (connected) {
-          this.status = "Connection failed — reload to retry";
-        } else if (googleCredential() && storedToken && tokenRejected(error)) {
-          this.status = "Google sign-in rejected — sign in again";
-        } else if (storedToken && tokenRejected(error)) {
+        } else if (!connected && storedToken && tokenRejected(error)) {
           // The server rejects this tab's saved identity: forget it and join as a new guest.
           sessionStorage.removeItem(key);
           this.held?.release();
@@ -311,12 +386,7 @@ export class Multiplayer extends EventTarget {
           return;
         } else {
           // First connection failed (server down or unreachable). The SDK never retries these.
-          const delay = initialRetryDelayMs(++this.initialFailures);
-          this.status = `Can't reach the multiplayer server — retrying in ${seconds(delay)} s`;
-          clearTimeout(this.retryTimer);
-          this.retryTimer = setTimeout(() => {
-            if (!this.disposed) this.connect();
-          }, delay);
+          this.retry();
         }
         this.report(error, "connection");
       })
@@ -326,20 +396,57 @@ export class Multiplayer extends EventTarget {
   private syncClock() {
     const credential = googleCredential();
     if (credential && credentialExpired(credential)) {
-      this.ready = false;
-      this.status = "Google session expired — sign in again";
+      this.blockAuth("Google session expired — sign in again");
       this.connection?.disconnect();
-      this.changed();
       return;
     }
-    if (this.ready)
-      void this.attempt(
-        () =>
-          this.connection!.reducers.sampleClock({
-            clientSentUs: BigInt(Date.now()) * 1000n,
-          }),
-        null,
-      );
+    const connection = this.connection;
+    if (!this.ready || !connection || this.heartbeat) return;
+    // A suspended phone can leave a socket looking open. An acknowledged
+    // clock sample detects that without replaying any party/physics mutations.
+    const timer = this.heartbeat = setTimeout(() => {
+      if (this.connection === connection) this.reconnect();
+    }, HEARTBEAT_TIMEOUT_MS);
+    void connection.reducers.sampleClock({ clientSentUs: BigInt(Date.now()) * 1000n })
+      .catch(() => { if (this.connection === connection && this.ready) this.reconnect(); })
+      .finally(() => {
+        clearTimeout(timer);
+        if (this.heartbeat === timer) this.heartbeat = undefined;
+      });
+  }
+  /** Wait for both the socket and its subscribed tables before a user-requested call. */
+  private waitUntilReady(timeoutMs: number): Promise<void> {
+    if (this.ready && this.connection?.isActive) return Promise.resolve();
+    if (this.ready) this.reconnect();
+    else if (!this.connection && !this.connecting) this.connect();
+    return new Promise((resolve, reject) => {
+      const finish = (error?: Error) => {
+        clearTimeout(timer);
+        this.removeEventListener("change", check);
+        error ? reject(error) : resolve();
+      };
+      const check = () => {
+        if (this.disposed) finish(new Error("This page's connection was closed"));
+        else if (this.authBlocked) finish(new Error(this.status));
+        else if (this.ready && this.connection?.isActive) finish();
+      };
+      const timer = setTimeout(() => finish(new Error("Still reconnecting. Check your internet connection, then try again.")), Math.max(0, timeoutMs));
+      this.addEventListener("change", check);
+      check();
+    });
+  }
+  /** One reducer only: retry only when the SDK guarantees it was never sent. */
+  async callConnected<T>(action: () => Promise<T>, timeoutMs = CONNECTION_WAIT_MS): Promise<T> {
+    const deadline = Date.now() + timeoutMs;
+    for (let attempt = 0; ; attempt++) {
+      await this.waitUntilReady(deadline - Date.now());
+      try { return await action(); }
+      catch (error) {
+        // UnknownCallResultError means the server may have committed it: never replay.
+        if (!(error instanceof DisconnectedError) || attempt >= 1 || Date.now() >= deadline) throw error;
+        this.reconnect();
+      }
+    }
   }
   private calibrate(row: {
     identity: Identity;
@@ -378,9 +485,11 @@ export class Multiplayer extends EventTarget {
   async attempt(
     action: () => Promise<unknown>,
     kind: string | null = "request",
+    waitForConnection = false,
   ): Promise<string | undefined> {
     try {
-      if (!this.ready) throw new Error("Wait for the multiplayer connection");
+      if (waitForConnection) await this.waitUntilReady(CONNECTION_WAIT_MS);
+      else if (!this.ready) throw new Error("Wait for the multiplayer connection");
       await action();
       if (kind !== null) this.resolve(kind);
       return undefined;
@@ -504,10 +613,18 @@ export class Multiplayer extends EventTarget {
   }
   dispose() {
     this.disposed = true;
+    this.ready = false;
+    this.generation++;
+    globalThis.window?.removeEventListener?.("online", this.resume);
+    globalThis.window?.removeEventListener?.("pageshow", this.resume);
+    globalThis.document?.removeEventListener?.("visibilitychange", this.resume);
     if (this.clockTimer) clearInterval(this.clockTimer);
     clearTimeout(this.retryTimer);
+    clearTimeout(this.watchdog);
+    clearTimeout(this.heartbeat);
     this.connection?.disconnect();
     this.held?.release();
     this.held = undefined;
+    this.changed();
   }
 }

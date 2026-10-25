@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { computeReconnectDelayMs, Identity, resolveReconnectPolicy } from "spacetimedb";
+import { computeReconnectDelayMs, DisconnectedError, Identity, resolveReconnectPolicy, UnknownCallResultError } from "spacetimedb";
 import { DbConnection } from "../apps/web/src/module_bindings";
 import {
   claimStoredToken,
@@ -86,12 +86,13 @@ function fakeConnection() {
     subscribe: () => ({}),
   };
   return {
+    isActive: true,
     db: Object.fromEntries(
       ["memory", "room", "party", "profile", "player", "timeline", "branch", "objectState", "branchKeyframes", "clockSample"].map((n) => [n, table()]),
     ),
     subscriptionBuilder: () => subscription,
     reducers: { sampleClock: async () => {} },
-    disconnect() {},
+    disconnect: vi.fn(),
     applied: () => applied(),
   };
 }
@@ -205,6 +206,128 @@ describe("connection", () => {
     expect(net.status).toBe("Resynchronizing…");
     conn.applied(); // the SDK replays the subscription after a reconnect
     expect([net.ready, net.status, net.error]).toEqual([true, "Connected", ""]);
+  });
+});
+
+describe("connection recovery", () => {
+  function setup() {
+    vi.useFakeTimers();
+    const builds = recordBuilds();
+    tab("recovery");
+    const net = multiplayer(undefined);
+    net.connect();
+    const establish = (build = builds.at(-1)!) => {
+      build.on.onConnect(build.conn, new Identity(7n), "same-visitor");
+      build.conn.applied();
+    };
+    return { builds, net, establish };
+  }
+
+  test("a terminal disconnect rebuilds automatically, preserves identity, and ignores old callbacks", async () => {
+    const { builds, net, establish } = setup();
+    establish();
+    const old = builds[0];
+    old.on.onDisconnect({}, new Error("Socket ended"));
+    expect(net.ready).toBe(false);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(builds).toHaveLength(2);
+    expect(builds[1].token).toBe("same-visitor");
+    expect(old.conn.disconnect).toHaveBeenCalledOnce();
+    old.conn.applied();
+    old.on.onAutomaticReconnect(old.conn, new Identity(99n), "obsolete-token");
+    expect(net.ready).toBe(false);
+    expect(net.identity?.toHexString()).toBe(new Identity(7n).toHexString());
+    establish();
+    expect([net.ready, net.status]).toEqual([true, "Connected"]);
+  });
+
+  test("a party request waits for the new socket and subscribed data after stale readiness", async () => {
+    const { builds, net, establish } = setup();
+    establish();
+    builds[0].conn.isActive = false; // browser has not delivered its disconnect callback yet
+    const create = vi.fn(async () => "party-code");
+    const result = net.callConnected(create);
+    expect(create).not.toHaveBeenCalled();
+    expect(builds).toHaveLength(2);
+    builds[1].on.onConnect(builds[1].conn, new Identity(7n), "same-visitor");
+    await Promise.resolve();
+    expect(create).not.toHaveBeenCalled(); // the subscription still has to arrive
+    builds[1].conn.applied();
+    expect(await result).toBe("party-code");
+    expect(create).toHaveBeenCalledOnce();
+  });
+
+  test("only a reducer that was definitely never sent is retried", async () => {
+    const { builds, net, establish } = setup();
+    establish();
+    const create = vi.fn().mockRejectedValueOnce(new DisconnectedError()).mockResolvedValue("new-party");
+    const result = net.callConnected(create);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(builds).toHaveLength(2);
+    establish();
+    expect(await result).toBe("new-party");
+    expect(create).toHaveBeenCalledTimes(2);
+    const uncertain = vi.fn().mockRejectedValue(new UnknownCallResultError());
+    await expect(net.callConnected(uncertain)).rejects.toBeInstanceOf(UnknownCallResultError);
+    expect(uncertain).toHaveBeenCalledOnce();
+    expect(builds).toHaveLength(2);
+  });
+
+  test("waiting is bounded and disposed pages never send a queued party request", async () => {
+    const { net } = setup();
+    const create = vi.fn(async () => {});
+    const timeout = expect(net.callConnected(create, 100)).rejects.toThrow("Still reconnecting");
+    await vi.advanceTimersByTimeAsync(100);
+    await timeout;
+    expect(create).not.toHaveBeenCalled();
+    const disposed = expect(net.callConnected(create)).rejects.toThrow("connection was closed");
+    net.dispose();
+    await disposed;
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  test("a first handshake that never finishes is replaced by the watchdog", async () => {
+    const { builds } = setup();
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(builds).toHaveLength(2);
+    expect(builds[0].conn.disconnect).toHaveBeenCalledOnce();
+  });
+
+  test("returning online restarts a disconnected page and resumed stale sockets fail a heartbeat", async () => {
+    const window = new EventTarget();
+    const document = Object.assign(new EventTarget(), { visibilityState: "visible" });
+    vi.stubGlobal("window", window);
+    vi.stubGlobal("document", document);
+    const { builds, net, establish } = setup();
+    window.dispatchEvent(new Event("online"));
+    expect(builds).toHaveLength(2);
+    establish();
+    await vi.advanceTimersByTimeAsync(0); // finish the initial clock sample
+    builds[1].conn.reducers.sampleClock = () => new Promise(() => {});
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(builds).toHaveLength(3);
+    expect(net.ready).toBe(false);
+    net.dispose();
+    window.dispatchEvent(new Event("online"));
+    window.dispatchEvent(new Event("pageshow"));
+    expect(builds).toHaveLength(3);
+  });
+
+  test("rejected Google authentication never retries as a guest", async () => {
+    const { builds, net } = setup();
+    net.dispose();
+    const credential = `header.${Buffer.from(JSON.stringify({ exp: Date.now() / 1000 + 3600 })).toString("base64url")}.signature`;
+    sessionStorage.setItem("memreplay-google-credential", credential);
+    const signedIn = multiplayer(undefined);
+    signedIn.connect();
+    builds[1].on.onConnectError({}, Object.assign(new Error("Rejected"), { name: "WebSocketTokenError", status: 401 }));
+    signedIn.reconnect();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(builds).toHaveLength(2);
+    await expect(signedIn.callConnected(async () => {})).rejects.toThrow("Google sign-in rejected");
+    expect(sessionStorage.getItem("memreplay-google-credential")).toBe(credential);
   });
 });
 
