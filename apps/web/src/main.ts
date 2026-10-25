@@ -12,6 +12,7 @@ import { mountAuth } from "./auth.js";
 import { DEFAULT_MANIFEST, loadedManifest, Session } from "./session.js";
 import { PhoneJoystick, isTouchDevice } from "./phone-joystick.js";
 import { PathGuide } from "./guided.js";
+import { PathFollower, placeHead } from "./follow.js";
 import { applyExposure, clearExposure } from "./exposure.js";
 import { AutoHide, formatTime, mountVRButton, percentAt, popover, Toast } from "./ui.js";
 import "./style.css";
@@ -22,6 +23,7 @@ const status = element("status"), loading = element("loading"), warning = elemen
 const play = element<HTMLButtonElement>("play"), scrub = element<HTMLInputElement>("scrub");
 const branches = element<HTMLSelectElement>("branches"), debug = element<HTMLInputElement>("debug");
 const eyes = element<HTMLInputElement>("eyes"), guided = element<HTMLInputElement>("guided");
+const follow = element<HTMLInputElement>("follow"), viewMode = element<HTMLButtonElement>("view-mode");
 let viewer: Viewer | undefined;
 const showWarning = (message: string) => { warning.hidden = false; warning.textContent = message; };
 const toast = new Toast(element("toast"), status);
@@ -116,10 +118,38 @@ async function main(): Promise<void> {
   };
   // A recorded memory opens from the wearer's first spot, inside the room, instead of outside it.
   if (!demo) standOnPath();
-  guided.checked = params.get("mode") === "guided";
+  const mode = params.get("mode");
+  guided.checked = mode === "guided";
   guide.setGuided(guided.checked);
   if (guided.checked) standOnPath();
-  guided.onchange = () => { guide.setGuided(guided.checked); if (guided.checked) standOnPath(); };
+  // Follow mode (follow.ts), the default for a recorded memory (no ?mode=, or ?mode=follow): while it plays you walk
+  // the recorded path and look where you like; paused, you roam anywhere. ?mode=free and ?mode=guided leave it off.
+  const follower = new PathFollower(memory.cameraTrack);
+  const followPos = new THREE.Vector3(), eyePos = new THREE.Vector3(), shift = new THREE.Vector3();
+  // A drag turns the view where you stand (it moves the scene with the pointer, as in a photo sphere) instead of
+  // orbiting a point ahead, and you can look up as well as down. Off again, the orbit's limits come back.
+  const followLook = (on: boolean) => {
+    controls.rotateSpeed = on ? -0.35 : 1; controls.enableZoom = !on;
+    controls.minPolarAngle = on ? Math.PI * 0.05 : 0; controls.maxPolarAngle = Math.PI * (on ? 0.95 : 0.49);
+    // Back to orbiting: a target above the eyes would make the orbit's floor limit lift the camera, so level it.
+    const reach = camera.position.distanceTo(controls.target), drop = reach * Math.cos(Math.PI * 0.49);
+    if (!on && camera.position.y - controls.target.y < drop) controls.target.y = camera.position.y - drop;
+  };
+  let lookInPlace = false;
+  const setFollow = (on: boolean) => {
+    if (on !== lookInPlace) { lookInPlace = on; followLook(on); }
+    follow.checked = on;
+    if (on && guided.checked) { guided.checked = false; guide.setGuided(false); }   // three modes: follow, free (guided), eyes
+  };
+  setFollow(!demo && !xrPreview && (mode === null || mode === "follow"));
+  follow.onchange = () => {
+    setFollow(follow.checked);
+    if (follow.checked && eyes.checked) { eyes.checked = false; applyEyes(); }
+  };
+  guided.onchange = () => {
+    if (guided.checked && follow.checked) setFollow(false);
+    guide.setGuided(guided.checked); if (guided.checked) standOnPath();
+  };
   const headPos = new THREE.Vector3(), headQuat = new THREE.Quaternion(), correction = new THREE.Vector3();
   // Lost-tracking stretches (the pipeline writes timeline.gaps; older memories have none).
   const gaps = (memory.manifest.timeline as { gaps?: [number, number][] }).gaps ?? [];
@@ -139,8 +169,10 @@ async function main(): Promise<void> {
   const grabbable = memory.objects.filter(o => o.definition.grabbable).length;
   element("asset-info").textContent = `${formatTime(duration)} · ${grabbable} ${grabbable === 1 ? "object" : "objects"} to throw`;
   document.title = `${title} · memos`;
-  status.textContent = touch ? "Pause, then drag an object where you want it. Play shows what happens."
-    : "Pause (Space), then drag an object where you want it. Play shows what happens.";
+  status.textContent = follow.checked
+    ? touch ? "Following the recorded walk. Pause to roam. Drag to look." : "Following the recorded walk. Space: pause to roam. Drag to look."
+    : touch ? "Pause, then drag an object where you want it. Play shows what happens."
+      : "Pause (Space), then drag an object where you want it. Play shows what happens.";
   loading.hidden = true; element<HTMLFieldSetElement>("timeline-controls").disabled = false;
   element("time-total").textContent = formatTime(duration);
   // Lost-tracking stretches on the scrubber.
@@ -188,24 +220,62 @@ async function main(): Promise<void> {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const preEyesPosition = new THREE.Vector3(), preEyesTarget = new THREE.Vector3();
-  eyes.onchange = () => {
+  function applyEyes() {
     if (eyes.checked) { preEyesPosition.copy(camera.position); preEyesTarget.copy(controls.target); }
     else { camera.position.copy(preEyesPosition); controls.target.copy(preEyesTarget); camera.fov = 65; camera.updateProjectionMatrix(); }
     controls.enabled = !eyes.checked && !xrPreview;
+  }
+  eyes.onchange = applyEyes;
+  // The view chip on the dock says which mode you are in; a click goes follow → free → wearer's view → follow.
+  viewMode.hidden = false;
+  viewMode.onclick = () => {
+    if (eyes.checked) { eyes.checked = false; applyEyes(); setFollow(true); }
+    else if (follow.checked) setFollow(false);
+    else if (!eyes.disabled) { eyes.checked = true; applyEyes(); }
+    else setFollow(true);
   };
+  // Pausing while following frees you to roam: say how, once, as the clock stops (an XR grab's "Holding…" follows it).
+  let framePlaying = currentViewer.timeline.playing;
+  currentViewer.subscribe(event => {
+    if (event.type !== "clock" || event.playing || !framePlaying || !follow.checked || eyes.checked) return;
+    if (currentViewer.timeline.time >= currentViewer.timeline.duration) return;
+    status.textContent = renderer.xr.isPresenting ? "Paused: roam with the left stick, or grab something. Play takes you back to the walk."
+      : touch ? "Paused: roam with the WALK pad, or drag an object. Play glides you back to the walk."
+        : "Paused: roam with W/A/S/D, or drag an object. Play glides you back to the walk.";
+  });
   const markers = element("markers"), roomPanel = element<HTMLDialogElement>("room-panel");
   let previous = 0, frames = 0, elapsed = 0, lastUI = 0, slowSeconds = 0, wasPlaying = false;
   renderer.setAnimationLoop(timestamp => {
     const dt = previous ? Math.min((timestamp - previous) / 1000, 0.1) : 0; previous = timestamp;
     xr.update(dt); currentViewer.update(dt);
     audio?.update(currentViewer.timeline.time, currentViewer.timeline.playing, currentViewer.timeline.speed);
+    // Follow mode: while the memory plays, the eyes are locked to the recorded path (wearer's view overrides it).
+    const following = follow.checked && !eyes.checked, locked = following && currentViewer.timeline.playing;
     if (eyes.checked && !renderer.xr.isPresenting) {
       sampleTrack(memory.cameraTrack, currentViewer.timeline.time, camera);
       camera.fov = memory.manifest.camera.fovYDeg; camera.updateProjectionMatrix();
       applyExposure(renderer.domElement, memory.cameraTrack, currentViewer.timeline.time);   // the recording's auto-exposure
-    } else if (!renderer.xr.isPresenting) { clearExposure(renderer.domElement); joystick.update(dt); if (controls.enabled) controls.update(); }
-    // Lost-tracking stretches: the room there was never reconstructed, so guided mode and the wearer's view fade out.
-    const lost = inGap(currentViewer.timeline.time) && (guide.guided || eyes.checked);
+      follower.step(false, 0, camera.position, dt, followPos);
+    } else if (!renderer.xr.isPresenting) {
+      clearExposure(renderer.domElement);
+      if (!locked) joystick.update(dt);
+      if (controls.enabled) {
+        eyePos.copy(camera.position); controls.update();
+        // Following, a drag only turns the view: put the eyes back where they were, the target with them.
+        if (following) { shift.subVectors(eyePos, camera.position); camera.position.add(shift); controls.target.add(shift); }
+      }
+      // Camera and target move together, so the look direction stays yours (also while gliding back on Play).
+      if (follower.step(locked, currentViewer.timeline.time, camera.position, dt, followPos, currentViewer.timeline.speed)) {
+        shift.subVectors(followPos, camera.position); camera.position.add(shift); controls.target.add(shift);
+      }
+    } else {
+      // VR: the rig moves so the headset lands on the path; the head turns freely.
+      camera.getWorldPosition(headPos);
+      if (follower.step(locked, currentViewer.timeline.time, headPos, dt, followPos, currentViewer.timeline.speed)) placeHead(rig, camera, followPos);
+    }
+    // Lost-tracking stretches: the room there was never reconstructed, so guided mode, the wearer's view and the
+    // followed walk fade out.
+    const lost = inGap(currentViewer.timeline.time) && (guide.guided || eyes.checked || locked);
     if (guide.guided && !eyes.checked) {
       camera.getWorldPosition(headPos); camera.getWorldQuaternion(headQuat);
       const outside = guide.excess(headPos);
@@ -253,6 +323,13 @@ async function main(): Promise<void> {
       document.querySelectorAll<HTMLButtonElement>(".fork-marker").forEach(marker => { marker.disabled = !canControl; });
       markers.querySelectorAll<HTMLElement>(".fork-marker").forEach(marker => marker.classList.toggle("active", marker.dataset.take === tl.activeId));
       document.body.classList.toggle("wearer-view", eyes.checked);
+      document.body.classList.toggle("follow-locked", locked);
+      const view = eyes.checked ? "eyes" : follow.checked ? (tl.playing ? "follow" : "roam") : guide.guided ? "guided" : "free";
+      if (viewMode.dataset.mode !== view) {
+        viewMode.dataset.mode = view;
+        element("view-mode-label").textContent = { eyes: "Wearer's view", follow: "Following the walk", roam: "Paused · roam freely",
+          guided: "Guided path", free: "Free camera" }[view];
+      }
       // Keep the status up while it matters (a hold or a throw); fade the overlay while the memory just plays.
       toast.hold(!!currentViewer.held || currentViewer.recording);
       autoHide.update(tl.playing && !currentViewer.held && !more.open && !roomPanel.open && warning.hidden && !scrub.matches(":active"));
@@ -274,6 +351,7 @@ async function main(): Promise<void> {
       if (slowSeconds >= 2 && pixelRatio > 1) { pixelRatio = 1; renderer.setPixelRatio(1); resizeScene(); }
     }
     session.update(dt);
+    framePlaying = tl.playing;
     renderer.render(scene, camera);
     // In VR, Spark sorts splats on a timer between frames and then restores whatever render target was current. After a
     // VR frame that is the headset's frame surface, which expires with the frame, so the restore fails with a WebGL
@@ -289,7 +367,7 @@ async function main(): Promise<void> {
     // Dev-only handles: multi-tab checks compare positionsAt(t) across tabs of one room; scripted screenshots use the rest.
     const probe = new THREE.Object3D();
     window.__memreplay = {
-      viewer: currentViewer, session, memory, audio, scene, grid, guide, camera, renderer, xr,
+      viewer: currentViewer, session, memory, audio, scene, grid, guide, camera, renderer, xr, controls, follower,
       get adapter() { return session.adapter; },
       positionsAt: (t: number) => Object.fromEntries(memory.objects.map(o => {
         sampleTrack(currentViewer.timeline.track(o.definition.id, o.track, t), t, probe);

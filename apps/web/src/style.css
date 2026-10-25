@@ -163,6 +163,19 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -0.01em; line
 @media (hover: hover) { #branches:hover { background-color: var(--chip-hover); } }
 #branches option { background: #18202a; color: var(--text); }
 
+/* The view chip (follow.ts, main.ts): on the dock's top edge, at its left end (the room sheet opens on the right),
+   or its right end on touch screens (the WALK pad is on the left); a click switches view. Solid, not blurred: it sits
+   outside the dock's box, where the dock's backdrop cannot reach. */
+#view-mode { position: absolute; left: 14px; bottom: calc(100% + 8px); min-width: 0; min-height: 36px; padding: 0 14px 0 11px; gap: 8px; background: var(--glass-solid); border: 1px solid var(--glass-border); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); font-size: 12px; font-weight: 650; letter-spacing: 0.01em; }
+.touch #view-mode { left: auto; right: 14px; min-height: 40px; }
+@media (hover: hover) { #view-mode:hover { background: var(--glass-hover); } }
+#view-mode .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
+#view-mode[data-mode="follow"] .dot { background: var(--accent); box-shadow: 0 0 8px rgba(140, 229, 221, 0.7); }
+#view-mode[data-mode="roam"] .dot { background: var(--fork); }
+#view-mode[data-mode="eyes"] .dot { background: #f2f5f7; }
+/* Following the walk, the WALK pad cannot move you, so it steps back until you pause. */
+.follow-locked #joystick { opacity: 0.35; }
+
 /* View options, above the dock's right end. */
 #more-sheet { position: fixed; z-index: 7; right: max(var(--right), calc((100vw - var(--dock-width)) / 2)); bottom: calc(var(--hud-space, 80px) + 10px); width: min(320px, calc(100vw - 24px)); max-height: calc(100dvh - var(--hud-space, 80px) - 90px); overflow: auto; padding: 8px; border-radius: var(--radius-m); }
 .toggle { display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 0 8px 0 12px; border-radius: var(--radius-s); font-size: 15px; font-weight: 550; cursor: pointer; }
