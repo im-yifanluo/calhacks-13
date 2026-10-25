@@ -19,7 +19,7 @@ import traceback
 import urllib.request
 from pathlib import Path
 
-PROGRESS = {"normalize": 0.15, "nouns": 0.2, "vipe": 0.55, "world": 0.6, "l0": 0.7, "objects": 0.8, "background": 0.93,
+PROGRESS = {"normalize": 0.15, "nouns": 0.2, "vipe": 0.55, "world": 0.6, "l0": 0.7, "objects": 0.8, "background": 0.92, "refine": 0.94, "bake": 0.95,
             "layers": 0.97}
 
 
@@ -162,7 +162,7 @@ def process(job: dict, root: Path) -> str:
         (work / "source.txt").write_text(src)
     for name in STAGES:
         run_stage(name, work)
-        progress = max(progress, PROGRESS[name])
+        progress = max(progress, PROGRESS.get(name, progress))   # stages added later (refine, bake) keep the last value
         set_status(mid, "processing", progress)
     merge(work, job.get("title") or f"Memory {mid}", str(mid), "uploaded-clip")
     merge(work, job.get("title") or f"Memory {mid}", str(mid), "uploaded-clip", static=True)

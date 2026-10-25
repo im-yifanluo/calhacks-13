@@ -93,7 +93,9 @@ def test_hlg_lut_is_monotonic_and_white_is_white():
     grey = hlg_to_sdr(np.stack([g, g, g], 1))
     assert np.all(np.diff(grey[:, 0]) >= -1e-9)
     assert np.allclose(grey[:, 0], grey[:, 1], atol=1e-3) and np.allclose(grey[:, 1], grey[:, 2], atol=1e-3)
-    assert 0.85 < hlg_to_sdr(np.array([[0.75, 0.75, 0.75]]))[0, 0] < 0.97   # HLG reference white -> near SDR white
+    # as macOS/iOS render HLG in SDR (fitted Oct 24): full signal -> white, reference white (75 %) -> about 61 %
+    assert hlg_to_sdr(np.array([[1.0, 1.0, 1.0]]))[0, 0] > 0.98
+    assert 0.55 < hlg_to_sdr(np.array([[0.75, 0.75, 0.75]]))[0, 0] < 0.67
 
 
 def test_points_sequence_roundtrip(tmp_path):

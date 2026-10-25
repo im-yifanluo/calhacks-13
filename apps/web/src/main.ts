@@ -167,7 +167,7 @@ async function main(): Promise<void> {
     status: () => status.textContent ?? "",
     room: () => {
       const summary = element("room-summary").textContent ?? "";
-      return summary === "" || summary === "Solo" ? "Solo" : summary.startsWith("Joining") ? summary : `Room ${summary}`;
+      return summary === "" || summary === "Solo" ? "Solo" : summary.startsWith("Joining") ? summary : `Party ${summary}`;
     },
     title: () => title,
     gaps: () => gaps,

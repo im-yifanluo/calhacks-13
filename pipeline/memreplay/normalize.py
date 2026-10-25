@@ -49,17 +49,24 @@ def _srgb_oetf(x: np.ndarray) -> np.ndarray:
     return np.where(x <= 0.0031308, 12.92 * x, 1.055 * np.power(x, 1 / 2.4) - 0.055)
 
 
+# Fitted (Oct 24) to how macOS/iOS show these clips: AVFoundation's SDR rendering of 16 frames from iPhone HDR,
+# Ray-Ban Meta exports and outdoor clips; mean error 3 levels of 255 (the previous curve, which put HLG reference
+# white at 85 %, was 36 levels too bright and flat). See docs/VISION_PIPELINE_REPORT.md, "Colour of the input".
+HLG_SYSTEM_GAMMA = 0.8478     # OOTF exponent on scene luminance
+HLG_EXPOSURE = 1.0233         # scene-linear 1.0 (full HLG signal) -> SDR white
+HLG_KNEE = 0.9451             # soft shoulder above this (linear)
+HLG_SATURATION = 1.0084
+
+
 def hlg_to_sdr(rgb: np.ndarray) -> np.ndarray:
-    """HLG BT.2020 signal (0..1, full range) -> sRGB/BT.709 signal (0..1).
-    HLG reference white (75 % signal, 203 nits) lands at about 85 % SDR linear; highlights roll off softly."""
+    """HLG BT.2020 signal (0..1, full range) -> sRGB/BT.709 signal (0..1), matching Apple's SDR rendering."""
     e = _hlg_inverse_oetf(np.clip(rgb, 0, 1))                                # scene light, 0..1
     ys = np.clip(e @ np.array([0.2627, 0.6780, 0.0593]), 1e-6, None)[..., None]
-    disp = e * ys ** 0.2                                                     # HLG OOTF, gamma 1.2 (1000-nit display)
-    lin = (disp @ _BT2020_TO_709.T) * (0.85 / 0.203)                         # 203 nits -> 0.85
-    lin = np.clip(lin, 0, None)
-    knee = 0.75                                                              # soft shoulder above the knee
-    over = lin > knee
-    lin = np.where(over, knee + (1 - knee) * np.tanh((lin - knee) / (1 - knee)), lin)
+    lin = (e * ys ** (HLG_SYSTEM_GAMMA - 1)) @ _BT2020_TO_709.T               # OOTF, then BT.2020 -> BT.709 primaries
+    y = (lin @ np.array([0.2126, 0.7152, 0.0722]))[..., None]
+    lin = np.clip((y + HLG_SATURATION * (lin - y)) * HLG_EXPOSURE, 0, None)
+    knee = HLG_KNEE
+    lin = np.where(lin > knee, knee + (1 - knee) * np.tanh((lin - knee) / (1 - knee)), lin)
     return _srgb_oetf(lin)
 
 

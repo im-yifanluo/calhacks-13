@@ -190,6 +190,13 @@ In the order we hit it. Every fix is in the code and the runbook.
   the NFS volume refuses chown. All fixed or worked around.
 
 **Footage**
+- **Colour of the input (fixed Oct 24 evening)**: the HDR → SDR conversion in S1 made every clip too bright and
+  flat with a pale sky: it put HLG reference white at 85 % brightness, about 4× too high. Refitted to how macOS/iOS
+  render the same frames (16 frames from the iPhone samples, Ray-Ban Meta exports and outdoor clips): proper HLG
+  inverse OETF, system gamma 0.85, full signal → SDR white, soft shoulder. Error against Apple's rendering went
+  from 36 to about 1 level of 255 ([before/after](colour_fix.jpg)). Every scene in §3 was trained on the old,
+  washed-out conversion, so their colours (and the viewer-gain fits) are relative to it; re-run S1 onward for any
+  clip whose colours matter.
 - **iPhone HDR** (HLG, BT.2020, 10-bit): plain decoding gives washed-out colours. Fix: a generated HLG→SDR 3D LUT.
 - **Long, mostly static walkthroughs**: great for the room, but there are no throws and few people, so the moving
   layer is thin on these clips.
