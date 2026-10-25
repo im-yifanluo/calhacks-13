@@ -80,7 +80,7 @@ Port 3055 avoids Docker, which often holds 3000/3001. Set `STDB_PORT=<port>` to 
 3. The leader controls playback, seeking, speed and take selection. Other members follow the clock and can explore/grab objects while paused.
 4. Use **Make leader** to transfer control. A leader's last disconnect elects another connected member. See [the complete party/Google test](docs/PARTIES.md).
 
-Without `?room=` the page is a solo session, exactly as before. If SpacetimeDB restarts, pages reconnect within about 5 s. Joining a room drops takes you made solo; **Leave** returns to solo. A room whose memory differs from the loaded one reloads the page with `?memory=<url>&room=<code>`. In dev builds, `window.__memreplay` exposes the viewer state for debugging.
+The server root `/` is a solo session. Joining or creating a party uses `/ROOMCODE`; opening or refreshing that address rejoins it. Existing `?room=<code>` invitations remain supported. If SpacetimeDB restarts, pages reconnect within about 5 s. Joining a room drops takes you made solo; **Leave** returns to `/`. The database selects the room's scene; asset URLs stay out of the shared room address. Production hosting needs SPA fallback for direct room paths. See [the hosted demo guide](docs/ONLINE_DEMO.md). In dev builds, `window.__memreplay` exposes the viewer state for debugging.
 
 **Check it works:**
 

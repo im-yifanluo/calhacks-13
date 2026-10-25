@@ -103,10 +103,26 @@ export type Device = "quest" | "phone" | "desktop";
 export const normalizeCode = (code: string | null | undefined) =>
   (code ?? "").trim().toUpperCase();
 
-/** The manifest this page loaded, as main.ts picks it: ?memory=, else the demo default. Absolute. */
-export function loadedManifest(href: string): string {
+/** /CODE is canonical. Old ?room= invitations still work; a path code takes precedence. */
+export function roomCode(href: string): string {
   const url = new URL(href);
-  return new URL(url.searchParams.get("memory") ?? DEFAULT_MANIFEST, url).href;
+  const match = /^\/([a-z0-9]{7})\/?$/i.exec(url.pathname);
+  return normalizeCode(match?.[1] ?? url.searchParams.get("room"));
+}
+
+const ROOM_MANIFEST_KEY = "memreplay-room-manifest:";
+
+/** Only a hint for the next load. The database always checks and replaces it after joining. */
+export function rememberRoomManifest(storage: Pick<Storage, "setItem">, code: string, manifest: string): void {
+  storage.setItem(ROOM_MANIFEST_KEY + normalizeCode(code), manifest);
+}
+
+/** Resolve the scene without putting its asset URL in the shared room address. */
+export function loadedManifest(href: string, storage?: Pick<Storage, "getItem">): string {
+  const url = new URL(href);
+  const code = roomCode(href);
+  const roomManifest = code ? storage?.getItem(ROOM_MANIFEST_KEY + code) : null;
+  return new URL(roomManifest ?? url.searchParams.get("memory") ?? DEFAULT_MANIFEST, url).href;
 }
 
 export function sameManifest(a: string, b: string, base: string): boolean {
@@ -114,19 +130,15 @@ export function sameManifest(a: string, b: string, base: string): boolean {
 }
 
 /**
- * This page's URL for room `code` (null: no room). `memory` replaces ?memory= when the room shows
- * another memory; otherwise the page's own ?memory= is kept, so a copied link opens the same scene.
+ * One server origin: /CODE joins a party, / starts solo. Scene URLs stay in the database.
  */
 export function roomUrl(
   href: string,
   code: string | null,
-  memory?: string,
 ): string {
   const url = new URL(href);
-  if (url.pathname === "/upload") url.pathname = "/";
-  if (memory !== undefined) url.searchParams.set("memory", memory);
-  if (code) url.searchParams.set("room", code);
-  else url.searchParams.delete("room");
+  url.pathname = code ? `/${normalizeCode(code)}` : "/";
+  url.search = "";
   url.hash = "";
   return url.href;
 }
@@ -362,7 +374,7 @@ export class Session {
   adapter?: NetAdapter;
   private viewer?: Viewer;
   private readonly avatars: Avatars;
-  /** ?room= of this page; cleared when that room cannot be joined. */
+  /** Room from the path or legacy query; cleared when it cannot be joined. */
   private urlRoom: string;
   /** The room this page is in ("" while it is a local session). */
   private room = "";
@@ -413,6 +425,7 @@ export class Session {
     joinForm: $<HTMLFormElement>("party-join-form"),
     code: $<HTMLInputElement>("room-code"),
     join: $<HTMLButtonElement>("room-join"),
+    solo: $<HTMLButtonElement>("room-solo"),
     codeShare: $("party-code-share"),
     currentCode: $("party-current-code"),
     copyCode: $<HTMLButtonElement>("party-copy-code"),
@@ -439,9 +452,7 @@ export class Session {
       (text) => !line || line.textContent === text,
       () => (this.adapter ? roomHint(this.room) : ""),
     );
-    this.urlRoom = normalizeCode(
-      new URL(location.href).searchParams.get("room"),
-    );
+    this.urlRoom = roomCode(location.href);
     const { ui } = this;
     ui.name.value = sessionStorage.getItem(NAME_KEY) || localStorage.getItem(NAME_KEY) || "Guest";
     ui.name.addEventListener("input", () => {
@@ -462,6 +473,7 @@ export class Session {
       if (!ui.join.disabled) void this.join(ui.code.value, false);
     };
     ui.copyCode.onclick = () => void this.copyCode();
+    ui.solo.onclick = () => this.expand(false);
     ui.leave.onclick = () => void this.leave();
     ui.copy.onclick = () => void this.copyLink();
     ui.libraryAdd.onclick = () => void this.addToLibrary();
@@ -533,7 +545,7 @@ export class Session {
       this.firstReady = false;
       if (this.urlRoom) void this.join(this.urlRoom, true);
       // The server put this identity back in its old room on connect, but this page has no
-      // ?room=, so it is a local session: leave, or the others see a ghost.
+      // room address, so it is a solo session: leave, or the others see a ghost.
       else if (net.room)
         void net.attempt(() => net.connection!.reducers.leaveRoom({}), null);
       return;
@@ -544,7 +556,8 @@ export class Session {
         this.rejoinCycle = this.readyCycle;
         void this.rejoin();
       } else if (net.room && net.memory && this.sceneRevision !== undefined && net.party?.sceneRevision !== this.sceneRevision) {
-        this.navigate(roomUrl(location.href, this.room, net.memory.manifestUrl), `Opening “${net.memory.title}” for everyone…`);
+        rememberRoomManifest(sessionStorage, this.room, net.memory.manifestUrl);
+        this.navigate(roomUrl(location.href, this.room), `Opening “${net.memory.title}” for everyone…`);
       } else if (net.room && net.memory && !sameManifest(net.memory.manifestUrl, this.host.manifestUrl, location.href)) {
         this.entered(true);
       } else if (net.room && !this.adapter) this.startAdapter();
@@ -704,11 +717,12 @@ export class Session {
       return;
     }
     const code = room.joinCode;
+    rememberRoomManifest(sessionStorage, code, memory.manifestUrl);
     if (
       !sameManifest(memory.manifestUrl, this.host.manifestUrl, location.href)
     ) {
       // Nikko's viewer loads one manifest at boot: reload into the room's memory.
-      const target = roomUrl(location.href, code, memory.manifestUrl);
+      const target = roomUrl(location.href, code);
       if (fromUrl && !claimReload(sessionStorage, target)) {
         this.abandonJoin(
           `Room ${code} shows “${memory.title}”, but this page could not open it (${memory.manifestUrl}). You're exploring on your own.`,
@@ -727,7 +741,7 @@ export class Session {
     this.sceneRevision = this.net.party?.sceneRevision;
     if (this.adapter) return;
     this.room = this.urlRoom = code;
-    // Keep ?room= in the address bar, so a reload rejoins and the link can be shared.
+    // Canonicalize legacy invites and lowercase/trailing-slash paths after joining.
     history.replaceState(history.state, "", roomUrl(location.href, code));
     this.startAdapter();
   }
@@ -985,7 +999,7 @@ export class Session {
     if (ui.hudLabel) {
       setText(
         ui.hudLabel,
-        this.room ? `Party ${this.room} · ${people}` : "Local session",
+        this.room ? `Party ${this.room} · ${people}` : "Solo session",
       );
       ui.hudLabel.classList.toggle("shared", !!this.room);
     }
@@ -1045,6 +1059,7 @@ export class Session {
       : net.party ? `Viewing ${net.memory?.title}. ${net.memory?.manifestUrl.includes("/demo/memory.json") ? "Synthetic demo; not reconstructed from video." : ""}`
       : "Synthetic demo available. Create a party and share its link. No reconstruction worker is required to test multiplayer.");
     ui.join.disabled = !idle;
+    ui.solo.hidden = !!this.room || !!this.urlRoom;
     ui.libraryAdd.disabled = !net.ready || this.adding;
     ui.libraryAdd.textContent = this.adding ? "Adding…" : "Add to library";
     ui.copy.disabled = !this.room;

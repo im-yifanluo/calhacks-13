@@ -2,6 +2,16 @@
 
 The hosted demo is at **https://jerry-memory-replay-phone.alightdell64.chatgpt.site/**. It serves the built viewer from Sites and connects directly to SpacetimeDB Maincloud. The Mac and phone both act as clients; neither a laptop server nor a tunnel is required.
 
+## Server and room addresses
+
+- **Fresh visit / solo:** open the server address with no room path: `https://jerry-memory-replay-phone.alightdell64.chatgpt.site/`. **Explore solo** closes the party panel; it does not create or join a shared room.
+- **Shared party:** creating a party or entering its code changes the address to `/ROOMCODE`, for example `https://jerry-memory-replay-phone.alightdell64.chatgpt.site/031HHRP`. Copying the invite link uses this address.
+- **Direct entry:** opening or refreshing `/ROOMCODE` rejoins that room and loads its current scene. The database owns the scene selection; a per-tab scene hint avoids putting asset URLs in the invite link.
+- **Leave / home:** **Leave** or the **MEMORY REPLAY** home link returns to `/` and solo playback. A fresh visit to `/` never silently rejoins the previous party.
+- Existing `/?room=ROOMCODE` links still join, then become `/ROOMCODE`. Codes are unchanged and still contain seven letters/numbers.
+
+Production hosting must serve `index.html` for room paths, including refreshes. In the Sites hosting manifest, use `"static": {"directory": "dist", "not_found_handling": "single-page-application"}`. Vite's development server already supports this fallback. Static assets retain their root-relative `/assets/` URLs.
+
 ## Test on a Mac and iPhone
 
 1. Open the hosted address on the Mac. Enter `Mac leader`, keep **Synthetic demo · ready to play** selected, and choose **Create party**.
@@ -48,6 +58,8 @@ npm run build -w apps/web -- --outDir ../../data/hosted-phone-site/dist
 Preserve `.openai/hosting.json` in the hosting checkout. Its README describes the synthetic-demo presentation changes: omit `capture.html`, hide the upload controls, and explain that uploads are available in the local capture app. Do not copy `.env` files, tokens, database directories, or recordings into the static distribution. Use the Sites workflow to save and deploy the matching source/build; rebuilding alone does not update the live site.
 
 ## Verification
+
+The clean-address update passed TypeScript checking, all 24 session/party unit tests, and a production build. Local browser checks covered root/solo, party creation, a scene change with no asset query in the address, direct entry from a fresh tab, refresh/rejoin, legacy invite conversion, and returning to `/` through both Leave and the home link.
 
 The party-code update passed TypeScript checking, the 22 session/party unit tests, and a production build. Two local browser instances verified blank-code validation, joining with lowercase and padded input via Enter, preserving the current party after an unknown code, switching to a second party, clearing the field/error after success, and copying a host code. Guest playback controls remained disabled after switching.
 

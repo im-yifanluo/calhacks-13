@@ -10,7 +10,7 @@ import { desktopInput } from "./input-desktop.js";
 import { sampleTrack } from "./tracks.js";
 import { mountAudio } from "./audio.js";
 import { mountAuth } from "./auth.js";
-import { Session } from "./session.js";
+import { DEFAULT_MANIFEST, loadedManifest, Session } from "./session.js";
 import { PhoneJoystick, isTouchDevice } from "./phone-joystick.js";
 import "./style.css";
 
@@ -24,10 +24,9 @@ let viewer: Viewer | undefined;
 const showWarning = (message: string) => { warning.hidden = false; warning.textContent = message; };
 
 async function main(): Promise<void> {
-  const params = new URLSearchParams(location.search);
-  const manifestUrl = params.get("memory") ?? "/demo/memory.json";
+  const manifestUrl = loadedManifest(location.href, sessionStorage);
   const sceneUrl = new URL(manifestUrl, location.href);
-  const demo = !params.has("memory") || (sceneUrl.origin === location.origin && sceneUrl.pathname === "/demo/memory.json");
+  const demo = sceneUrl.origin === location.origin && sceneUrl.pathname === DEFAULT_MANIFEST;
   element("mode").textContent = demo ? "LOCAL DEMO" : "MEMORY VIEWER";
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
   renderer.setPixelRatio(1); renderer.setSize(innerWidth, innerHeight);

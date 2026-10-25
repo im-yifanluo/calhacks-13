@@ -10,7 +10,7 @@
   <body>
     <main id="stage"></main>
     <header>
-      <div class="eyebrow"><span class="brand-dot"></span> MEMORY REPLAY <span id="mode">LOCAL DEMO</span></div>
+      <div class="eyebrow"><span class="brand-dot"></span> <a class="brand-home" href="/" aria-label="Memory Replay home">MEMORY REPLAY</a> <span id="mode">LOCAL DEMO</span></div>
       <h1 id="title">A moment. Another possibility.</h1>
       <p id="subtitle">Pause the memory. Change the throw. Replay your take.</p>
     </header>
@@ -49,6 +49,7 @@
           <div class="row"><input id="room-code" placeholder="Enter party code" maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" aria-describedby="party-code-help" /><button id="room-join" type="submit" class="primary" disabled>Join party</button></div>
           <p id="party-code-help">Enter the host’s 7-character code. Use the same app address on both devices.</p>
           <label>Your name<input id="player-name" maxlength="40" autocomplete="nickname" /></label>
+          <button id="room-solo" type="button">Explore solo</button>
         </form>
         <p id="room-message" role="status"></p>
         <p id="room-error" role="alert"></p>
