@@ -9,6 +9,8 @@ export function mountSceneOnly(stage: HTMLElement, button: HTMLButtonElement, on
   let down: Tap | undefined, last: Tap | undefined;
   const pointers = new Set<number>();
   const hideTitle = button.title;
+  // The label sits in a span next to the icons; without one (older markup), the whole button text.
+  const setLabel = (text: string) => { const label = button.querySelector(".label"); if (label) label.textContent = text; else button.textContent = text; };
 
   // Keep the toggle and its ancestors interactive; hide every other overlay from keyboard navigation.
   const makeInert = (element: HTMLElement) => {
@@ -24,7 +26,7 @@ export function mountSceneOnly(stage: HTMLElement, button: HTMLButtonElement, on
     if (!hidden) return;
     hidden = false; down = last = undefined; pointers.clear();
     document.body.classList.remove("scene-only");
-    button.textContent = "Hide UI"; button.title = hideTitle;
+    setLabel("Hide UI"); button.title = hideTitle;
     for (const [element, inert] of previousInert) element.inert = inert;
     previousInert.clear();
     stage.removeAttribute("tabindex");
@@ -40,7 +42,7 @@ export function mountSceneOnly(stage: HTMLElement, button: HTMLButtonElement, on
     for (const element of Array.from(document.body.children)) {
       if (element instanceof HTMLElement) makeInert(element);
     }
-    button.textContent = "Show UI"; button.title = "Show controls";
+    setLabel("Show UI"); button.title = "Show controls";
     document.body.classList.add("scene-only");
     stage.tabIndex = 0; stage.focus({ preventScroll: true });
   };

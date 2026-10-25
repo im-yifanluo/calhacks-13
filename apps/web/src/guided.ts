@@ -36,18 +36,18 @@ export class PathGuide {
     // the path, drawn just above the floor
     const floor = this.points.map(p => new THREE.Vector3(p.x, floorY + 0.02, p.z));
     const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(floor),
-      new THREE.LineBasicMaterial({ color: 0x5fe3c0, transparent: true, opacity: 0.9, depthTest: false }));
+      new THREE.LineBasicMaterial({ color: 0xededf0, transparent: true, opacity: 0.9, depthTest: false }));
     line.renderOrder = 50;
     this.root.add(line);
-    const start = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 8), new THREE.MeshBasicMaterial({ color: 0x5fe3c0 }));
+    const start = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 8), new THREE.MeshBasicMaterial({ color: 0xededf0 }));
     start.position.copy(floor[0]);
     this.root.add(start);
     this.ribbon = new THREE.Mesh(ribbonGeometry(floor, this.radius),
-      new THREE.MeshBasicMaterial({ color: 0x5fe3c0, transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide }));
+      new THREE.MeshBasicMaterial({ color: 0xededf0, transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide }));
     this.ribbon.renderOrder = 49;
     this.root.add(this.ribbon);
     // fog quad in front of the eyes (works in XR too: it is a child of the camera)
-    this.fogMaterial = new THREE.MeshBasicMaterial({ color: 0x0c151e, transparent: true, opacity: 0, depthTest: false, depthWrite: false });
+    this.fogMaterial = new THREE.MeshBasicMaterial({ color: 0x0a0a0f, transparent: true, opacity: 0, depthTest: false, depthWrite: false });
     this.fog = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.fogMaterial);
     this.fog.position.set(0, 0, -0.11);
     this.fog.renderOrder = 1000;

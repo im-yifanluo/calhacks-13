@@ -67,7 +67,7 @@ export function mountAuth(net: Multiplayer): void {
     const account = savedAccount();
     const profile = net.identity && net.connection?.db.profile.identity.find(net.identity);
     const registered = net.ready && profile?.provider === "key";
-    status.textContent = registered ? `${profile.displayName} · signed in` : account ? "Saved account · connecting…" : "Guest · sign in to keep your name";
+    status.textContent = registered ? `${profile.displayName} · signed in` : account ? "Saved account · connecting…" : "Guest";
     signedIn.hidden = !registered && !account;
     signedOut.hidden = registered || !!account;
     signout.hidden = !registered && !account;

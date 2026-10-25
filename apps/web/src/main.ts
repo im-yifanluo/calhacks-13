@@ -60,7 +60,7 @@ async function main(): Promise<void> {
   renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType("local-floor"); renderer.xr.setFoveation(1);
   renderer.domElement.setAttribute("aria-label", "Interactive 3D memory. Pause, then drag an object to throw it.");
   stage.appendChild(renderer.domElement);
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b1118);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0a0a0f);
   scene.add(new THREE.HemisphereLight(0xbfeaf4, 0x374454, 2.5));
   const light = new THREE.DirectionalLight(0xffd7b5, 3); light.position.set(3, 5, 2); scene.add(light);
   const camera = new THREE.PerspectiveCamera(65, (stage.clientWidth || innerWidth) / (stage.clientHeight || innerHeight), 0.05, 200);
@@ -259,7 +259,7 @@ async function main(): Promise<void> {
     else { releaseWearer(camera, controls); clearExposure(renderer.domElement); }
     controls.enabled = !eyes.checked && !xrPreview && !renderer.xr.isPresenting;
     updateCameraModeButton();
-    status.textContent = eyes.checked ? "Following the recorded camera. Tap Camera to return to free look."
+    status.textContent = eyes.checked ? "Following the recorded camera. Tap the view chip above the controls to switch."
       : touch ? "Free look: drag to explore, pinch to zoom, use WALK to move."
       : "Free look: drag to explore, scroll to zoom, use WASD to move.";
   }
@@ -367,6 +367,10 @@ async function main(): Promise<void> {
         viewMode.dataset.mode = view;
         element("view-mode-label").textContent = { eyes: "Wearer's view", follow: "Following the walk", roam: "Paused · roam freely",
           guided: "Guided path", free: "Free camera" }[view];
+        // Say where a click goes (the same order as viewMode.onclick).
+        const next = view === "eyes" ? "follow the walk" : view === "follow" || view === "roam" ? "free camera" : eyes.disabled ? "follow the walk" : "wearer's view";
+        viewMode.title = `Switch to ${next}`;
+        viewMode.setAttribute("aria-description", `Click to switch to ${next}`);
       }
       // Keep the status up while it matters (a hold or a throw); fade the overlay while the memory just plays.
       toast.hold(!!currentViewer.held || currentViewer.recording);

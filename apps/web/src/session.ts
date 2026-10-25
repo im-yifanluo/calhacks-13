@@ -10,6 +10,8 @@ import { validateManifest } from "./loader.js";
 import { isTouchDevice } from "./phone-joystick.js";
 import { uploadPanel } from "./upload.js";
 import { dragToClose } from "./ui.js";
+import { previewMissing, previewUrl, viewerLink } from "./library-state.js";
+import { localMemoryUrls, seedLocalMemories, seedSummary } from "./dev-seed.js";
 import type { Viewer } from "./viewer.js";
 
 /** main.ts loads this manifest when the URL has no ?memory= (its built-in demo). */
@@ -214,7 +216,7 @@ export class Avatars {
   private headGeometry = new THREE.SphereGeometry(0.12, 20, 14);
   private visorGeometry = new THREE.BoxGeometry(0.15, 0.045, 0.05);
   private handGeometry = new THREE.SphereGeometry(0.04, 12, 8);
-  private visorMaterial = new THREE.MeshBasicMaterial({ color: 0x0c151e });
+  private visorMaterial = new THREE.MeshBasicMaterial({ color: 0x0a0a0f });
   private position = new THREE.Vector3();
   private rotation = new THREE.Quaternion();
   private hand = new THREE.Vector3();
@@ -315,7 +317,7 @@ export class Avatars {
     canvas.height = 128;
     const ctx = canvas.getContext("2d");
     if (ctx) {
-      ctx.fillStyle = "#101e29d9";
+      ctx.fillStyle = "rgba(22, 22, 28, 0.82)";
       ctx.beginPath();
       ctx.roundRect(8, 16, 496, 96, 40);
       ctx.fill();
@@ -323,7 +325,7 @@ export class Avatars {
       ctx.beginPath();
       ctx.arc(64, 64, 18, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#e7f0f3";
+      ctx.fillStyle = "#ededf0";
       ctx.font = "600 44px Inter, system-ui, sans-serif";
       ctx.textBaseline = "middle";
       ctx.fillText(`${name} · ${device}`, 100, 66, 390);
@@ -409,6 +411,13 @@ export class Session {
   /** The last connection failure shown, to notice a new one or its end. */
   private failureSeen?: Failure;
   private memoryKey = "initial";
+  private cardsKey = "";
+  /** The person cleared their pick: keep the synthetic demo instead of falling back to the memory on screen. */
+  private demoPicked = false;
+  /** Dev only: how many local scenes can be loaded into the library (0 hides the button), and ?seed=local. */
+  private localCount = 0;
+  private seeding = false;
+  private seedPending = new URL(location.href).searchParams.get("seed") === "local";
   private peopleKey = "";
   private sceneRevision?: number;
   private poseSentAt = -Infinity;
@@ -426,6 +435,8 @@ export class Session {
     reconnect: $<HTMLButtonElement>("room-reconnect"),
     name: $<HTMLInputElement>("player-name"),
     memories: $<HTMLSelectElement>("room-memories"),
+    memoryCards: $<HTMLUListElement>("memory-cards"),
+    sceneChoice: $("party-scene-choice"),
     create: $<HTMLButtonElement>("room-create"),
     uploadToggle: $<HTMLButtonElement>("upload-toggle"),
     sceneActions: $("party-scene-actions"),
@@ -451,6 +462,7 @@ export class Session {
     leave: $<HTMLButtonElement>("room-leave"),
     libraryUrl: $<HTMLInputElement>("library-url"),
     libraryAdd: $<HTMLButtonElement>("library-add"),
+    seed: $<HTMLButtonElement>("library-seed"),
     upload: $("upload-panel"),
     libraryErrors: $("library-errors"),
     message: $("room-message"),
@@ -504,6 +516,13 @@ export class Session {
     ui.leave.onclick = () => void this.leave();
     ui.copy.onclick = () => void this.copyLink();
     ui.libraryAdd.onclick = () => void this.addToLibrary();
+    ui.seed.onclick = () => void this.seedLocal();
+    void localMemoryUrls().then((urls) => {
+      this.localCount = urls.length;
+      this.ui.seed.textContent = `Load local memories (${urls.length})`;
+      this.cardsKey = "";
+      this.render();
+    });
     uploadPanel(this.net, ui.upload);
     ui.uploadToggle.onclick = () => this.showUpload(ui.upload.hidden);
     if (location.pathname === "/upload") this.showUpload(true);
@@ -861,6 +880,23 @@ export class Session {
     }
   }
 
+  /** Dev only: every scene in public/memories into this identity's library. */
+  private async seedLocal(): Promise<void> {
+    if (this.seeding || !this.localCount) return;
+    this.seeding = true;
+    this.render();
+    try {
+      const result = await seedLocalMemories(this.net, (done, total) => setText(this.ui.seed, `Loading ${done} of ${total}…`));
+      this.memoryKey = "";
+      this.cardsKey = "";
+      this.panel.show(seedSummary(result));
+    } finally {
+      this.seeding = false;
+      this.ui.seed.textContent = `Load local memories (${this.localCount})`;
+      this.render();
+    }
+  }
+
   private async addToLibrary(): Promise<void> {
     if (this.adding) return;
     this.adding = true;
@@ -1090,13 +1126,22 @@ export class Session {
     ui.progress.hidden = !pending;
     ui.progress.value = pending?.progress ?? 0;
     setText(ui.sceneStatus, pending
-      ? `${pending.title} · ${pending.status} ${Math.round(pending.progress * 100)}%. ${pending.status === "uploaded" ? "Waiting for a reconstruction worker. " : ""}${pending.error || "The current scene stays available until the new one is ready."}`
-      : net.party ? `Viewing ${net.memory?.title}. ${net.memory?.manifestUrl.includes("/demo/memory.json") ? "Synthetic demo; not reconstructed from video." : ""}`
-      : this.host.localImport ? "This imported scene is stored in this browser. Host its files and register memory.json to share it with a party." : "Synthetic demo available. Create a party and share its link. No reconstruction worker is required to test multiplayer.");
+      ? `${pending.title} · ${pending.status} ${Math.round(pending.progress * 100)}%. ${pending.status === "uploaded" ? "Waiting for a worker. " : ""}${pending.error || "The current scene stays until it is ready."}`
+      : net.party ? `Viewing ${net.memory?.title}. ${net.memory?.manifestUrl.includes("/demo/memory.json") ? "A synthetic demo." : ""}`
+      : this.host.localImport ? "This import lives in this browser only. Host its files to share it." : "Create a party to watch together, or join one with a code.");
     ui.join.disabled = this.busy || this.navigating;
     ui.join.textContent = this.busy && !net.ready ? "Connecting…" : "Join party";
     ui.solo.hidden = !!this.room || !!this.urlRoom;
     ui.libraryAdd.disabled = !net.ready || this.adding;
+    ui.seed.disabled = !net.ready || this.seeding;
+    // Dev: offered until every local scene is in the library.
+    ui.seed.hidden = !this.localCount || net.memories.length >= this.localCount;
+    if (this.seedPending && net.ready && this.localCount) {
+      this.seedPending = false;
+      // Once is enough: a reload should not run it again.
+      const url = new URL(location.href); url.searchParams.delete("seed"); history.replaceState(history.state, "", url);
+      void this.seedLocal();
+    }
     ui.libraryAdd.textContent = this.adding ? "Adding…" : "Add to library";
     ui.copy.disabled = !this.room;
     ui.leave.disabled = !this.room || this.busy || this.navigating;
@@ -1116,7 +1161,7 @@ export class Session {
     const key = `library:${memories
       .map((m) => `${m.id}:${m.title}:${m.status}:${m.progress}`)
       .join("|")}`;
-    if (key === this.memoryKey) return;
+    if (key === this.memoryKey) { this.renderCards(); return; }
     this.memoryKey = key;
     const previous = select.value;
     select.replaceChildren(new Option("Synthetic demo · ready to play", "demo"));
@@ -1133,7 +1178,136 @@ export class Session {
     const requested = ready.find((m) => m.requestId === this.selectRequest);
     if (requested) this.selectRequest = "";
     const keep = ready.find((m) => m.id.toString() === previous);
-    const choice = requested ?? keep;
+    // With nothing picked yet, a party starts with the memory you are looking at.
+    const current = this.demoPicked ? undefined : ready.find((m) => sameManifest(m.manifestUrl, this.host.manifestUrl, location.href));
+    const choice = requested ?? keep ?? current;
     select.value = choice ? choice.id.toString() : "demo";
+    this.renderCards();
+  }
+
+  /**
+   * Your memories as cards. A ready one opens in the viewer to explore; the one on screen closes the sheet. One that is
+   * still processing (or any, while you are in a party, where leaving would drop you out) is chosen as the party's scene.
+   */
+  private renderCards(): void {
+    const memories = this.net.memories, selected = this.ui.memories.value;
+    const key = JSON.stringify([selected, this.room, this.net.ready, this.net.isLeader, this.host.manifestUrl, this.localCount, this.seeding, String(this.net.memory?.id ?? ""),
+      memories.map((m) => [String(m.id), m.title, m.status, m.progress, m.manifestUrl, String(m.durationUs)])]);
+    if (key === this.cardsKey) return;
+    this.cardsKey = key;
+    const picked = memories.find((m) => m.id.toString() === selected);
+    const party = this.room ? this.net.memory : undefined;
+    setText(this.ui.sceneChoice, party
+      ? `Party scene: “${party.title}”${picked && picked.id !== party.id ? ` · selected: “${picked.title}”` : ""}`
+      : `Party scene: ${picked ? `“${picked.title}”` : "the synthetic demo"}`);
+    if (!memories.length) {
+      const empty = document.createElement("li");
+      empty.className = "memory-empty";
+      empty.textContent = this.net.ready ? "No memories yet. Upload a video or import a scene." : "Connecting to your memories…";
+      if (this.localCount && this.net.ready) {
+        // Dev: one tap fills the library with the scenes on this machine.
+        const load = document.createElement("button");
+        load.type = "button";
+        load.className = "wide";
+        load.disabled = this.seeding;
+        load.textContent = this.seeding ? "Loading…" : `Load local memories (${this.localCount})`;
+        load.onclick = () => void this.seedLocal();
+        empty.append(load);
+      }
+      this.ui.memoryCards.replaceChildren(empty);
+      return;
+    }
+    // Rebuilding the list must not drop keyboard focus: put it back on the same card.
+    const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>(".memory-tile")?.dataset.id;
+    this.ui.memoryCards.replaceChildren(...memories.map((m) => this.memoryCard(m, selected)));
+    if (focused) this.ui.memoryCards.querySelector<HTMLElement>(`.memory-tile[data-id="${focused}"]`)?.focus({ preventScroll: true });
+  }
+
+  private memoryCard(m: Multiplayer["memories"][number], selected: string): HTMLLIElement {
+    const item = document.createElement("li");
+    const link = viewerLink(m, location.origin);
+    const current = sameManifest(m.manifestUrl, this.host.manifestUrl, location.href);
+    const inParty = !!this.room;
+    const seconds = Math.max(0, Math.floor(Number(m.durationUs) / 1e6));
+    const length = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+    const progress = Math.max(0, Math.min(100, Math.round((Number.isFinite(m.progress) ? m.progress : 0) * 100)));
+    const state = current ? "Now viewing" : link ? "Ready" : m.status === "failed" ? "Needs attention"
+      : m.status === "ready" ? "Scene unavailable" : m.status === "processing" ? `Processing ${progress}%` : "Uploaded";
+    let tile: HTMLAnchorElement | HTMLButtonElement;
+    let action: string;
+    if (link && !current && !inParty) {
+      tile = document.createElement("a");
+      tile.href = link;
+      action = "Open to explore";
+    } else {
+      const button = document.createElement("button");
+      button.type = "button";
+      tile = button;
+      if (current && !inParty) {
+        action = "Close this panel and keep exploring";
+        button.onclick = () => this.expand(false);
+      } else {
+        action = inParty ? "Use for the party" : "Use for a party when it is ready";
+        button.setAttribute("aria-pressed", String(m.id.toString() === selected));
+        button.disabled = inParty && !this.net.isLeader;
+        if (button.disabled) action = "The party's leader picks the scene";
+        button.onclick = () => {
+          // A second tap clears the pick (back to the synthetic demo).
+          const again = this.ui.memories.value === m.id.toString();
+          this.ui.memories.value = again ? "demo" : m.id.toString();
+          this.demoPicked = again;
+          this.renderCards();
+          this.panel.show(again ? `“${m.title}” deselected.` : inParty ? `“${m.title}” selected. Tap “Use the selected memory” to switch the party to it.`
+            : `“${m.title}” will be used when you create a party.`);
+        };
+      }
+    }
+    tile.className = `memory-tile ${current ? "current" : link ? "ready" : m.status === "failed" ? "failed" : "pending"}`;
+    tile.dataset.id = m.id.toString();
+    tile.title = action;
+    tile.setAttribute("aria-label", `${m.title}, ${length}, ${state}. ${action}.`);
+    const art = document.createElement("span");
+    art.className = "tile-art";
+    art.setAttribute("aria-hidden", "true");
+    const badge = document.createElement("span");
+    badge.className = "tile-badge";
+    badge.textContent = state;
+    art.append(badge);
+    // A snapshot of the rendered splat scene, when the memory has one; otherwise the status colour stays.
+    const preview = previewUrl(m, location.origin);
+    if (preview) {
+      const shot = document.createElement("img");
+      shot.className = "tile-shot";
+      shot.alt = "";
+      shot.loading = "lazy";
+      shot.decoding = "async";
+      shot.onerror = () => { previewMissing(preview); shot.remove(); };
+      shot.src = preview;
+      art.prepend(shot);
+    }
+    if (tile instanceof HTMLAnchorElement) {
+      const play = document.createElement("span");
+      play.className = "tile-play";
+      art.append(play);
+    }
+    if (m.status === "processing") {
+      const bar = document.createElement("span");
+      bar.className = "tile-progress";
+      bar.style.setProperty("--p", `${progress}%`);
+      art.append(bar);
+    }
+    const body = document.createElement("span");
+    body.className = "tile-body";
+    body.setAttribute("aria-hidden", "true");
+    const title = document.createElement("span");
+    title.className = "tile-title";
+    title.textContent = m.title || "Untitled memory";
+    const meta = document.createElement("span");
+    meta.className = "tile-meta";
+    meta.textContent = length;
+    body.append(title, meta);
+    tile.append(art, body);
+    item.append(tile);
+    return item;
   }
 }

@@ -16,7 +16,7 @@ const duration = manifest.timeline.durationSec;
 const src = manifest.source || {};
 const W = 450, H = src.width && src.height ? Math.round(W * src.height / src.width) : 800;
 const gaps = manifest.timeline.gaps || [];
-const times = spec.includes(",") ? spec.split(",").map(Number)
+const times = spec.includes(",") ? spec.split(",").filter(Boolean).map(Number)
   : Array.from({ length: Number(spec) }, (_, k) => +(duration * (k + 0.5) / Number(spec)).toFixed(1));
 const inGap = t => gaps.some(([a, b]) => t >= a && t <= b);
 
@@ -30,7 +30,8 @@ const inGap = t => gaps.some(([a, b]) => t >= a && t <= b);
       "--ignore-gpu-blocklist", "--no-sandbox", "--autoplay-policy=no-user-gesture-required", `--window-size=${W},${H}`],
   });
   const page = await browser.newPage();
-  await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 });
+  // SCALE=2 renders at twice the pixel density (preview.js uses it for sharper card snapshots); scoring keeps 1.
+  await page.setViewport({ width: W, height: H, deviceScaleFactor: Number(process.env.SCALE || 1) });
   console.error(`[capture] viewport ${W}x${H} (source ${src.width}x${src.height})`);
   page.on("pageerror", e => console.error("page error:", e.message));
   await page.goto(`${process.env.CAPTURE_URL || "http://127.0.0.1:5177"}/?memory=/memories/${id}/${process.env.MEMFILE || "memory.json"}&mode=free&lod=0`, { waitUntil: "load", timeout: 120000 });
