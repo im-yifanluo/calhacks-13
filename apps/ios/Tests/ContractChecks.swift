@@ -8,6 +8,10 @@ import Foundation
         let expected = AccountDestination(server: "https://app.test/stdb", database: "memos")
         let shortLogin = try AccountKey.signInBody("000007", expected: expected)
         precondition(shortLogin == ["password": "000007"])
+        let pastedLogin = try AccountKey.signInBody(" \n000007\n ", expected: expected)
+        precondition(pastedLogin == shortLogin)
+        precondition(AccountDestination(server: expected.server, database: expected.database, passwordLength: 6).usesPortableAccountAPI)
+        precondition(!AccountKey.KeyError.invalid.localizedDescription.contains("memos1"))
         for invalid in ["12345", "1234567", "abcdef", "１２３４５６"] {
             do { _ = try AccountKey.signInBody(invalid, expected: expected); fatalError("Invalid password accepted") }
             catch AccountKey.KeyError.password {}

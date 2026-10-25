@@ -289,11 +289,14 @@ struct UserProfileView: View {
                 Text("Already signed in on the web? Paste that password below to keep the same account.").font(.caption)
             }
             SecureField("6-digit password", text: $library.personalKeyInput)
-                .keyboardType(.numberPad)
+                .keyboardType(.numberPad).textContentType(.password)
                 .textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("account-password-input")
             Button("Sign in with saved password") { Task { await library.importAccount() } }
                 .disabled(!library.pending.isEmpty || library.personalKeyInput.isEmpty)
-            Text(library.profileMessage).font(.caption)
+                .accessibilityIdentifier("account-password-sign-in")
+            Text("Paste the six digits you copied from memos. No prefix is needed.").font(.caption).foregroundStyle(.secondary)
+            Text(library.profileMessage).font(.caption).accessibilityIdentifier("account-sign-in-status")
             if !library.userID.isEmpty { Text("User ID: \(library.userID)").font(.caption2.monospaced()).textSelection(.enabled) }
             Text("Your six-digit password works on phone, web and Quest. Keep it private. You can also paste an older saved credential to restore your account.").font(.caption).foregroundStyle(.secondary)
         }.disabled(library.savingProfile || library.checking || library.uploading || library.captureActive)
@@ -329,6 +332,7 @@ struct SettingsView: View {
                     Text("4. Local clips remain available offline and can be exported. New recordings upload automatically when signed in.")
                 }
                 Section("About this build") {
+                    Text("Six-digit password sign-in enabled")
                     #if DEMO_APP
                     Text("Memory Replay Demo · simulated camera · real H.264 MP4 and upload. No Meta SDK or camera permission needed.")
                     #else

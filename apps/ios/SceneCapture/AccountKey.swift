@@ -6,7 +6,8 @@ struct AccountDestination: Codable, Equatable {
     var maxUploadBytes: Int? = nil
     var pipelineAvailable: Bool? = nil
     var passwordLength: Int? = nil
-    var usesPortableAccountAPI: Bool { pipelineAvailable != nil }
+    // Account support is independent of whether a reconstruction worker is advertised.
+    var usesPortableAccountAPI: Bool { passwordLength == 6 || pipelineAvailable != nil }
 }
 
 struct HostedAccount: Decodable {
@@ -71,7 +72,7 @@ struct AccountKey: Codable, Equatable {
         var errorDescription: String? {
             switch self {
             case .password: return "Enter exactly six digits."
-            case .invalid: return "Paste the complete password starting with memos1. A party code is different."
+            case .invalid: return "The saved account credential is incomplete or damaged. Sign in again with your six-digit password."
             case .destination: return "This password belongs to a different server or database. Check your server address."
             }
         }
