@@ -2,7 +2,8 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import type { Keyframe, Vec3 } from "@memreplay/shared";
-import { keyframeVelocity, trackVelocity, validateTrack } from "../src/engine/tracks";
+import { validateTrack } from "@memreplay/shared";
+import { keyframeVelocity, trackVelocity } from "../src/engine/tracks";
 import { approx } from "./helpers";
 
 const frame = (t: number, x: number, v?: Vec3): Keyframe => ({ t, p: [x, 1, 0], q: [0, 0, 0, 1], ...(v ? { v } : {}) });

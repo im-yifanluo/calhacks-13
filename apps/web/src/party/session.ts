@@ -3,10 +3,9 @@
 // viewer and HUD; net/adapter.ts syncs those with the server while this page is in a room.
 import * as THREE from "three";
 import type { Identity } from "spacetimedb";
-import type { MemoryManifest } from "@memreplay/shared";
+import { type MemoryManifest, validateManifest } from "@memreplay/shared";
 import { type Failure, Multiplayer, type Player } from "../net";
 import { NetAdapter } from "../net/adapter";
-import { validateManifest } from "../engine/loader";
 import { isTouchDevice } from "../input/joystick";
 import { uploadPanel } from "../upload/panel";
 import { dragToClose } from "../ui/overlay";

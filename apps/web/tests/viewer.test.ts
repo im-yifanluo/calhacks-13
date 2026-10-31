@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { Euler, Group, Quaternion, Vector3 } from "three";
 import type { DynamicObject, Keyframe } from "@memreplay/shared";
 import { colliderDepth, initPhysics, STEP } from "../src/engine/physics";
-import { type LoadedMemory, type LoadedObject, validateManifest } from "../src/engine/loader";
+import { validateManifest } from "@memreplay/shared";
+import type { LoadedMemory, LoadedObject } from "../src/engine/loader";
 import { AT_END, type GrabRequest, Viewer, type ViewerEvent, isGhost } from "../src/engine/viewer";
 import { approx, type Definition, frame, mockManifest, settle } from "./helpers";
 

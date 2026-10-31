@@ -1,11 +1,10 @@
 // Glue between nikko's Viewer (one device: pause, grab, throw, record, replay) and jerry's SpacetimeDB room.
 // The server is the authority: the viewer asks before every grab (InteractionAuthority), shows the room's shared clock,
 // and replays takes rebuilt from the server's keyframe chunks, so every device resolves the same tracks.
-import type { Keyframe } from "@memreplay/shared";
+import { type Keyframe, validateTrack } from "@memreplay/shared";
 import type { Identity } from "spacetimedb";
 import type { DbConnection } from "../module_bindings";
 import type { Branch as ViewerBranch } from "../engine/timeline";
-import { validateTrack } from "../engine/tracks";
 import type { GrabRequest, InteractionAuthority, Viewer, ViewerEvent } from "../engine/viewer";
 import type {
   Branch as BranchRow,

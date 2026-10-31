@@ -7,7 +7,7 @@ import { mkdtemp, readFile, rm, mkdir, writeFile, stat } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateManifest } from "../../apps/web/src/engine/loader";
+import { validateManifest } from "@memreplay/shared";
 import { DbConnection } from "../../apps/web/src/module_bindings";
 import { decodeAccountKey } from "../../apps/web/src/account/key";
 

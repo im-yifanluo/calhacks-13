@@ -4,35 +4,6 @@ import type { Keyframe } from "@memreplay/shared";
 const p = new Vector3();
 const q = new Quaternion();
 
-export function validateTrack(value: unknown, label = "track"): asserts value is Keyframe[] {
-  if (!Array.isArray(value) || value.length === 0) throw new Error(`${label}: expected nonempty keyframes`);
-  let previous = -Infinity;
-  for (const frame of value) {
-    if (
-      !frame ||
-      !Number.isFinite(frame.t) ||
-      frame.t < 0 ||
-      frame.t <= previous ||
-      !tuple(frame.p, 3) ||
-      !tuple(frame.q, 4) ||
-      Math.hypot(...frame.q) < 1e-8 ||
-      (frame.s !== undefined && (!Number.isFinite(frame.s) || frame.s <= 0))
-    ) {
-      throw new Error(`${label}: invalid pose or timestamps (must strictly increase)`);
-    }
-    // Optional velocity in m/s. Absent means "derive it from the track". Anything else malformed (null, two numbers,
-    // NaN) is rejected, because it would reach Rapier's setLinvel. The pipeline omits unset fields (exclude_none).
-    if (frame.v !== undefined && !tuple(frame.v, 3)) {
-      throw new Error(`${label}: keyframe at t=${frame.t} has an invalid v (expected three finite numbers)`);
-    }
-    previous = frame.t;
-  }
-}
-
-export function tuple(value: unknown, length: number): value is number[] {
-  return Array.isArray(value) && value.length === length && value.every(Number.isFinite);
-}
-
 export function segment(track: Keyframe[], t: number): [Keyframe, Keyframe] {
   let low = 0,
     high = track.length - 1;
