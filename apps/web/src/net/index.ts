@@ -2,6 +2,7 @@ import { databaseSettings, savedAccount } from "../account/key";
 import { DbConnection, tables } from "../module_bindings";
 import { DisconnectedError, type Identity } from "spacetimedb";
 import type { Memory, Room, Player, Timeline, Branch, ObjectState, BranchKeyframes } from "../module_bindings/types";
+import { claimStoredToken, holdLock, lockName, type Locks } from "./identity-lock";
 export type { Memory, Room, Player, Timeline, Branch, ObjectState, BranchKeyframes };
 export type Pose = {
   px: number;
@@ -46,80 +47,6 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 export interface Failure {
   readonly kind: string;
   readonly message: string;
-}
-
-/** The part of the Web Locks API (`navigator.locks`) used to tell tabs apart. */
-export type Locks = Pick<LockManager, "request">;
-/** How long a page waits for its stored identity before deciding another live tab uses it (ms). */
-export const IDENTITY_WAIT_MS = 1000;
-
-/** A short, stable tag for a token, so lock names never contain the token itself (53-bit cyrb53). */
-export function tokenTag(token: string): string {
-  let h1 = 0xdeadbeef,
-    h2 = 0x41c6ce57;
-  for (let i = 0; i < token.length; i++) {
-    const c = token.charCodeAt(i);
-    h1 = Math.imul(h1 ^ c, 2654435761);
-    h2 = Math.imul(h2 ^ c, 1597334677);
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
-}
-const lockName = (key: string, token: string) => `${key}:${tokenTag(token)}`;
-
-/**
- * Holds the exclusive Web Lock `name` until the returned function is called. Resolves to undefined
- * when another page still holds it after `waitMs` (0: only if it is free right now). Without Web
- * Locks (an insecure origin, an old browser) every page gets it.
- */
-export function holdLock(locks: Locks | undefined, name: string, waitMs: number): Promise<(() => void) | undefined> {
-  const none = () => {};
-  if (!locks) return Promise.resolve(none);
-  return new Promise((resolve) => {
-    let letGo = none;
-    const held = new Promise<void>((done) => (letGo = done));
-    const abort = new AbortController();
-    const timer = waitMs > 0 ? setTimeout(() => abort.abort(), waitMs) : undefined;
-    const options: LockOptions = waitMs > 0 ? { signal: abort.signal } : { ifAvailable: true };
-    // AbortError: still held elsewhere after waitMs. Any other error means locks don't work here.
-    const failed = (error: unknown) => {
-      clearTimeout(timer);
-      resolve((error as Error)?.name === "AbortError" ? undefined : none);
-    };
-    try {
-      locks
-        .request(name, options, (lock) => {
-          clearTimeout(timer);
-          resolve(lock ? letGo : undefined);
-          return lock ? held : undefined;
-        })
-        .catch(failed);
-    } catch (error) {
-      failed(error);
-    }
-  });
-}
-
-/**
- * The token this page may connect with. A duplicated tab, or a window the app opens, starts with a
- * copy of its opener's sessionStorage, so with the same SpacetimeDB identity, and two tabs with one
- * identity release each other's objects. Every page holds a Web Lock named after its token while it
- * uses it; a page that finds the lock taken drops its copy and connects as a new guest. A reload
- * waits up to `waitMs` for its previous page to let go.
- */
-export async function claimStoredToken(
-  storage: Pick<Storage, "getItem" | "removeItem">,
-  key: string,
-  locks: Locks | undefined,
-  waitMs = IDENTITY_WAIT_MS,
-): Promise<{ token?: string; release: () => void }> {
-  const token = storage.getItem(key) || undefined;
-  if (!token) return { release: () => {} };
-  const release = await holdLock(locks, lockName(key, token), waitMs);
-  if (release) return { token, release };
-  storage.removeItem(key);
-  return { release: () => {} };
 }
 
 export class Multiplayer extends EventTarget {
@@ -532,20 +459,6 @@ export class Multiplayer extends EventTarget {
     const r = this.room;
     return r ? [...this.connection!.db.player.iter()].filter((p) => p.roomId === r.id && p.online) : [];
   }
-  get branches() {
-    const r = this.room;
-    return r
-      ? [...this.connection!.db.branch.iter()].filter((b) => b.roomId === r.id && b.memoryId === r.memoryId)
-      : [];
-  }
-  get objects() {
-    const tl = this.timeline;
-    return tl ? [...this.connection!.db.objectState.iter()].filter((o) => o.branchId === tl.branchId) : [];
-  }
-  get chunks() {
-    const ids = new Set(this.branches.map((b) => b.id));
-    return this.connection ? [...this.connection.db.branchKeyframes.iter()].filter((c) => ids.has(c.branchId)) : [];
-  }
   time() {
     const tl = this.timeline;
     if (!tl) return 0;
@@ -560,15 +473,9 @@ export class Multiplayer extends EventTarget {
     this.poseAt = now;
     void this.attempt(() => this.connection!.reducers.setPose(p), null);
   }
-  // Object calls report nothing here: the adapter shows its own errors in the status line.
-  grab(objectId: string, p: Pose) {
-    return this.run(() => this.connection!.reducers.grab({ objectId, ...p }), null);
-  }
+  // Reports nothing here: the adapter shows its own errors in the status line.
   move(objectId: string, p: Pose) {
     return this.run(() => this.connection!.reducers.moveObject({ objectId, ...p }), null);
-  }
-  release(objectId: string, rest: boolean, p: Pose) {
-    return this.run(() => this.connection!.reducers.release({ objectId, rest, ...p }), null);
   }
   dispose() {
     this.disposed = true;

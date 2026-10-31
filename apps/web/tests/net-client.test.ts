@@ -8,15 +8,8 @@ import {
 } from "spacetimedb";
 import { accountStorageKey, databaseSettings, encodeAccountKey } from "../src/account/key";
 import { DbConnection } from "../src/module_bindings";
-import {
-  claimStoredToken,
-  IDENTITY_WAIT_MS,
-  initialRetryDelayMs,
-  type Locks,
-  Multiplayer,
-  RECONNECT_MAX_DELAY_MS,
-  tokenRejected,
-} from "../src/net";
+import { initialRetryDelayMs, Multiplayer, RECONNECT_MAX_DELAY_MS, tokenRejected } from "../src/net";
+import { claimStoredToken, IDENTITY_WAIT_MS, type Locks } from "../src/net/identity-lock";
 import { sleep } from "./helpers";
 
 async function until(predicate: () => unknown, what: string, ms = 3000): Promise<void> {
