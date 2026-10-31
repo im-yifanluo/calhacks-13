@@ -1,10 +1,14 @@
+# Dependencies and build output
 node_modules/
 dist/
-.DS_Store
+apps/web/.test-dist/
+
+# Environment and secrets
 .env
 .env.*
 !.env.example
-# big assets live in object storage, not git
+
+# Large binary assets live in object storage, not git
 data/
 *.ply
 *.spz
@@ -13,31 +17,28 @@ data/
 *.mov
 *.glb
 !apps/web/public/mock/**
-# python
+!tests/fixtures/plant.mp4
+
+# Scenes and fixtures copied or generated for local viewing
+apps/web/public/memories/
+apps/web/public/local/
+apps/web/public/splat-test/
+
+# Python
 __pycache__/
 .venv/
 *.egg-info/
-# spacetime
-server/spacetime/target/
-# agents
+.pytest_cache/
+.ruff_cache/
+pipeline/tools/shots/
+
+# iOS (build output, personal signing state)
+**/DerivedData/
+**/xcuserdata/
+*.xcuserstate
+apps/ios/.build/
+
+# Editors, agents and local tools
+.DS_Store
 .claude
 .flash/
-# memories copied from the pod for local viewing (big files)
-apps/web/public/memories/
-# local test manifests and assets (generated, never committed)
-apps/web/public/local/
-# Nikko's private build journal (not shared with the team)
-NIKKO_BUILD_LOG.md
-apps/web/.test-dist/
-# iPhone build output and machine-specific signing/server configuration
-apps/ios/DerivedData/
-apps/ios/.build/
-apps/ios/Backend.local.xcconfig
-apps/ios/**/xcuserdata/
-!apps/ios/CameraAccess/TestResources/plant.mp4
-
-# Native iPhone builds and personal signing state
-**/xcuserdata/
-**/DerivedData/
-*.xcuserstate
-pipeline/tools/shots/

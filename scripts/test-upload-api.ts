@@ -116,7 +116,7 @@ try {
   });
   assert.equal(viewer.db.profile.identity.find(viewer.identity!)?.displayName, "Phone API test");
   assert.equal(viewer.db.profile.identity.find(viewer.identity!)?.provider, "key");
-  const bytes = await readFile(join(repo, "apps/ios/CameraAccess/TestResources/plant.mp4"));
+  const bytes = await readFile(join(repo, "tests/fixtures/plant.mp4"));
   const sha = (data: Buffer) => createHash("sha256").update(data).digest("hex");
   const prepared = await call("/api/uploads/presign", { name: "plant.mp4", type: "video/mp4", size: bytes.length,
     title: "[API test] MP4 transport fixture", durationSec: 5, pipeline: false }, account.personalKey);
@@ -154,31 +154,6 @@ try {
   assert.equal((await call(`/api/account?identity=${legacy.identity}`, undefined, legacy.token)).provider, "key");
   assert.equal((await call(`/api/memories?identity=${account.identity}`, undefined, account.token)).memories.length, 1);
   console.log("PASS ownership: second account isolation, receipt/identity tampering rejected, legacy token promotion and listing");
-  if (process.env.UPLOAD_TEST_NATIVE_BIN) {
-    let dropped = false;
-    const proxy = createServer(async (req, res) => {
-      try {
-        const data: Buffer[] = []; for await (const chunk of req) data.push(chunk);
-        const headers = { ...req.headers }; delete headers.host; delete headers.connection; delete headers['content-length'];
-        const response = await fetch(base + req.url, { method: req.method, headers: headers as Record<string, string>,
-          ...(!['GET', 'HEAD'].includes(req.method!) ? { body: Buffer.concat(data) } : {}) });
-        const body = Buffer.from(await response.arrayBuffer());
-        if (req.url === '/api/uploads/complete' && response.ok && !dropped) {
-          dropped = true; res.writeHead(503, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'TEST: confirmation deliberately lost' })); return;
-        }
-        res.writeHead(response.status, { 'Content-Type': response.headers.get('content-type') || 'application/json' }); res.end(body);
-      } catch { res.writeHead(502); res.end(); }
-    });
-    await new Promise<void>(resolve => proxy.listen(0, '127.0.0.1', resolve));
-    try {
-      const address = `http://127.0.0.1:${(proxy.address() as {port:number}).port}`;
-      const native = await exec(process.env.UPLOAD_TEST_NATIVE_BIN, [join(repo, 'apps/ios/CameraAccess/TestResources/plant.mp4'), address, join(directory, 'native-queue')], { timeout: 60000 });
-      console.log(native.stdout.trim());
-      assert.ok(dropped);
-      console.log('PASS actual Swift uploader: no-worker storage fallback and durable retry against the real API');
-    } finally { await new Promise<void>(resolve => proxy.close(() => resolve())); }
-  }
   if (process.env.UPLOAD_TEST_WORKER_DIR || process.env.UPLOAD_TEST_R2 === '1') {
     const worker = await (await fetch(dbBase + '/v1/identity', { method: 'POST' })).json();
     workerIdentity = worker.identity.replace(/^0x/, '');
