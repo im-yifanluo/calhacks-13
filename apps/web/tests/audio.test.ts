@@ -12,7 +12,7 @@ class FakeMedia {
   plays = 0;
   seeks = 0;
   allow = true;
-  failWith = null;
+  failWith: string | null = null;
   play() {
     this.plays++;
     if (this.failWith) return Promise.reject(Object.assign(new Error("failed"), { name: this.failWith }));
@@ -23,16 +23,17 @@ class FakeMedia {
   pause() {
     this.paused = true;
   }
-  advance(seconds) {
+  advance(seconds: number) {
     if (!this.paused) this.currentTime += seconds * this.playbackRate;
   }
 }
 function rig(media = new FakeMedia()) {
   let now = 0;
-  const changes = [];
+  const changes: boolean[] = [];
   const sync = new AudioSync(
     new Proxy(media, {
-      set(target, key, value) {
+      // AudioSync writes only the two fields MediaLike lets it write.
+      set(target, key: "currentTime" | "playbackRate", value) {
         if (key === "currentTime") target.seeks++;
         target[key] = value;
         return true;
@@ -45,7 +46,7 @@ function rig(media = new FakeMedia()) {
     media,
     sync,
     changes,
-    tick: (ms) => {
+    tick: (ms: number) => {
       now += ms;
     },
   };

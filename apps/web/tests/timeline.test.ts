@@ -2,13 +2,12 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import { Timeline } from "../src/timeline";
+import { frame, times } from "./helpers";
 
-const frame = (t, x, y = 1, z = 0) => ({ t, p: [x, y, z], q: [0, 0, 0, 1] });
 const original = [frame(0, 0), frame(10, 0)];
-const times = (track) => track.map((f) => f.t);
 
 /** Branch rows as the network adapter imports them, parents first: [id, parentId, forkTime]. */
-function tree(rows) {
+function tree(rows: [id: string, parentId: string, forkTime: number][]) {
   const timeline = new Timeline(10);
   for (const [id, parentId, forkTime] of rows) timeline.upsertBranch({ id, parentId, name: id, forkTime });
   return timeline;
@@ -144,7 +143,7 @@ test("corrupt branch rows with a parent loop cannot hang track()", () => {
     ["A", "original", 1],
     ["B", "A", 2],
   ]);
-  timeline.branches.find((b) => b.id === "A").parentId = "B"; // upsertBranch refuses cycles; corrupt the rows directly
+  timeline.branches.find((b) => b.id === "A")!.parentId = "B"; // upsertBranch refuses cycles; corrupt the rows directly
   timeline.select("B");
   assert.equal(timeline.track("ball", original, 3), original);
 });

@@ -2,50 +2,49 @@
 // or a held press does, and drag-plane hits behind the camera, far away or under the floor are handled.
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { Group, PerspectiveCamera, Plane, Ray, Vector3 } from "three";
+import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import type { Keyframe } from "@memreplay/shared";
+import type { LoadedMemory } from "../src/loader";
 import { initPhysics } from "../src/physics";
-import { Viewer } from "../src/viewer";
-import {
-  desktopInput,
-  dragPoint,
-  pressStartsGrab,
-  HOLD_START_MS,
-  MAX_DRAG_DISTANCE,
-} from "../src/input-desktop";
+import { Viewer, type ViewerEvent } from "../src/viewer";
+import { desktopInput, dragPoint, pressStartsGrab, HOLD_START_MS, MAX_DRAG_DISTANCE } from "../src/input-desktop";
+import { approx, heldId, mockManifest, sleep } from "./helpers";
 
-const manifest = JSON.parse(await readFile(new URL("../public/mock/memory.json", import.meta.url)));
+const manifest = await mockManifest();
 await initPhysics();
 // desktopInput listens for blur and keys on window. Rapier's glue reads window.performance once a window exists.
-globalThis.window ??= Object.assign(new EventTarget(), { performance: globalThis.performance });
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const close = (a, b, tolerance = 1e-5) => assert.ok(Math.abs(a - b) < tolerance, `${a} != ${b}`);
+globalThis.window ??= Object.assign(new EventTarget(), {
+  performance: globalThis.performance,
+}) as unknown as Window & typeof globalThis;
+const { close } = approx(1e-5);
 
 class FakeCanvas extends EventTarget {
   captured = new Set();
   getBoundingClientRect() {
     return { left: 0, top: 0, width: 800, height: 600 };
   }
-  setPointerCapture(id) {
+  setPointerCapture(id: number) {
     this.captured.add(id);
   }
-  hasPointerCapture(id) {
+  hasPointerCapture(id: number) {
     return this.captured.has(id);
   }
-  releasePointerCapture(id) {
+  releasePointerCapture(id: number) {
     this.captured.delete(id);
   }
 }
-const pointer = (type, x, y) => Object.assign(new Event(type), { button: 0, pointerId: 1, clientX: x, clientY: y });
+const pointer = (type: string, x: number, y: number) =>
+  Object.assign(new Event(type), { button: 0, pointerId: 1, clientX: x, clientY: y });
 
 /** A paused viewer with the ball at (0, 1, 0), straight ahead of a camera at (0, 1, 3): the canvas centre is on it. */
-function setup(canGrab, canMoveCamera) {
-  const frame = (t) => ({ t, p: [0, 1, 0], q: [0, 0, 0, 1] });
+function setup(canGrab?: () => boolean, canMoveCamera?: () => boolean) {
+  const frame = (t: number): Keyframe => ({ t, p: [0, 1, 0], q: [0, 0, 0, 1] });
   const definition = { ...structuredClone(manifest.objects[0]), id: "ball", track: [frame(0), frame(6)] };
   const object = { definition, root: new Group(), track: definition.track };
   const root = new Group();
   root.add(object.root);
-  const memory = {
+  const memory: LoadedMemory = {
     manifest: structuredClone(manifest),
     root,
     objects: [object],
@@ -62,7 +61,14 @@ function setup(canGrab, canMoveCamera) {
   camera.updateMatrixWorld();
   const canvas = new FakeCanvas(),
     controls = { enabled: true };
-  desktopInput(canvas, camera, controls, viewer, canGrab, canMoveCamera);
+  desktopInput(
+    canvas as unknown as HTMLCanvasElement,
+    camera,
+    controls as unknown as OrbitControls,
+    viewer,
+    canGrab,
+    canMoveCamera,
+  );
   return { viewer, canvas, controls, ball: object.root };
 }
 
@@ -90,7 +96,7 @@ test("scene-only viewing can suppress grabs so restoring controls cannot create 
     assert.equal(canvas.captured.size, 0);
     canvas.dispatchEvent(pointer("pointerdown", 400, 300));
     await sleep(HOLD_START_MS + 30);
-    assert.equal(viewer.held?.definition.id, "ball", "grabbing resumes when controls are visible");
+    assert.equal(heldId(viewer), "ball", "grabbing resumes when controls are visible");
     canvas.dispatchEvent(pointer("pointerup", 400, 300));
   } finally {
     viewer.dispose();
@@ -127,7 +133,7 @@ test("a press whose pointer capture fails is dropped, leaving the camera control
 
 test("a quick tap on a paused object does nothing: no grab, no take, the camera controls come back", async () => {
   const { viewer, canvas, controls } = setup();
-  const events = [];
+  const events: ViewerEvent["type"][] = [];
   viewer.subscribe((e) => events.push(e.type));
   try {
     canvas.dispatchEvent(pointer("pointerdown", 400, 300));
@@ -220,7 +226,7 @@ test("a drag past the threshold grabs and follows the pointer; let go, it stays 
     viewer.togglePlay();
     assert.equal(viewer.timeline.playing, true);
     assert.equal(viewer.held, null);
-    const take = viewer.timeline.active.tracks.get("ball");
+    const take = viewer.timeline.active.tracks.get("ball")!;
     assert.ok(
       take.length > 2 && Math.hypot(take[0].p[0] - at.x, take[0].p[1] - at.y, take[0].p[2] - at.z) < 1e-6,
       "the take starts where it was placed",
@@ -255,10 +261,10 @@ test("dragging to the bottom of the screen keeps the ball on the floor, never un
       canvas.dispatchEvent(pointer("pointermove", 400, y));
       await sleep(2);
     }
-    close(ball.position.y, manifest.objects[0].collider.radius);
+    close(ball.position.y, (manifest.objects[0].collider as { radius: number }).radius); // the mock ball's sphere
     canvas.dispatchEvent(pointer("pointerup", 400, 600));
     viewer.togglePlay(); // releases the placed ball and records its fall at once
-    const take = viewer.timeline.active.tracks.get("ball");
+    const take = viewer.timeline.active.tracks.get("ball")!;
     assert.ok(
       take.every((f) => f.p[1] > 0.17),
       `lowest recorded y ${Math.min(...take.map((f) => f.p[1]))}`,

@@ -1,7 +1,8 @@
 // People ghosts (points-sequence, MRPS files) and primitive geometry.
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { DataUtils, Group, Points, Vector3 } from "three";
+import { type BufferGeometry, DataUtils, type Float16BufferAttribute, Group, Points, Vector3 } from "three";
+import type { DynamicObject } from "@memreplay/shared";
 import {
   createPointsSequence,
   disposeObject,
@@ -10,11 +11,14 @@ import {
   primitiveGeometry,
   proxyGeometry,
 } from "../src/loader";
+import { approx } from "./helpers";
 
-const close = (a, b, tolerance = 1e-6) => assert.ok(Math.abs(a - b) < tolerance, `${a} != ${b}`);
+const { close } = approx(1e-6);
+/** three sets this flag on its float16 attributes; @types/three 0.186 does not declare it. */
+type Float16Attribute = Float16BufferAttribute & { readonly isFloat16BufferAttribute: true };
 
 /** The MRPS layout as pipeline/memreplay/handoff.py write_points_sequence writes it. frames: [[x, y, z, r, g, b], ...][] */
-function mrps(frames, sampleHz, { magic = "MRPS", version = 1, pad = true, extra = 0 } = {}) {
+function mrps(frames: number[][][], sampleHz: number, { magic = "MRPS", version = 1, pad = true, extra = 0 } = {}) {
   const size =
     frames.reduce(
       (n, points) => {
@@ -51,7 +55,12 @@ const ghostFrames = [
   ],
   [],
 ];
-const visual = { kind: "points-sequence", url: "ghost.bin", frameCount: 3, sampleHz: 10 };
+const visual: Extract<DynamicObject["visual"], { kind: "points-sequence" }> = {
+  kind: "points-sequence",
+  url: "ghost.bin",
+  frameCount: 3,
+  sampleHz: 10,
+};
 
 test("MRPS parsing reads the header, per-frame float16 positions and uint8 colours, and the 4-byte padding", () => {
   const data = parsePointsSequence(mrps(ghostFrames, 10));
@@ -86,7 +95,7 @@ test("MRPS parsing rejects bad magic, versions, truncation, missing padding and 
 });
 
 test("the file's header wins over a manifest that disagrees, with a warning", () => {
-  const warnings = [];
+  const warnings: string[] = [];
   const ghost = createPointsSequence({ ...visual, frameCount: 4, sampleHz: 12 }, mrps(ghostFrames, 10), (message) =>
     warnings.push(message),
   );
@@ -112,7 +121,7 @@ test("a ghost renders as THREE.Points that switch frames in place and dispose cl
     geometry = points.geometry;
   assert.ok(points instanceof Points);
   assert.equal(points.frustumCulled, false);
-  const position = geometry.getAttribute("position"),
+  const position = geometry.getAttribute("position") as Float16Attribute, // asserted just below
     color = geometry.getAttribute("color");
   assert.equal(position.isFloat16BufferAttribute, true);
   assert.equal(position.count, 2, "sized for the largest frame");
@@ -149,10 +158,10 @@ test("a ghost renders as THREE.Points that switch frames in place and dispose cl
 });
 
 test("primitive geometry uses full extents: sphere diameter, box sides, cylinder height along +Y", () => {
-  const size = (geometry) => {
+  const size = (geometry: BufferGeometry) => {
     geometry.computeBoundingBox();
-    return geometry.boundingBox
-      .getSize(new Vector3())
+    return geometry
+      .boundingBox!.getSize(new Vector3())
       .toArray()
       .map((x) => +x.toFixed(4));
   };

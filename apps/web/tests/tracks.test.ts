@@ -1,11 +1,12 @@
 // Keyframe velocity `v`: validation and the velocity physics starts from on pause.
 import { test } from "vitest";
 import assert from "node:assert/strict";
+import type { Keyframe, Vec3 } from "@memreplay/shared";
 import { keyframeVelocity, trackVelocity, validateTrack } from "../src/tracks";
+import { approx } from "./helpers";
 
-const frame = (t, x, v) => ({ t, p: [x, 1, 0], q: [0, 0, 0, 1], ...(v ? { v } : {}) });
-const close = (a, b, tolerance = 1e-9) => assert.ok(Math.abs(a - b) < tolerance, `${a} != ${b}`);
-const vec = (vector, expected) => expected.forEach((x, i) => close(vector.toArray()[i], x));
+const frame = (t: number, x: number, v?: Vec3): Keyframe => ({ t, p: [x, 1, 0], q: [0, 0, 0, 1], ...(v ? { v } : {}) });
+const { vec } = approx(1e-9);
 
 test("validateTrack accepts an absent or finite 3-vector v and rejects anything else", () => {
   validateTrack([frame(0, 0), frame(1, 1, [1, 0, -2.5])]);

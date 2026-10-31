@@ -17,8 +17,8 @@ import {
   RECONNECT_MAX_DELAY_MS,
   tokenRejected,
 } from "../src/net";
+import { sleep } from "./helpers";
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(predicate: () => unknown, what: string, ms = 3000): Promise<void> {
   const deadline = Date.now() + ms;
   while (!predicate()) {
@@ -46,7 +46,7 @@ function fakeLocks(): Locks {
   };
   return {
     request(name: string, options: LockOptions, callback: (lock: Lock | null) => unknown) {
-      return new Promise((resolve, reject) => {
+      return new Promise<unknown>((resolve, reject) => {
         const run = () => {
           held.add(name);
           Promise.resolve()

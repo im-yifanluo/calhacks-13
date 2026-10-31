@@ -3,14 +3,14 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import { Euler, Group, PerspectiveCamera, Vector3 } from "three";
+import type { Keyframe, Quat } from "@memreplay/shared";
 import { GLIDE_SECONDS, PathFollower, pathPosition, placeHead } from "../src/follow";
+import { approx } from "./helpers";
 
-const close = (a, b, tolerance = 1e-9) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
-const vec = (vector, expected, tolerance = 1e-9) =>
-  expected.forEach((x, i) => close(vector.toArray()[i], x, tolerance));
-const q = [0, 0, 0, 1];
+const { close, vec } = approx(1e-9, { inclusive: true });
+const q: Quat = [0, 0, 0, 1];
 // A 2 s walk along +x then +z, at eye height.
-const track = [
+const track: Keyframe[] = [
   { t: 0, p: [0, 1.6, 0], q },
   { t: 1, p: [2, 1.6, 0], q },
   { t: 2, p: [2, 1.8, 4], q },
@@ -48,13 +48,13 @@ test("paused, nothing is moved; resuming glides from where you are onto the path
   eyes.set(5, 1.6, -3); // walked away
   const dt = 1 / 60;
   let t = 0.5,
-    first = follower.step(true, t, eyes, dt, out).clone(); // resume
+    first = follower.step(true, t, eyes, dt, out)!.clone(); // resume
   vec(first, [5, 1.6, -3]); // the glide starts where you stand
   assert.ok(follower.gliding);
   let frames = 0;
   while (follower.gliding) {
     t += dt;
-    eyes.copy(follower.step(true, t, eyes, dt, out));
+    eyes.copy(follower.step(true, t, eyes, dt, out)!);
     frames++;
     assert.ok(frames < 200);
   }

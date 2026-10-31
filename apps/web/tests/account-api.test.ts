@@ -20,15 +20,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
-function mockAPI(value = response, config = { ...account, passwordLength: 6 }) {
-  const fetch = vi.fn(async (url: string) => Response.json(url.endsWith("/config") ? config : value));
+/** fetch as account-api calls it: always with plain headers, and with a JSON string body for POSTs. */
+type Fetch = (url: string, init: { headers: Record<string, string>; body?: string }) => Promise<Response>;
+function mockAPI(value: object = response, config = { ...account, passwordLength: 6 }) {
+  const fetch = vi.fn<Fetch>(async (url) => Response.json(url.endsWith("/config") ? config : value));
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
 test("six-digit login sends a string, preserves leading zeros and resolves the existing identity", async () => {
   const fetch = mockAPI();
   expect(await restorePassword("000007")).toEqual({ account: { ...account, password: "000007" }, name: "Jerry" });
-  expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ password: "000007" });
+  expect(JSON.parse(fetch.mock.calls[1][1].body!)).toEqual({ password: "000007" });
   expect(fetch.mock.calls[1][0]).toBe("https://api.test/api/account");
 });
 test("creation promotes the current guest and rejects an unexpected identity", async () => {
@@ -44,10 +46,10 @@ test("wrong destination is rejected before sending the account credential", asyn
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 test("old sessions can obtain a short password without changing identity; cached passwords need no request", async () => {
-  const fetch = mockAPI({ password: "000007" } as any);
+  const fetch = mockAPI({ password: "000007" });
   expect(await accountPassword(account)).toBe("000007");
   expect(fetch.mock.calls[1][0]).toBe("https://api.test/api/account/password");
-  expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ identity: account.identity });
+  expect(JSON.parse(fetch.mock.calls[1][1].body!)).toEqual({ identity: account.identity });
   fetch.mockClear();
   expect(await accountPassword({ ...account, password: "000007" })).toBe("000007");
   expect(fetch).not.toHaveBeenCalled();

@@ -21,25 +21,22 @@ import {
   SUMMON,
   VRPanel,
 } from "../src/vr-panel";
+import { approx, stubCanvasDocument } from "./helpers";
 
-const close = (a, b, tolerance = 1e-9) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
+const { close } = approx(1e-9, { inclusive: true });
 /** uv of a canvas pixel (three's PlaneGeometry uv: origin bottom-left). */
-const uv = (x, y) => [x / PANEL.width, 1 - y / PANEL.height];
-const deg = (radians) => (radians * 180) / Math.PI;
+const uv = (x: number, y: number): [u: number, v: number] => [x / PANEL.width, 1 - y / PANEL.height];
+const deg = (radians: number) => (radians * 180) / Math.PI;
 
 // The canvas is the only browser piece; drawing calls do nothing.
-const context = new Proxy(
-  { measureText: (value) => ({ width: value.length * 15 }), createLinearGradient: () => ({ addColorStop() {} }) },
-  { get: (target, key) => (key in target ? target[key] : () => {}), set: () => true },
-);
-globalThis.document = { createElement: () => ({ getContext: () => context, width: 0, height: 0 }) };
+stubCanvasDocument();
 
 test("every region is hit at its centre in each mode, and the gaps between them hit nothing", () => {
   for (const [mode, regions] of [
     ["full", REGIONS],
     ["help", HELP_REGIONS],
     ["compact", COMPACT_REGIONS],
-  ])
+  ] as const)
     for (const region of regions)
       assert.equal(
         hitRegion(...uv(region.x + region.w / 2, region.y + region.h / 2), mode),
@@ -65,7 +62,7 @@ test("targets follow the brief: Play 96 px, others 80 px or more, at least 16 px
         assert.ok(Math.max(dx, dy) >= 16, `${a.id} and ${b.id} are ${Math.max(dx, dy)} px apart`);
       }
   }
-  assert.equal(REGIONS.find((r) => r.id === "play").h, 96);
+  assert.equal(REGIONS.find((r) => r.id === "play")!.h, 96);
 });
 
 test("the panel's header is at the top of the plane (uv v = 1 is the canvas top)", () => {
@@ -114,7 +111,7 @@ test("lazy follow: small turns and steps keep the panel put; turning past 30° o
   const head = new Vector3(0, 1.6, 0),
     forward = new Vector3(0, 0, -1);
   const panel = panelTarget(head, forward);
-  const turned = (degrees) =>
+  const turned = (degrees: number) =>
     new Vector3(-Math.sin((degrees * Math.PI) / 180), 0, -Math.cos((degrees * Math.PI) / 180));
   assert.equal(needsRecenter(panel, head, forward, head), false);
   assert.equal(needsRecenter(panel, head, turned(25), head), false);
@@ -140,7 +137,7 @@ function rigged() {
   panel.follow(head, forward, 1 / 90);
   return { rig, panel, head, forward, eye: rig.localToWorld(head.clone()) };
 }
-const worldOf = (panel, x, y) =>
+const worldOf = (panel: VRPanel, x: number, y: number) =>
   panel.mesh.localToWorld(
     new Vector3((x / PANEL.width - 0.5) * PANEL.metersWide, (0.5 - y / PANEL.height) * PANEL_METERS_HIGH, 0),
   );
@@ -213,7 +210,7 @@ test("the stick cannot push the panel nearer than 0.6 m or farther than 3 m", ()
 
 test("a dragged panel stays between 55° below and 20° above eye level, 0.6–3 m away", () => {
   const eye = new Vector3(1, 1.6, 2);
-  const pitchOf = (p) => deg(Math.atan2(p.y - eye.y, Math.hypot(p.x - eye.x, p.z - eye.z)));
+  const pitchOf = (p: Vector3) => deg(Math.atan2(p.y - eye.y, Math.hypot(p.x - eye.x, p.z - eye.z)));
   const overhead = clampPlacement(new Vector3(1.2, 3.5, 1.5), eye);
   close(pitchOf(overhead), PLACE.maxPitchDeg, 1e-9);
   const floor = clampPlacement(new Vector3(1, 0, 1.5), eye);

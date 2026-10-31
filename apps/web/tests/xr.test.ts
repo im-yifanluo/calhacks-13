@@ -1,14 +1,13 @@
 // Quest locomotion (input-xr.ts): left-stick direction and snap turn from the user camera under the rig.
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { ArrayCamera, Euler, Group, PerspectiveCamera, Vector3 } from "three";
+import { ArrayCamera, Euler, Group, type Object3D, PerspectiveCamera, Vector3 } from "three";
 import { headForward, snapTurn, stickMove } from "../src/input-xr";
+import { approx } from "./helpers";
 
 // No Quest is available, so these check the locomotion math against the scene graph main.ts builds, with the head
 // pose WebXRManager.updateUserCamera writes into the user camera on each render (the viewer pose relative to the rig).
-const close = (a, b, tolerance) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
-const vec = (vector, expected, tolerance = 1e-12) =>
-  expected.forEach((x, i) => close(vector.toArray()[i], x, tolerance));
+const { close, vec } = approx(1e-12, { inclusive: true });
 
 function headset({ rigYaw = 0, rigPosition = [0, 0, 0], head = [0.4, 1.6, 0.3], headYaw = 0, headPitch = 0 } = {}) {
   const scene = new Group(),
@@ -23,7 +22,7 @@ function headset({ rigYaw = 0, rigPosition = [0, 0, 0], head = [0.4, 1.6, 0.3], 
   scene.updateMatrixWorld(true);
   return { rig, camera };
 }
-const worldHead = (camera) => camera.getWorldPosition(new Vector3());
+const worldHead = (camera: Object3D) => camera.getWorldPosition(new Vector3());
 
 test("the stick direction includes the rig's spawn yaw and earlier snap turns", () => {
   vec(headForward(headset({ rigYaw: Math.PI / 2 }).camera), [-1, 0, 0]); // spawned facing -X

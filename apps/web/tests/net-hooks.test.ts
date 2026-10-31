@@ -1,55 +1,29 @@
 // The viewer hooks the network adapter (src/net/adapter.ts) relies on: Timeline.setRecording and Viewer.applyClock.
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { Group, Quaternion, Vector3 } from "three";
+import { Quaternion, Vector3 } from "three";
+import type { Keyframe, Vec3 } from "@memreplay/shared";
 import { Timeline } from "../src/timeline";
 import { initPhysics, STEP } from "../src/physics";
-import { Viewer } from "../src/viewer";
+import { Viewer, type ViewerEvent } from "../src/viewer";
+import { approx, fixture, frame, mockManifest, settle, times } from "./helpers";
 
-const frame = (t, x, y = 1, z = 0) => ({ t, p: [x, y, z], q: [0, 0, 0, 1] });
-const times = (frames) => frames.map((f) => f.t);
-const close = (a, b, tolerance = 1e-5) => assert.ok(Math.abs(a - b) < tolerance, `${a} != ${b}`);
-const manifest = JSON.parse(await readFile(new URL("../public/mock/memory.json", import.meta.url)));
+const { close } = approx(1e-5);
+const manifest = await mockManifest();
 await initPhysics();
-
-function fixture() {
-  const definition = {
-    ...structuredClone(manifest.objects[0]),
-    collider: { kind: "sphere", radius: 0.12 },
-    track: [frame(0, 0), frame(6, 3)],
-  };
-  const object = { definition, root: new Group(), track: definition.track };
-  const root = new Group();
-  root.add(object.root);
-  const memory = {
-    manifest: structuredClone(manifest),
-    root,
-    objects: [object],
-    cameraTrack: [frame(0, 0)],
-    roomGeometry: [],
-    warnings: [],
-    dispose() {},
-  };
-  return { memory, object };
-}
-async function settle(viewer) {
-  for (let i = 0; i < 1200 && viewer.recording; i++) viewer.update(STEP);
-  assert.equal(viewer.recording, false);
-}
 
 test("setRecording replaces, copies and clears a branch's recording of one object", () => {
   const timeline = new Timeline(6);
   timeline.upsertBranch({ id: "7", parentId: "original", name: "Take", forkTime: 1 });
-  const branch = timeline.branches.find((b) => b.id === "7");
+  const branch = timeline.branches.find((b) => b.id === "7")!;
   timeline.appendRecording("7", "ball", [frame(1, 1), frame(2, 1), frame(3, 1)]);
-  const frames = [{ ...frame(1.5, 7), v: [1, 2, 3] }, frame(2.5, 8)];
+  const frames: [Keyframe & { v: Vec3 }, Keyframe] = [{ ...frame(1.5, 7), v: [1, 2, 3] }, frame(2.5, 8)];
   timeline.setRecording("7", "ball", frames);
-  assert.deepEqual(times(branch.tracks.get("ball")), [1.5, 2.5], "replaced, not merged");
+  assert.deepEqual(times(branch.tracks.get("ball")!), [1.5, 2.5], "replaced, not merged");
   frames[0].p[0] = 99;
   frames[0].v[0] = 99;
-  assert.equal(branch.tracks.get("ball")[0].p[0], 7, "stored a copy");
-  assert.equal(branch.tracks.get("ball")[0].v[0], 1);
+  assert.equal(branch.tracks.get("ball")![0].p[0], 7, "stored a copy");
+  assert.equal(branch.tracks.get("ball")![0].v![0], 1);
   timeline.setRecording("7", "ball", null);
   assert.equal(branch.tracks.has("ball"), false);
   timeline.setRecording("7", "ball", [frame(1, 1)]);
@@ -73,7 +47,7 @@ test("setRecording accepts a branch's own frames before its fork time, inside th
     assert.throws(() => timeline.setRecording("7", "ball", invalid));
   }
   assert.deepEqual(
-    times(timeline.branches.find((b) => b.id === "7").tracks.get("ball")),
+    times(timeline.branches.find((b) => b.id === "7")!.tracks.get("ball")!),
     [0, 1],
     "a rejected recording keeps the old one",
   );
@@ -85,10 +59,10 @@ test("setRecording accepts a branch's own frames before its fork time, inside th
 test("networked grab: the server's fork clock row arriving inside acquire() does not cancel the grab", async () => {
   // jerry-p4's grab reducer forks and moves the room's timeline to the new branch in the same transaction, so a
   // network layer sees that timeline row, and may apply it, before acquire() resolves.
-  const { memory } = fixture();
+  const { memory } = fixture(manifest);
   const viewer = new Viewer(memory, () => {});
-  const released = [];
-  const events = [];
+  const released: string[] = [];
+  const events: ViewerEvent["type"][] = [];
   const branch = { id: "7", parentId: "original", name: "First edit", forkTime: 1 };
   try {
     viewer.seek(1);
@@ -115,7 +89,7 @@ test("networked grab: the server's fork clock row arriving inside acquire() does
     viewer.release();
     await settle(viewer);
     assert.deepEqual(released, ["ball-1"]);
-    assert.ok(viewer.timeline.branches.find((b) => b.id === "7").tracks.get("ball-1").length > 2);
+    assert.ok(viewer.timeline.branches.find((b) => b.id === "7")!.tracks.get("ball-1")!.length > 2);
   } finally {
     viewer.dispose();
   }
@@ -125,10 +99,10 @@ test("a different clock while a grab is pending (another player's seek or play) 
   for (const [time, playing] of [
     [3, false],
     [1, true],
-  ]) {
-    const { memory } = fixture();
+  ] as const) {
+    const { memory } = fixture(manifest);
     const viewer = new Viewer(memory, () => {});
-    const released = [];
+    const released: string[] = [];
     try {
       viewer.seek(1);
       viewer.setAuthority({
@@ -151,9 +125,9 @@ test("a different clock while a grab is pending (another player's seek or play) 
 });
 
 test("an identical clock is a no-op: a held object stays held and a running preview keeps running", async () => {
-  const { memory, object } = fixture();
+  const { memory, object } = fixture(manifest);
   const viewer = new Viewer(memory, () => {});
-  const events = [];
+  const events: ViewerEvent["type"][] = [];
   try {
     viewer.seek(1);
     await viewer.grab("ball-1");
@@ -177,14 +151,14 @@ test("an identical clock is a no-op: a held object stays held and a running prev
 });
 
 test("an unknown branch in a clock is reported and ignored, never thrown; invalid numbers are ignored", async () => {
-  const { memory } = fixture();
-  const reports = [];
+  const { memory } = fixture(manifest);
+  const reports: string[] = [];
   const viewer = new Viewer(memory, (message) => reports.push(message));
   try {
     viewer.seek(1);
     await viewer.grab("ball-1");
     assert.doesNotThrow(() => viewer.applyClock(4, true, 1, "99"));
-    assert.ok(reports.at(-1).includes("99"));
+    assert.ok(reports.at(-1)!.includes("99"));
     assert.equal(viewer.held?.definition.id, "ball-1");
     close(viewer.timeline.time, 1);
     assert.equal(viewer.timeline.playing, false);
@@ -202,7 +176,7 @@ test("an unknown branch in a clock is reported and ignored, never thrown; invali
 });
 
 test("setAuthority(undefined) returns the viewer to local takes", async () => {
-  const { memory } = fixture();
+  const { memory } = fixture(manifest);
   const viewer = new Viewer(memory, () => {});
   try {
     viewer.setAuthority({ acquire: async () => false, release() {} });

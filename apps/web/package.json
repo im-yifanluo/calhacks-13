@@ -9,7 +9,7 @@
     "preview": "vite preview --host",
     "dev:lan": "vite --host",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",

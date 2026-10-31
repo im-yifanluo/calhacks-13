@@ -1,39 +1,18 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { Group, Object3D, Quaternion, Vector3 } from "three";
+import { Object3D, Quaternion, Vector3 } from "three";
+import type { DynamicObject, Keyframe } from "@memreplay/shared";
 import { sampleTrack, trackVelocity, validateTrack } from "../src/tracks";
 import { Timeline } from "../src/timeline";
 import { initPhysics, Physics, STEP } from "../src/physics";
 import { validateManifest } from "../src/loader";
-import { Viewer } from "../src/viewer";
+import { Viewer, type ViewerEvent } from "../src/viewer";
+import { approx, fixture, frame, mockManifest } from "./helpers";
 
-const frame = (t, x, y = 1, z = 0) => ({ t, p: [x, y, z], q: [0, 0, 0, 1] });
-const track = [frame(0, 0), { ...frame(2, 2), q: [0, 1, 0, 0], s: 2 }];
-const close = (a, b, tolerance = 1e-5) => assert.ok(Math.abs(a - b) < tolerance, `${a} != ${b}`);
-const manifest = JSON.parse(await readFile(new URL("../public/mock/memory.json", import.meta.url)));
+const track: Keyframe[] = [frame(0, 0), { ...frame(2, 2), q: [0, 1, 0, 0], s: 2 }];
+const { close } = approx(1e-5);
+const manifest = await mockManifest();
 await initPhysics();
-
-function fixture() {
-  const definition = {
-    ...structuredClone(manifest.objects[0]),
-    collider: { kind: "sphere", radius: 0.12 },
-    track: [frame(0, 0), frame(6, 3)],
-  };
-  const object = { definition, root: new Group(), track: definition.track };
-  const root = new Group();
-  root.add(object.root);
-  const memory = {
-    manifest: structuredClone(manifest),
-    root,
-    objects: [object],
-    cameraTrack: [frame(0, 0)],
-    roomGeometry: [],
-    warnings: [],
-    dispose() {},
-  };
-  return { memory, object };
-}
 
 test("track clamps endpoints, interpolates translation, normalized rotation, and scale", () => {
   const object = new Object3D();
@@ -119,9 +98,9 @@ test("late join imports branch ancestors and overlapping recording chunks withou
 });
 
 test("incoming clocks select known branches without emitting clock echoes", () => {
-  const { memory } = fixture();
+  const { memory } = fixture(manifest);
   const viewer = new Viewer(memory, () => {});
-  const events = [];
+  const events: ViewerEvent[] = [];
   try {
     viewer.subscribe((event) => events.push(event));
     viewer.timeline.upsertBranch({ id: "12", parentId: "original", name: "Remote", forkTime: 1 });
@@ -138,6 +117,7 @@ test("incoming clocks select known branches without emitting clock echoes", () =
 test("manifest rejects unsupported world frames, invalid colliders, and duplicate object ids", () => {
   validateManifest(manifest);
   const badWorld = structuredClone(manifest);
+  // @ts-expect-error: an unsupported world frame, which the validator must reject
   badWorld.world.up = "-y";
   assert.throws(() => validateManifest(badWorld));
   const badCollider = structuredClone(manifest);
@@ -149,7 +129,7 @@ test("manifest rejects unsupported world frames, invalid colliders, and duplicat
 });
 
 test("real Rapier simulation collides with a raised floor and clears bodies safely", () => {
-  const { object } = fixture();
+  const { object } = fixture(manifest);
   object.root.position.set(0, 2, 0);
   const physics = new Physics(0.5, []);
   try {
@@ -170,8 +150,8 @@ test("sphere, box, capsule, cylinder, and convex hull colliders all support scal
     { kind: "capsule", radius: 0.1, halfHeight: 0.2 },
     { kind: "cylinder", radius: 0.1, halfHeight: 0.2 },
     { kind: "convex", url: "hull.glb" },
-  ]) {
-    const { object } = fixture();
+  ] satisfies DynamicObject["collider"][]) {
+    const { object } = fixture(manifest);
     object.definition.collider = shape;
     object.root.position.y = 2;
     object.root.scale.setScalar(2);
@@ -188,8 +168,8 @@ test("sphere, box, capsule, cylinder, and convex hull colliders all support scal
 });
 
 test("paused grab creates a branch; release records physics; original and replay stay distinct", async () => {
-  const { memory, object } = fixture();
-  const events = [];
+  const { memory, object } = fixture(manifest);
+  const events: ViewerEvent[] = [];
   const viewer = new Viewer(memory, () => {});
   viewer.subscribe((e) => events.push(e));
   try {
@@ -201,7 +181,7 @@ test("paused grab creates a branch; release records physics; original and replay
     viewer.moveHeld(new Vector3(-1, 2, 0), new Quaternion(), 1 / 60);
     viewer.release();
     for (let i = 0; i < 360; i++) viewer.update(STEP);
-    const saved = viewer.timeline.active.tracks.get(object.definition.id);
+    const saved = viewer.timeline.active.tracks.get(object.definition.id)!;
     assert.ok(saved.length > 2);
     assert.ok(saved.every((f, i) => i === 0 || f.t > saved[i - 1].t));
     assert.ok(events.some((e) => e.type === "recording"));
@@ -224,15 +204,15 @@ test("paused grab creates a branch; release records physics; original and replay
 });
 
 test("ownership rejection never forks; a late grant after seeking is released", async () => {
-  const { memory, object } = fixture();
+  const { memory, object } = fixture(manifest);
   const viewer = new Viewer(memory, () => {});
   try {
     viewer.seek(1);
     viewer.setAuthority({ acquire: async () => false, release() {} });
     assert.equal(await viewer.grab(object.definition.id), false);
     assert.equal(viewer.timeline.branches.length, 1);
-    let grant;
-    const released = [];
+    let grant: ((granted: boolean) => void) | undefined;
+    const released: string[] = [];
     viewer.setAuthority({
       acquire: () =>
         new Promise((resolve) => {
@@ -242,7 +222,7 @@ test("ownership rejection never forks; a late grant after seeking is released", 
     });
     const pending = viewer.grab(object.definition.id);
     viewer.seek(3);
-    grant(true);
+    grant!(true);
     assert.equal(await pending, false);
     assert.deepEqual(released, [object.definition.id]);
     assert.equal(viewer.timeline.branches.length, 1);
@@ -252,9 +232,9 @@ test("ownership rejection never forks; a late grant after seeking is released", 
 });
 
 test("simulation ownership is retained after hand release until recording completes", async () => {
-  const { memory, object } = fixture();
+  const { memory, object } = fixture(manifest);
   const viewer = new Viewer(memory, () => {});
-  const released = [];
+  const released: string[] = [];
   try {
     viewer.setAuthority({ acquire: async () => true, release: (id) => released.push(id) });
     viewer.seek(1);
@@ -270,7 +250,7 @@ test("simulation ownership is retained after hand release until recording comple
 });
 
 test("network grants use the canonical server branch instead of creating a local duplicate", async () => {
-  const { memory, object } = fixture();
+  const { memory, object } = fixture(manifest);
   const viewer = new Viewer(memory, () => {});
   try {
     viewer.seek(1);
@@ -283,14 +263,14 @@ test("network grants use the canonical server branch instead of creating a local
     assert.equal(viewer.timeline.branches.length, 2);
     viewer.release();
     viewer.togglePlay();
-    assert.ok(viewer.timeline.active.tracks.get(object.definition.id).length > 1);
+    assert.ok(viewer.timeline.active.tracks.get(object.definition.id)!.length > 1);
   } finally {
     viewer.dispose();
   }
 });
 
 test("catching a local preview forks at its preview time without jumping to the initial release pose", async () => {
-  const { memory, object } = fixture();
+  const { memory, object } = fixture(manifest);
   const viewer = new Viewer(memory, () => {});
   try {
     viewer.seek(1);
@@ -308,10 +288,10 @@ test("catching a local preview forks at its preview time without jumping to the 
 });
 
 test("ownership revocation emits the recorded prefix and stops all later local pose/rest writes", async () => {
-  const { memory, object } = fixture();
+  const { memory, object } = fixture(manifest);
   const viewer = new Viewer(memory, () => {});
-  const events = [];
-  const releases = [];
+  const events: ViewerEvent[] = [];
+  const releases: string[] = [];
   try {
     viewer.setAuthority({ acquire: async () => true, release: (id) => releases.push(id) });
     viewer.subscribe((e) => events.push(e));
@@ -320,7 +300,7 @@ test("ownership revocation emits the recorded prefix and stops all later local p
     viewer.release();
     for (let i = 0; i < 12; i++) viewer.update(STEP);
     viewer.revokeOwnership(object.definition.id);
-    assert.equal(events.at(-1).type, "recording");
+    assert.equal(events.at(-1)!.type, "recording");
     const count = events.length;
     for (let i = 0; i < 120; i++) viewer.update(STEP);
     assert.equal(events.length, count);
@@ -332,7 +312,7 @@ test("ownership revocation emits the recorded prefix and stops all later local p
 });
 
 test("editing an existing canonical branch retains the prior recorded prefix", async () => {
-  const { memory, object } = fixture();
+  const { memory, object } = fixture(manifest);
   const viewer = new Viewer(memory, () => {});
   const branch = { id: "42", parentId: "original", name: "Shared take", forkTime: 1 };
   try {
@@ -343,7 +323,7 @@ test("editing an existing canonical branch retains the prior recorded prefix", a
     await viewer.grab(object.definition.id);
     viewer.release();
     viewer.togglePlay();
-    const saved = viewer.timeline.active.tracks.get(object.definition.id);
+    const saved = viewer.timeline.active.tracks.get(object.definition.id)!;
     close(saved[0].t, 1);
     close(saved[0].p[0], 5);
     assert.ok(saved.some((f) => f.t > 2));

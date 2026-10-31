@@ -2,28 +2,49 @@
 // transforms, ray picking, playback, takes and physics are real. Adapted from Andrew Eng's frontend-quest tests.
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { EventDispatcher, Group, PerspectiveCamera, Quaternion, Vector3 } from "three";
+import {
+  EventDispatcher,
+  Group,
+  type Object3DEventMap,
+  PerspectiveCamera,
+  Quaternion,
+  Vector3,
+  type WebGLRenderer,
+  type WebXRManagerEventMap,
+} from "three";
+import type { Keyframe } from "@memreplay/shared";
 import { XRInput } from "../src/input-xr";
-import { COMPACT_REGIONS, FOLLOW, PANEL, PANEL_METERS_HIGH, REGIONS, scrubTime } from "../src/vr-panel";
+import {
+  COMPACT_REGIONS,
+  FOLLOW,
+  PANEL,
+  PANEL_METERS_HIGH,
+  type PanelAction,
+  REGIONS,
+  type Region,
+  scrubTime,
+} from "../src/vr-panel";
 import { Viewer } from "../src/viewer";
 import { initPhysics } from "../src/physics";
+import { approx, heldId, mockManifest, stubCanvasDocument } from "./helpers";
 
 await initPhysics();
-const manifest = JSON.parse(await readFile(new URL("../public/mock/memory.json", import.meta.url)));
-const close = (a, b, tolerance = 1e-6) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
+const manifest = await mockManifest();
+const { close } = approx(1e-6, { inclusive: true });
 const flush = () => new Promise((resolve) => setImmediate(resolve));
-const region = (id) => REGIONS.find((r) => r.id === id);
+const region = (id: PanelAction) => REGIONS.find((r) => r.id === id)!;
+type Rect = Pick<Region, "x" | "y" | "w" | "h">;
 
-const context = new Proxy(
-  { measureText: (value) => ({ width: value.length * 15 }), createLinearGradient: () => ({ addColorStop() {} }) },
-  { get: (target, key) => (key in target ? target[key] : () => {}), set: () => true },
-);
-globalThis.document = { createElement: () => ({ getContext: () => context, width: 0, height: 0 }) };
+stubCanvasDocument();
 
-class Headset extends EventDispatcher {
+type Press = "selectstart" | "selectend" | "squeezestart" | "squeezeend";
+/** The controller events the tests dispatch: `connected` with a fake input source; presses carry no data. */
+interface ControllerEvents extends Object3DEventMap, Record<Press, {}> {
+  connected: { data: { handedness: XRHandedness; gamepad: ReturnType<typeof gamepad> } };
+}
+class Headset extends EventDispatcher<WebXRManagerEventMap> {
   isPresenting = false;
-  controllers = [new Group(), new Group()];
+  controllers = [new Group<ControllerEvents>(), new Group<ControllerEvents>()];
   grips = [new Group(), new Group()];
   hands = [Object.assign(new Group(), { joints: {} }), Object.assign(new Group(), { joints: {} })];
   session = Object.assign(new EventTarget(), {
@@ -34,13 +55,13 @@ class Headset extends EventDispatcher {
       return Promise.resolve();
     },
   });
-  getController(index) {
+  getController(index: number) {
     return this.controllers[index];
   }
-  getControllerGrip(index) {
+  getControllerGrip(index: number) {
     return this.grips[index];
   }
-  getHand(index) {
+  getHand(index: number) {
     return this.hands[index];
   }
   getSession() {
@@ -57,7 +78,7 @@ function setup() {
   const camera = new PerspectiveCamera();
   camera.position.set(0, 1.6, 2);
   rig.add(camera);
-  const frame = (t) => ({ t, p: [0, 1, 0], q: [0, 0, 0, 1] });
+  const frame = (t: number): Keyframe => ({ t, p: [0, 1, 0], q: [0, 0, 0, 1] });
   const definition = { ...structuredClone(manifest.objects[0]), id: "ball", track: [frame(0), frame(6)] };
   const object = { definition, root: new Group(), track: definition.track };
   root.add(object.root);
@@ -69,7 +90,8 @@ function setup() {
   const xr = new Headset(),
     right = gamepad(),
     left = gamepad();
-  const input = new XRInput({ xr, capabilities: { getMaxAnisotropy: () => 1 } }, rig, camera, viewer, {
+  const renderer = { xr, capabilities: { getMaxAnisotropy: () => 1 } } as unknown as WebGLRenderer;
+  const input = new XRInput(renderer, rig, camera, viewer, {
     status: () => "",
     room: () => "Solo",
     title: () => "Test room",
@@ -87,9 +109,9 @@ function setup() {
     scene.updateMatrixWorld(true);
   };
   for (let i = 0; i < 17; i++) step(); // the panel waits a few frames for a head pose, then opens in front
-  const panel = rig.getObjectByName("vr-panel");
+  const panel = rig.getObjectByName("vr-panel")!;
   /** Point controller 0 (held at the eyes) at a world point. */
-  const aim = (target) => {
+  const aim = (target: Vector3) => {
     const controller = xr.controllers[0];
     controller.position.set(0, 1.6, 2);
     controller.quaternion.setFromUnitVectors(
@@ -98,14 +120,14 @@ function setup() {
     );
     scene.updateMatrixWorld(true);
   };
-  const pixel = (x, y) =>
+  const pixel = (x: number, y: number) =>
     panel.localToWorld(
       new Vector3((x / PANEL.width - 0.5) * PANEL.metersWide, (0.5 - y / PANEL.height) * PANEL_METERS_HIGH, 0),
     );
-  const pointAt = (x, y) => aim(pixel(x, y));
-  const centre = (r) => pointAt(r.x + r.w / 2, r.y + r.h / 2);
-  const press = (type) => xr.controllers[0].dispatchEvent({ type });
-  const click = (r) => {
+  const pointAt = (x: number, y: number) => aim(pixel(x, y));
+  const centre = (r: Rect) => pointAt(r.x + r.w / 2, r.y + r.h / 2);
+  const press = (type: Press) => xr.controllers[0].dispatchEvent({ type });
+  const click = (r: Rect) => {
     centre(r);
     press("selectstart");
     press("selectend");
@@ -190,7 +212,7 @@ test("a grip on the panel grabs nothing behind it; once hidden, the object behin
     app.aim(app.ball);
     app.press("squeezestart");
     await flush();
-    assert.equal(app.viewer.held?.definition.id, "ball");
+    assert.equal(heldId(app.viewer), "ball");
     assert.equal(app.viewer.timeline.branches.length, 2);
     app.press("selectend");
     assert.ok(app.viewer.held, "letting go of the trigger must not drop an object held by the grip");
@@ -214,10 +236,10 @@ test("the held object follows the controller grip, and the left stick cannot mov
     app.aim(app.ball);
     app.press("squeezestart");
     await flush();
-    const x = app.viewer.held.root.position.x;
+    const x = app.viewer.held!.root.position.x;
     app.xr.grips[0].position.x += 0.25;
     app.step();
-    close(app.viewer.held.root.position.x, x + 0.25);
+    close(app.viewer.held!.root.position.x, x + 0.25);
     app.left.axes[3] = -1;
     const rig = app.rig.position.clone();
     for (let i = 0; i < 10; i++) app.step();
@@ -232,7 +254,7 @@ test("the held object follows the controller grip, and the left stick cannot mov
 
 test("leaving VR cancels a pending grab before it can fork a take", async () => {
   const app = setup();
-  let grant;
+  let grant: ((granted: boolean) => void) | undefined;
   app.viewer.setAuthority({
     acquire: () =>
       new Promise((resolve) => {
@@ -366,7 +388,7 @@ test("a panel left out of view can be called back with the Bring controls here p
       app.step(1 / 60);
     }
     app.press("selectend");
-    const summon = app.rig.getObjectByName("vr-panel-summon");
+    const summon = app.rig.getObjectByName("vr-panel-summon")!;
     for (let i = 0; i < 180; i++) app.step(1 / 60);
     assert.equal(summon.visible, true, "offered after the panel was out of view for a while");
     app.aim(summon.getWorldPosition(new Vector3()));
@@ -390,32 +412,33 @@ test("at the very end of the memory objects don't light up, and a grab says what
     app.viewer.seek(app.viewer.timeline.duration);
     app.aim(app.ball);
     app.step();
-    assert.equal(app.input.pointingKeys[0], "", "the ball is not offered at the end");
+    assert.equal(app.input["pointingKeys"][0], "", "the ball is not offered at the end");
     app.press("squeezestart");
     await flush();
     app.press("squeezeend");
     assert.equal(app.viewer.held, null);
     assert.equal(app.viewer.timeline.branches.length, 1, "no take was made");
-    assert.match(app.input.toast.text, /end/);
+    assert.match(app.input["toast"]!.text, /end/);
     // Back a second, the same grab works.
     app.viewer.seek(app.viewer.timeline.duration - 1);
     app.aim(app.ball);
     app.step();
-    assert.equal(app.input.pointingKeys[0], "object:ball");
+    assert.equal(app.input["pointingKeys"][0], "object:ball");
     app.press("squeezestart");
     await flush();
-    assert.equal(app.viewer.held?.definition.id, "ball");
+    assert.equal(heldId(app.viewer), "ball");
   } finally {
     app.dispose();
   }
 });
 
+type App = ReturnType<typeof setup>;
 /** The ball's proxy as a world sphere. */
-const ballSphere = (app) => {
-  const proxy = app.viewer.pickables.find((p) => p.userData.objectId === "ball");
+const ballSphere = (app: App) => {
+  const proxy = app.viewer.pickables.find((p) => p.userData.objectId === "ball")!;
   proxy.updateWorldMatrix(true, false);
   if (!proxy.geometry.boundingSphere) proxy.geometry.computeBoundingSphere();
-  return proxy.geometry.boundingSphere.clone().applyMatrix4(proxy.matrixWorld);
+  return proxy.geometry.boundingSphere!.clone().applyMatrix4(proxy.matrixWorld);
 };
 
 test("touching an object with the controller grabs it without pointing at it", async () => {
@@ -425,7 +448,7 @@ test("touching an object with the controller grabs it without pointing at it", a
     app.aim(new Vector3(0, 4, -5)); // the ray points up and away
     app.xr.grips[0].position.copy(sphere.center).add(new Vector3(0, 0, sphere.radius + 0.04));
     app.step();
-    assert.equal(app.input.pointingKeys[0], "object:ball", "offered by touch");
+    assert.equal(app.input["pointingKeys"][0], "object:ball", "offered by touch");
     app.press("squeezestart");
     await flush();
     assert.equal(app.viewer.held?.definition.id, "ball");
@@ -450,7 +473,7 @@ test("a ray that just misses a small object still offers it", async () => {
       .applyAxisAngle(new Vector3(0, 1, 0), -(edge + (2 * Math.PI) / 180));
     app.aim(eye.clone().add(dir));
     app.step();
-    assert.equal(app.input.pointingKeys[0], "object:ball");
+    assert.equal(app.input["pointingKeys"][0], "object:ball");
     // Far outside the assist cone it is not.
     app.aim(
       eye.clone().add(
@@ -461,7 +484,7 @@ test("a ray that just misses a small object still offers it", async () => {
       ),
     );
     app.step();
-    assert.equal(app.input.pointingKeys[0], "");
+    assert.equal(app.input["pointingKeys"][0], "");
   } finally {
     app.dispose();
   }
@@ -476,7 +499,7 @@ test("grabbing while the memory plays freezes time first", async () => {
     assert.equal(app.viewer.timeline.playing, true);
     app.aim(app.ball);
     app.step();
-    assert.equal(app.input.pointingKeys[0], "object:ball", "offered while playing");
+    assert.equal(app.input["pointingKeys"][0], "object:ball", "offered while playing");
     app.press("squeezestart");
     await flush();
     assert.equal(app.viewer.timeline.playing, false);
@@ -500,13 +523,13 @@ test("placed objects can be picked up again without a new take, and walking is f
     app.press("squeezeend");
     app.step();
     assert.equal(app.viewer.isPlaced, true);
-    const at = app.viewer.held.root.position.clone();
+    const at = app.viewer.held!.root.position.clone();
     for (let i = 0; i < 20; i++) app.step();
-    assert.ok(app.viewer.held.root.position.distanceTo(at) < 1e-9, "stays put while paused");
+    assert.ok(app.viewer.held!.root.position.distanceTo(at) < 1e-9, "stays put while paused");
     // Pick it up again (it is under the ray where it was left): same take.
     app.aim(at);
     app.step();
-    assert.equal(app.input.pointingKeys[0], "object:ball");
+    assert.equal(app.input["pointingKeys"][0], "object:ball");
     app.press("squeezestart");
     await flush();
     assert.equal(app.viewer.isPlaced, false);
