@@ -64,7 +64,7 @@ def hist_match(a: np.ndarray, b: np.ndarray) -> float:
     return float(cv2.compareHist(ha, hb, cv2.HISTCMP_CORREL))
 
 
-BG = np.array([30, 21, 12])  # the viewer's page/scene background (#0c151e), BGR
+BG = np.array([15, 10, 10])  # the viewer's scene background (0x0a0a0f in apps/web/src/main.ts), BGR
 
 
 def autocrop(img: np.ndarray) -> np.ndarray:

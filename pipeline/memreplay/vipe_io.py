@@ -33,10 +33,10 @@ def _decode_exr(buf: bytes) -> np.ndarray:
 
         import Imath
         import OpenEXR
-    except ImportError:
+    except ImportError as missing:
         img = cv2.imdecode(np.frombuffer(buf, np.uint8), cv2.IMREAD_UNCHANGED)
         if img is None:
-            raise RuntimeError("cannot decode EXR depth: pip install OpenEXR")
+            raise RuntimeError("cannot decode EXR depth: pip install OpenEXR") from missing
         return img.astype(np.float32)
     f = OpenEXR.InputFile(io.BytesIO(buf))
     hdr = f.header()

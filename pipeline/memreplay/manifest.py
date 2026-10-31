@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Union
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -58,7 +58,7 @@ class Background(BaseModel):
 
 
 class Camera(BaseModel):
-    track: Union[list[Keyframe], UrlRef]
+    track: list[Keyframe] | UrlRef
     fovYDeg: float
 
 
@@ -126,17 +126,17 @@ class ConvexCollider(BaseModel):
 class DynamicObject(BaseModel):
     id: str
     label: str
-    visual: Union[MeshVisual, SplatVisual, SplatSequenceVisual, PrimitiveVisual, PointsSequenceVisual] = Field(
+    visual: MeshVisual | SplatVisual | SplatSequenceVisual | PrimitiveVisual | PointsSequenceVisual = Field(
         discriminator="kind"
     )
-    collider: Union[BoxCollider, SphereCollider, CapsuleCollider, CylinderCollider, ConvexCollider] = Field(
+    collider: BoxCollider | SphereCollider | CapsuleCollider | CylinderCollider | ConvexCollider = Field(
         discriminator="kind"
     )
     mass: float
     grabbable: bool = True
     visibleFrom: float
     visibleTo: float
-    track: Union[list[Keyframe], UrlRef]
+    track: list[Keyframe] | UrlRef
 
 
 class MemoryManifest(BaseModel):

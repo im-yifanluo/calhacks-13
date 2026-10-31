@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 # One-time setup of the vision pipeline on a Runpod pod with a network volume at /workspace.
-#   bash setup.sh base world vipe warmup   # the whole initial pipeline (run in this order)
-#   bash setup.sh extras                   # later, only if needed: SAM 2.1 masks + CoTracker3 rotation
-#   bash setup.sh sam3d sam3d_weights      # stretch only: SAM 3D Objects (half a day of installs)
+#   bash setup.sh base world vipe warmup   # the whole pipeline (run in this order)
 # Finished steps leave a marker in $ENVS/<env>/.setup-<step>; a rerun skips them (delete a marker to redo it).
-# NOT YET TESTED ON A REAL POD. Every block follows the tool's own README as of 2026-10-23;
-# if a step fails, check that README first (repo names in pipeline/README.md).
+# Every block follows the tool's own README as of 2026-10-23; if a step fails, check that README first (repo names
+# in pipeline/README.md).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 bash "$HERE/on_start.sh"   # always: idempotent; installs libGL (open3d) and git-lfs too
@@ -108,44 +106,7 @@ warmup() {  # download ViPE's weights now. Two (DeAOT, DROID-SLAM) come from Goo
   fi
 }
 
-extras() {  # optional upgrades, installed into the world env: SAM 2.1 (better masks), CoTracker3 (object rotation)
-  need_base
-  use world
-  clone https://github.com/facebookresearch/sam2 sam2
-  step sam2 pip install -e "$SRC/sam2"
-  [ -f "$SRC/sam2/checkpoints/sam2.1_hiera_large.pt" ] || (cd "$SRC/sam2/checkpoints" && ./download_ckpts.sh)
-  step extras-pip pip install "imageio[ffmpeg]" transformers
-  python -c "import torch; torch.hub.load('facebookresearch/co-tracker', 'cotracker3_offline')"
-  echo "SAM 2.1 + Grounding DINO + CoTracker3 ready in the world env"
-}
-
-sam3d() {  # stretch: SAM 3D Objects. Pins Python 3.11, CUDA 12.1, torch 2.5.1; needs >= 32 GB VRAM.
-  need_base
-  clone https://github.com/facebookresearch/sam-3d-objects sam-3d-objects
-  cd "$SRC/sam-3d-objects"
-  have_env sam3d || mamba env create -f environments/default.yml -p "$ENVS/sam3d"
-  use sam3d
-  export PIP_EXTRA_INDEX_URL="https://pypi.ngc.nvidia.com https://download.pytorch.org/whl/cu121"
-  step dev pip install -e '.[dev]'
-  step p3d pip install -e '.[p3d]'        # pytorch3d needs a second step (per the repo)
-  export PIP_FIND_LINKS="https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.5.1_cu121.html"
-  step inference pip install -e '.[inference]'
-  step hydra-patch ./patching/hydra
-  step hf-cli pip install 'huggingface-hub[cli]<1.0'
-  step memreplay bash -c "pip install --no-deps -e '$REPO/pipeline' && pip install 'pydantic>=2'"
-  echo "SAM 3D env ready. Weights: bash setup.sh sam3d_weights (after Hugging Face approval)"
-}
-
-sam3d_weights() {  # needs approved access to facebook/sam-3d-objects and HF_TOKEN in /workspace/secrets.sh
-  need_base
-  cd "$SRC/sam-3d-objects"
-  use sam3d
-  [ -d checkpoints/hf ] && { echo "SAM 3D weights already in place"; return 0; }
-  hf download --repo-type model --local-dir checkpoints/hf-download --max-workers 1 facebook/sam-3d-objects
-  mv checkpoints/hf-download/checkpoints checkpoints/hf && rm -rf checkpoints/hf-download
-}
-
-TARGETS="base world vipe warmup extras sam3d sam3d_weights"
+TARGETS="base world vipe warmup"
 [ $# -gt 0 ] || { echo "usage: bash setup.sh <target>...   targets: $TARGETS"; exit 1; }
 for target in "$@"; do
   case " $TARGETS " in *" $target "*) ;; *) echo "unknown target: $target (targets: $TARGETS)"; exit 1 ;; esac

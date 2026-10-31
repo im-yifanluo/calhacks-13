@@ -512,14 +512,16 @@ def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
         # air at an end (thrown in or out of view): only show it while it was seen, rather than leave it floating.
         dur = frames.duration_sec
 
-        def airborne(k):
-            return not static and (
+        airborne = [  # at the first and last sample: moving, or clearly above whatever supports it
+            not static
+            and (
                 np.linalg.norm(V[k]) > REST_SPEED
                 or (support.H is not None and P[k, 1] - half_h - support(P[k, 0], P[k, 2]) > 0.12)
             )
-
-        vis0 = float(t[0]) if airborne(0) else 0.0
-        vis1 = float(t[-1]) if airborne(-1) else float(dur)
+            for k in (0, -1)
+        ]
+        vis0 = float(t[0]) if airborne[0] else 0.0
+        vis1 = float(t[-1]) if airborne[1] else float(dur)
         if t[0] > 0 and vis0 == 0.0:
             t, P, V = np.r_[0.0, t], np.vstack([P[:1], P]), np.vstack([np.zeros((1, 3)), V])
         if t[-1] < dur and vis1 == float(dur):

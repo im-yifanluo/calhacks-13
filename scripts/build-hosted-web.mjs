@@ -16,7 +16,7 @@ await build({
   publicDir: false,
   build: { outDir, emptyOutDir: true },
 });
-for (const directory of ["demo", "mock", "status"]) {
+for (const directory of ["demo", "mock"]) {
   await mkdir(outDir, { recursive: true });
   await cp(resolve("apps/web/public", directory), resolve(outDir, directory), { recursive: true });
 }

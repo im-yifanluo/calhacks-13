@@ -18,7 +18,7 @@ import numpy as np
 
 from .handoff import Cameras, FramesInfo, WorldInfo
 from .l0 import read_splat_ply_xyz_rgb
-from .vipe_io import Frames, Vipe, dilate
+from .vipe_io import Frames, Vipe
 
 MAX_IMAGES = 300
 INIT_POINTS = 150_000
@@ -135,7 +135,7 @@ def prepare(work: Path, static: bool = False) -> Path:
             sel = np.random.default_rng(0).choice(len(seed_xyz), INIT_POINTS, replace=False)
             seed_xyz, seed_rgb = seed_xyz[sel], seed_rgb[sel]
     pos_in_image = {}  # point id -> its index in that image's POINTS2D
-    for img, lst in obs.items():
+    for lst in obs.values():
         for k, (_, _, pid) in enumerate(lst):
             pos_in_image[pid] = k
     with open(col / "sparse/0/points3D.txt", "w") as f:
@@ -221,7 +221,6 @@ def train(work: Path, steps_scaler: float = 0.25, static: bool = False) -> Path:
     # it the MCMC training diverges on these auto-exposed phone clips: the loss climbs after ~20 % of the steps and
     # 85 % of the Gaussians end with opacity < 0.002 (room corner: 390k usable Gaussians with it, 13k without)
     if static:  # refine ViPE's poses; evaluate on held-out frames at the end
-        steps = int(30_000 * steps_scaler)
         # gsplat's default pose_opt_lr (1e-5) moves cameras only ~2 mm; 1e-3 let the whole splat drift away from the
         # held-out cameras (room corner PSNR 19 -> 8), so path drift is left to S3's levelling instead
         # gsplat multiplies eval_steps by steps_scaler itself, so pass the unscaled count to evaluate at the end

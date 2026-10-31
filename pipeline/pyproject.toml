@@ -9,7 +9,7 @@ description = "Glasses video -> layered 4D scene (background splat + dynamic obj
 requires-python = ">=3.10"
 dependencies = [
   "numpy",
-  "OpenEXR",
+  "OpenEXR>=3.3",
   "opencv-python-headless",
   "pydantic>=2",
   "scipy",
@@ -19,10 +19,16 @@ dependencies = [
 [project.optional-dependencies]
 claude = ["anthropic"]
 publish = ["boto3"]
-test = ["pytest"]
+test = ["pytest>=7"]
+dev = ["pytest>=7", "ruff"]
 
 [project.scripts]
 memreplay = "memreplay.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["memreplay*"]   # pipeline/ also holds runpod/ (shell scripts), which is not a package
+include = ["memreplay*"]   # pipeline/ also holds runpod/, tools/ and experiments/, which are not packages
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Import memreplay from this checkout even without `pip install -e`, e.g. `pytest pipeline` from the repo root.
+pythonpath = ["."]

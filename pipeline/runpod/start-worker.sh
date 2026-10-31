@@ -22,7 +22,7 @@ command -v ffmpeg >/dev/null
 command -v ffprobe >/dev/null
 command -v flock >/dev/null
 test -f "$SRC/vipe/run.py" || { echo "ViPE is missing; run pipeline/runpod/setup.sh first" >&2; exit 1; }
-test -f scripts/source_check.py || { echo "scripts/source_check.py is missing; sync the complete worker source" >&2; exit 1; }
+test -f pipeline/memreplay/source_check.py || { echo "pipeline/memreplay/source_check.py is missing; sync the complete worker source" >&2; exit 1; }
 python -c 'import torch, gsplat, cv2, OpenEXR, scipy, trimesh, pydantic; assert torch.cuda.is_available(), "CUDA GPU is not available"'
 ( use vipe; cd "$SRC/vipe"; uv run python -c 'import torch, vipe_ext; assert torch.cuda.is_available(), "ViPE cannot access CUDA"' )
 python -m memreplay.hosted_publish

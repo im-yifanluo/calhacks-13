@@ -33,13 +33,7 @@ def fit(cid: str) -> dict:
             continue
         shot = SHOTS / cid / f"{cid}_{f['t']:.1f}.png"
         if not shot.exists():
-            shot = (
-                Path(
-                    "/private/tmp/claude-501/-Users-yifanluo-Hackathons-CalHacks-13/e2a2e10a-ec8f-4abc-bab2-5e2c4c111cc5/scratchpad/cap/shots"
-                )
-                / cid
-                / shot.name
-            )
+            raise SystemExit(f"{shot} is missing: capture the renders first (pipeline/tools/evalclip.py)")
         r = autocrop(cv2.imread(str(shot))).astype(np.float32) / 255
         o = (
             frame_at(REPO / "data/work" / cid / "input/clip.mp4", f["t"], (r.shape[1], r.shape[0])).astype(np.float32)

@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from .handoff import CameraFrame, Cameras, CaptureInfo, FramesInfo, WorldInfo
-from .vipe_io import Vipe, backproject, depth_edges, dilate, transform
+from .vipe_io import Vipe, backproject, depth_edges, transform
 
 MAX_DEPTH = 6.0  # m; farther depth is too noisy to place the floor with
 SAMPLE_FRAMES = 80  # frames used for the floor fit
@@ -22,7 +22,7 @@ def _unit(v: np.ndarray) -> np.ndarray:
 
 
 def static_points(
-    v: Vipe, frame_ids: np.ndarray, stride: int = 6, max_depth: float = MAX_DEPTH, to_world: "WorldPoses | None" = None
+    v: Vipe, frame_ids: np.ndarray, stride: int = 6, max_depth: float = MAX_DEPTH, to_world: WorldPoses | None = None
 ) -> np.ndarray:
     """Static-scene points from the given frames, in ViPE's frame (or the final world frame with to_world)."""
     out = []

@@ -10,7 +10,6 @@ Writes <out>/renders/*.png, metrics.json, video.mp4 (GT | 4DGS along the recorde
 
 import json
 import math
-import os
 import subprocess
 import sys
 import time
@@ -158,7 +157,7 @@ def write_ply(path, xyz, fdc, op_logit, log_scale, quat):
     ]
     a = np.concatenate([xyz, fdc, op_logit, log_scale, quat], 1).astype("<f4")
     hdr = (
-        "ply\nformat binary_little_endian 1.0\nelement vertex %d\n" % n
+        f"ply\nformat binary_little_endian 1.0\nelement vertex {n}\n"
         + "".join(f"property float {k}\n" for k in names)
         + "end_header\n"
     )

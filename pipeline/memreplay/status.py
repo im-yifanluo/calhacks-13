@@ -1,4 +1,7 @@
-"""Report a memory's pipeline status to SpacetimeDB (the worker handoff).
+"""Report a memory's pipeline status to SpacetimeDB (the worker handoff), by hand.
+
+Usage: python3 pipeline/memreplay/status.py MEMORY_ID {processing,ready,failed} --progress P
+       [--manifest-url URL] [--error TEXT]     (standard library only; `memreplay worker` reports on its own)
 
 Calls the set_memory_status reducer over authenticated HTTP. Only the memory's assigned
 pipeline identity may do that, so the worker's token stays on the GPU host.

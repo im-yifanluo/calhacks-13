@@ -6,23 +6,10 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from clips import TITLES
+
 MEM = Path(__file__).resolve().parents[2] / "apps/web/public/memories"
-IDS = sys.argv[1:] or [
-    "img8013",
-    "img8014",
-    "img8015",
-    "img8016",
-    "img8017",
-    "v59",
-    "v71",
-    "v83",
-    "v106",
-    "o3329",
-    "o3328",
-    "o3330",
-    "o3331",
-    "o3332",
-]
+IDS = sys.argv[1:] or list(TITLES)
 
 
 def load(p):

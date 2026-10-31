@@ -19,7 +19,6 @@ import numpy as np
 
 from .handoff import Cameras, WorldInfo
 from .vipe_io import Vipe, dilate
-from .world import WorldPoses
 
 MIN_GAUSSIANS = 50
 SNAP_FLOOR = False
@@ -88,8 +87,7 @@ def run(work: Path) -> dict:
     objs_doc = json.loads((work / "objects" / "objects.json").read_text())
     objs = {o["id"]: o for o in objs_doc["objects"]}
     cams = {c.idx: c for c in Cameras.model_validate_json((work / "world" / "cameras.json").read_text()).frames}
-    scale = WorldInfo.model_validate_json((work / "world" / "world.json").read_text()).scale
-    v, wp = Vipe(work / "vipe"), WorldPoses(work)
+    v = Vipe(work / "vipe")
     # 1. put the splat's floor exactly at y = 0, and rewrite the static room with it
     cam_xz = np.array([[c.c2w[3], c.c2w[11]] for c in cams.values()])
     opacity = 1 / (1 + np.exp(-data["opacity"].astype(np.float64)))

@@ -12,7 +12,6 @@ import torch
 
 sys.path.insert(0, "/workspace/4dgs/A")
 sys.path.insert(0, "/workspace/4dgs/A/4DGaussians")
-import post  # noqa: E402
 from post import GaussianModel, ModelHiddenParams, ModelParams, PipelineParams, Scene, get_combined_args, merge_hparams  # noqa: E402,E501
 
 

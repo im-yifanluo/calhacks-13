@@ -50,7 +50,7 @@ def write_ply(path, xyz, rgb, flag=None):
     if flag is not None:
         a["nx"] = flag.astype(np.float32)
     hdr = (
-        "ply\nformat binary_little_endian 1.0\nelement vertex %d\n" % n
+        f"ply\nformat binary_little_endian 1.0\nelement vertex {n}\n"
         + "".join(f"property float {k}\n" for k in ["x", "y", "z", "nx", "ny", "nz"])
         + "property uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
     )

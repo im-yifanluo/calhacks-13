@@ -5,23 +5,9 @@ import json
 import sys
 from pathlib import Path
 
+from clips import TITLES
+
 MEM = Path(__file__).resolve().parents[2] / "apps/web/public/memories"
-TITLES = {
-    "img8013": "Hotel room",
-    "img8014": "Hotel room corner",
-    "img8015": "Hotel corridor",
-    "img8016": "Hotel lobby",
-    "img8017": "Night walk downtown",
-    "v59": "Stage: speaker at the podium",
-    "v71": "Stage and the hall",
-    "v83": "Hackathon hall walk",
-    "v106": "Hackathon hall, long walk",
-    "o3329": "Palace of Fine Arts: short",
-    "o3328": "Palace of Fine Arts: rotunda and people",
-    "o3330": "Palace of Fine Arts: colonnade walk",
-    "o3331": "Palace of Fine Arts: colonnade walk 2",
-    "o3332": "Palace of Fine Arts: garden and people",
-}
 NOTES = {
     "img8013": "42 s hand-held walk around a hotel room (bed, desk, TV, window), chest-height phone. No people.",
     "img8014": "11 s look at a hotel room corner: couch, floor lamp (lit), TV, side table with papers. No people.",

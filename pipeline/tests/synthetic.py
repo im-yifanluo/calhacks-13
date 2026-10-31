@@ -9,11 +9,13 @@ frame (as ViPE's arbitrary world frame would be), so S3 has to find the floor an
 from __future__ import annotations
 
 import json
+import tempfile
 import zipfile
 from pathlib import Path
 
 import cv2
 import numpy as np
+import OpenEXR
 
 W, H, FPS = 180, 320, 30
 CAM_H = 1.35
@@ -120,6 +122,17 @@ def render(t: float, K: np.ndarray, c2w: np.ndarray):
     return depth, color.astype(np.uint8), ident
 
 
+def encode_depth(depth: np.ndarray) -> bytes:
+    """One EXR frame in ViPE's layout: a single HALF channel "Z", ZIP compression. Written with OpenEXR, since
+    some OpenCV builds (e.g. the Linux opencv-python-headless 5 wheel) cannot encode EXR."""
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "depth.exr"
+        header = {"compression": OpenEXR.ZIP_COMPRESSION, "type": OpenEXR.scanlineimage}
+        with OpenEXR.File(header, {"Z": depth.astype(np.float16)}) as exr:
+            exr.write(str(path))
+        return path.read_bytes()
+
+
 def make(work: Path, seconds: float = 6.0, seed: int = 3) -> dict:
     """Write <work>/input/clip.mp4 + frames.json + nouns.json + capture.json and <work>/vipe/ like ViPE would."""
     work = Path(work)
@@ -146,10 +159,7 @@ def make(work: Path, seconds: float = 6.0, seed: int = 3) -> dict:
             c2w = camera(t)
             depth, rgb, ident = render(t, K, c2w)
             vw.write(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
-            zd.writestr(
-                f"{i:05d}.exr",
-                cv2.imencode(".exr", depth, [cv2.IMWRITE_EXR_TYPE, cv2.IMWRITE_EXR_TYPE_HALF])[1].tobytes(),
-            )
+            zd.writestr(f"{i:05d}.exr", encode_depth(depth))
             zm.writestr(f"{i:05d}.png", cv2.imencode(".png", ident)[1].tobytes())
             poses.append(A @ c2w)
     vw.release()

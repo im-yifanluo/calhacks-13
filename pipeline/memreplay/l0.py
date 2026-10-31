@@ -49,7 +49,7 @@ def room_points(
     reader = Frames(work / "input" / "clip.mp4")
     acc = None
     batch = []
-    for n, idx in enumerate(ids):
+    for idx in ids:
         idx = int(idx)
         if not wp.good(idx):
             continue

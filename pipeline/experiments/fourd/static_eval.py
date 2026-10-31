@@ -94,6 +94,7 @@ def main():
     rows = []
     if a.renders:
         Path(a.renders).mkdir(parents=True, exist_ok=True)
+    reader = None  # the source video, opened on first use with --gt-video
     for c in [c for c in meta["cams"] if c["split"] == "test"]:
         if a.frames:
             n = len(list(Path(a.frames).glob("t_*.ply")))
@@ -125,7 +126,8 @@ def main():
         if a.gt_video:
             from memreplay.vipe_io import Frames
 
-            reader = reader if "reader" in dir() else Frames(Path(a.work) / "input" / "clip.mp4")
+            if reader is None:
+                reader = Frames(Path(a.work) / "input" / "clip.mp4")
             rgb = reader.get(c["idx"])
         else:
             rgb = cv2.cvtColor(cv2.imread(str(Path(a.data) / "rgb" / "2x" / f"{c['idx']:05d}.png")), cv2.COLOR_BGR2RGB)

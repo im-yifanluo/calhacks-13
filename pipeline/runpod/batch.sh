@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Process several memories on the pod with the GPU kept busy:
 #   queue 1: nouns + ViPE for each clip, back to back (shortest first)
-#   queue 2: as soon as a clip's ViPE output exists: world, l0, objects, merge, verify, background splat, merge, verify
+#   queue 2: as soon as a clip's ViPE output exists: the remaining `memreplay run` steps (finished ones are skipped),
+#            then verify
 # Usage (pod, from anywhere):  bash batch.sh <work dir>...      e.g. bash batch.sh $WORK/img8014 $WORK/img8013
 # Titles come from <work>/title.txt and the device from <work>/device.txt when present.
 # Logs: <work>/logs/<step>.log ; summary lines go to stdout.
@@ -40,14 +41,9 @@ queue2() {
     local title device
     title=$(cat "$w/title.txt" 2>/dev/null || basename "$w")
     device=$(cat "$w/device.txt" 2>/dev/null || echo "ray-ban-meta-gen2")
-    step "$w" world memreplay stage world --work "$w" || continue
-    step "$w" l0 memreplay stage l0 --work "$w" || continue
-    step "$w" objects memreplay stage objects --work "$w" || continue
-    step "$w" merge memreplay merge "$w" --title "$title" --device "$device" || continue
+    # Exactly what `memreplay run` does for a single clip, so batch and single-clip scenes match.
+    step "$w" run memreplay run "$w" --title "$title" --device "$device" || continue
     step "$w" verify memreplay verify "$w"
-    step "$w" background memreplay stage background --work "$w" && \
-      step "$w" merge2 memreplay merge "$w" --title "$title" --device "$device" && \
-      step "$w" verify2 memreplay verify "$w"
   done
 }
 

@@ -144,7 +144,7 @@ def _stdb(path: str, body) -> bytes:
 
 
 def set_status(memory_id: int, status: str, progress: float, manifest_url: str = "", error: str = "") -> None:
-    """Same call as jerry's scripts/pipeline-status.py (reducer set_memory_status)."""
+    """The set_memory_status reducer call that memreplay/status.py makes by hand."""
     _stdb("call/set_memory_status", [memory_id, status, round(progress, 3), manifest_url, error[:500]])
 
 
@@ -157,10 +157,11 @@ def _identity_hex(v) -> str:
 
 
 def _source_check():
-    """scripts/source_check.py (repo root): only download what the upload service issued."""
+    """source_check.py next to this file: only download what the upload service issued. Loaded by path, so this
+    module keeps working when it is itself loaded as a bare file (scripts/test-connection-worker.py)."""
     import importlib.util
 
-    path = Path(__file__).resolve().parents[2] / "scripts" / "source_check.py"
+    path = Path(__file__).resolve().with_name("source_check.py")
     spec = importlib.util.spec_from_file_location("source_check", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

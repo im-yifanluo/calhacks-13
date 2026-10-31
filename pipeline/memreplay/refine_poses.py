@@ -61,7 +61,7 @@ def run(work: Path, ckpt_path: Path | None = None, test_every: int = 12) -> dict
             raise SystemExit("no static checkpoint")
         ckpt_path = Path(ckpts[-1])
         cfg = (work / "gsplat_static" / "cfg.yml").read_text()
-        test_every = int(next(l for l in cfg.splitlines() if l.strip().startswith("test_every")).split(":")[1])
+        test_every = int(next(line for line in cfg.splitlines() if line.strip().startswith("test_every")).split(":")[1])
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     if "pose_adjust" not in ckpt:
         print("[refine] trained without pose_opt; nothing to do")

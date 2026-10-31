@@ -134,7 +134,7 @@ Every block starts 4-byte aligned, so the viewer can wrap positions in a Uint16A
 """
 
 
-def write_points_sequence(path: Path, frames: list[tuple["object", "object"]], sample_hz: float) -> None:
+def write_points_sequence(path: Path, frames: list[tuple[object, object]], sample_hz: float) -> None:
     """frames: list of (xyz float array [N,3], rgb uint8 array [N,3]); N may differ per frame."""
     import numpy as np
 
@@ -148,7 +148,7 @@ def write_points_sequence(path: Path, frames: list[tuple["object", "object"]], s
             f.write(block + b"\0" * (-len(block) % 4))
 
 
-def read_points_sequence(path: Path) -> tuple[float, list[tuple["object", "object"]]]:
+def read_points_sequence(path: Path) -> tuple[float, list[tuple[object, object]]]:
     import numpy as np
 
     data = Path(path).read_bytes()

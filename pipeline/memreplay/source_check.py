@@ -9,12 +9,13 @@ the worker must not trust the URL. It downloads only what the upload service iss
 and caps the download: at most MAX_SOURCE_BYTES (the upload limit; check Content-Length,
 then count the bytes), a few minutes in total, no redirects.
 
-    sys.path.insert(0, "scripts")  # from the repo root
-    from source_check import allowed_source
+    from memreplay.source_check import allowed_source
     if not allowed_source(row_source_url, os.environ["ASSET_BASE_URL"], owner=row_owner_hex):
         ...report the memory as failed...
 
-CLI: python3 scripts/source_check.py URL BASE [OWNER]  (exit 0 allowed, 1 refused)
+CLI: python3 pipeline/memreplay/source_check.py URL BASE [OWNER]  (exit 0 allowed, 1 refused)
+
+Standard library only: worker.py loads this file by path, so it also runs outside an installed package.
 """
 
 import re
@@ -59,7 +60,7 @@ def allowed_source(url, base, owner=None):
 
 if __name__ == "__main__":
     if len(sys.argv) not in (3, 4):
-        sys.exit("usage: python3 scripts/source_check.py URL BASE [OWNER]")
+        sys.exit("usage: python3 pipeline/memreplay/source_check.py URL BASE [OWNER]")
     ok = allowed_source(*sys.argv[1:])
     print("allowed" if ok else "refused")
     sys.exit(0 if ok else 1)

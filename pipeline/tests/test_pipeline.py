@@ -7,7 +7,8 @@ import struct
 
 import numpy as np
 import pytest
-from memreplay import l0, objects, synthetic, world
+import synthetic
+from memreplay import l0, objects, world
 from memreplay.cli import merge
 from memreplay.handoff import Cameras, read_points_sequence
 from memreplay.normalize import hlg_to_sdr

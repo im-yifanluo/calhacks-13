@@ -1,11 +1,11 @@
 import type { Multiplayer } from "./net/index.js";
 
 /**
- * Local development only: put every scene under apps/web/public/memories/ (not in git; the pipeline lists them in
- * status.json) into the signed-in account's library, or the guest's, so the memory cards can be seen with real
- * data. Memories already in the library are skipped. Nothing here runs in a production build.
+ * Local development only: put every scene under apps/web/public/memories/ (not in git; listed in index.json by
+ * pipeline/tools/index_scenes.py) into the signed-in account's library, or the guest's, so the memory cards can be
+ * seen with real data. Memories already in the library are skipped. Nothing here runs in a production build.
  */
-export const LOCAL_INDEX = "/memories/status.json";
+export const LOCAL_INDEX = "/memories/index.json";
 
 const requestId = () =>
   crypto.randomUUID?.() ??
