@@ -8,6 +8,6 @@ rsync -az --no-owner --no-group \
   --exclude '.env*' --exclude secrets.sh --exclude '*.pem' --exclude '*.key' --exclude '*.p8' --exclude '*.p12' \
   --exclude '*.mp4' --exclude '*.mov' --exclude '*.ply' --exclude '*.spz' --exclude '*.glb' \
   --exclude __pycache__ --exclude '*.egg-info' --exclude apps/web/public/memories \
-  --exclude apps/ios/DerivedData --exclude server/spacetime/target --exclude .DS_Store --exclude NIKKO_BUILD_LOG.md \
+  --exclude apps/ios/DerivedData --exclude .DS_Store --exclude NIKKO_BUILD_LOG.md \
   -e "$MEMREPLAY_RSYNC_SSH" "$MEMREPLAY_LOCAL_REPO/" "root@$MEMREPLAY_SSH_HOST:$MEMREPLAY_REMOTE_REPO/"
 echo synced

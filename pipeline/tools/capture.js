@@ -1,5 +1,5 @@
 // Render a memory from the recorded camera (wearer's view) at several times, portrait 450x800, with headless Chrome.
-//   node pipeline/tools/capture.js <memory id> <out dir> [n shots | t1,t2,...]   (needs: npm i -g puppeteer-core, Chrome,
+//   node pipeline/tools/capture.js <memory id> <out dir> [n shots | t1,t2,...]   (needs `npm ci` in pipeline/tools, Chrome,
 //   and the viewer dev server on http://127.0.0.1:5177; CAPTURE_URL overrides it)
 // Prints one JSON line: {id, duration, shots: [{t, path, inGap}]}
 const puppeteer = require("puppeteer-core");

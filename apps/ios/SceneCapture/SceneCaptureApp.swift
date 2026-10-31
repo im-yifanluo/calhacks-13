@@ -263,7 +263,7 @@ struct PartyView: View {
                     }
                 }
                 Section("From a recording to a scene") {
-                    Text("Finish recording with Off and wait for upload verification. Follow processing in Memories, then open the finished scene or choose it in the party lobby. The synthetic demo stays available while reconstruction runs.")
+                    Text("Finish recording with Stop & save and wait for upload verification. Follow processing in Memories, then open the finished scene or choose it in the party lobby. The synthetic demo stays available while reconstruction runs.")
                     Text("The party opens in your browser. Copy your password from Settings and paste it into web sign-in to use the same account and recordings. Your party code is separate.")
                     Text("A reconstruction worker is still required to turn video into a 3D scene.").foregroundStyle(.secondary)
                 }

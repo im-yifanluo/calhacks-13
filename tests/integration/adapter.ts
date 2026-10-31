@@ -2,11 +2,13 @@
 // SpacetimeDB running this repo's module. Player A pauses, grabs, moves and throws the ball; B sees it live, both end
 // with the same take and identical tracks; B re-grabs it into a new take; a late third player rebuilds everything.
 //
-// Run (no npm script needed; any free port and database name):
+// Run against the local database from `npm run stdb:start` and `npm run stdb:publish:local`:
+//   npm run test:adapter
+// or against any port and database name:
 //   spacetime start --listen-addr 127.0.0.1:3065                                      # terminal 1
 //   spacetime publish -s http://127.0.0.1:3065 --module-path server/spacetime --anonymous --yes memreplay-adapter
-//   STDB_WS_URL=ws://127.0.0.1:3065 STDB_DATABASE=memreplay-adapter npx tsx tests/integration/adapter.ts
-// (`node --import tsx tests/integration/adapter.ts` works too.) Defaults: ws://127.0.0.1:${STDB_PORT:-3055}, database memory-replay.
+//   STDB_WS_URL=ws://127.0.0.1:3065 STDB_DATABASE=memreplay-adapter npm run test:adapter
+// Defaults: ws://127.0.0.1:${STDB_PORT:-3055}, database memory-replay.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { Group, Quaternion, Vector3 } from "three";

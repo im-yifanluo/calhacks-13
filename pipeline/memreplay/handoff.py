@@ -1,4 +1,4 @@
-"""File formats between the steps of the one-person vision pipeline. See pipeline/README.md.
+"""File formats between the steps of the vision pipeline. See pipeline/README.md.
 
 One glasses clip per memory, one work dir per memory. Upload or copy the work dir as-is,
 because memory.json uses URLs relative to it.

@@ -7,7 +7,7 @@ import { makeHandler } from "../../server/upload/src/handler.mjs";
 const database = process.env.STDB_DATABASE;
 if (!database) throw new Error("Set STDB_DATABASE to a published local test database");
 const db = databaseConfig({
-  STDB_HTTP_URL: "http://127.0.0.1:3055",
+  STDB_HTTP_URL: `http://127.0.0.1:${process.env.STDB_PORT || 3055}`,
   STDB_DATABASE: database,
   ACCOUNT_SERVER_URL: "http://127.0.0.1:5174/stdb",
 });

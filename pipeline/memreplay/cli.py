@@ -1,4 +1,4 @@
-"""memreplay CLI for the one-person vision pipeline (pipeline/README.md).
+"""memreplay CLI for the vision pipeline (pipeline/README.md).
 Every step reads and writes one work dir per memory (layout in handoff.py), so any step reruns alone.
 
   memreplay run work/<id> --title "..."        every step below, in order (skips finished ones unless --force)

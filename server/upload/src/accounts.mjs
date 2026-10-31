@@ -1,4 +1,4 @@
-/** Same portable password format as apps/web/src/account-key.ts. No credentials live in the database. */
+/** Same portable password format as apps/web/src/account/key.ts. No credentials live in the database. */
 export class ApiError extends Error {
   constructor(status, message) {
     super(message);
