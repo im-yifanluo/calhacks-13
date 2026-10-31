@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import { XRControllerModelFactory } from "three/examples/jsm/webxr/XRControllerModelFactory.js";
 import { XRHandModelFactory } from "three/examples/jsm/webxr/XRHandModelFactory.js";
-import type { Viewer } from "./viewer.js";
-import { scrubTime, VRPanel, type PanelAction, type PanelHit } from "./vr-panel.js";
+import type { Viewer } from "../engine/viewer";
+import { scrubTime, VRPanel, type PanelAction, type PanelHit } from "./panel";
 
 // Head pose for locomotion: use the user camera (main.ts parents it to the rig), never renderer.xr.getCamera().
 // three's XR camera has no parent, and WebXRManager writes the raw viewer pose (in the reference space, i.e. relative

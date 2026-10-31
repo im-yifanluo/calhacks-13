@@ -1,4 +1,4 @@
-import { databaseSettings, savedAccount } from "../account-key";
+import { databaseSettings, savedAccount } from "../account/key";
 import { DbConnection, tables } from "../module_bindings";
 import { DisconnectedError, type Identity } from "spacetimedb";
 import type { Memory, Room, Player, Timeline, Branch, ObjectState, BranchKeyframes } from "../module_bindings/types";

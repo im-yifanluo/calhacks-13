@@ -5,10 +5,10 @@ import assert from "node:assert/strict";
 import { Group, PerspectiveCamera, Plane, Ray, Vector3 } from "three";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { Keyframe } from "@memreplay/shared";
-import type { LoadedMemory } from "../src/loader";
-import { initPhysics } from "../src/physics";
-import { Viewer, type ViewerEvent } from "../src/viewer";
-import { desktopInput, dragPoint, pressStartsGrab, HOLD_START_MS, MAX_DRAG_DISTANCE } from "../src/input-desktop";
+import type { LoadedMemory } from "../src/engine/loader";
+import { initPhysics } from "../src/engine/physics";
+import { Viewer, type ViewerEvent } from "../src/engine/viewer";
+import { desktopInput, dragPoint, pressStartsGrab, HOLD_START_MS, MAX_DRAG_DISTANCE } from "../src/input/desktop";
 import { approx, heldId, mockManifest, sleep } from "./helpers";
 
 const manifest = await mockManifest();

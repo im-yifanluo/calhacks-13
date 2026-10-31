@@ -1039,7 +1039,7 @@ body:not(.touch) .pointer-coarse {
   border-radius: 3px;
 }
 
-/* Phone WALK pad (phone-joystick.ts): touch devices only, the same glass as the dock. */
+/* Phone WALK pad (input/joystick.ts): touch devices only, the same glass as the dock. */
 #joystick {
   position: fixed;
   z-index: 4;

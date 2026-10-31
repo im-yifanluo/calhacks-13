@@ -1,9 +1,9 @@
 import { expect, test } from "vitest";
 import { Identity } from "spacetimedb";
 import { Multiplayer } from "../src/net";
-import { sceneAccount, belongsToAccount } from "../src/scene-store";
+import { sceneAccount, belongsToAccount } from "../src/scenes/store";
 import { IDBFactory } from "fake-indexeddb";
-import { getImportedScene, saveImportedScene, listImportedScenes } from "../src/scene-store";
+import { getImportedScene, saveImportedScene, listImportedScenes } from "../src/scenes/store";
 
 test("libraries are owner scoped while the active party can reference another owner’s memory", () => {
   const alice = new Identity(1n),

@@ -117,7 +117,8 @@
           name.querySelector("b").textContent = scene.title;
           name.querySelector("div").textContent = `${scene.id}${scene.seconds ? ` · ${scene.seconds} s` : ""}`;
           const preview = row.insertCell();
-          if (scene.preview) preview.append(Object.assign(document.createElement("img"), { src: scene.preview, alt: "" }));
+          if (scene.preview)
+            preview.append(Object.assign(document.createElement("img"), { src: scene.preview, alt: "" }));
           const links = row.insertCell();
           links.className = "links";
           for (const [kind, file] of [

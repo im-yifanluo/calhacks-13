@@ -13,7 +13,7 @@ import {
   type WebXRManagerEventMap,
 } from "three";
 import type { Keyframe } from "@memreplay/shared";
-import { XRInput } from "../src/input-xr";
+import { XRInput } from "../src/xr/input";
 import {
   COMPACT_REGIONS,
   FOLLOW,
@@ -23,9 +23,9 @@ import {
   REGIONS,
   type Region,
   scrubTime,
-} from "../src/vr-panel";
-import { Viewer } from "../src/viewer";
-import { initPhysics } from "../src/physics";
+} from "../src/xr/panel";
+import { Viewer } from "../src/engine/viewer";
+import { initPhysics } from "../src/engine/physics";
 import { approx, heldId, mockManifest, stubCanvasDocument } from "./helpers";
 
 await initPhysics();

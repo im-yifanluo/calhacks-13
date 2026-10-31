@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { PerspectiveCamera, Quaternion, Euler, Vector3 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { wearerPose, releaseWearer } from "../src/camera-mode";
+import { wearerPose, releaseWearer } from "../src/camera/wearer";
 
 test("wearer lock samples the requested time immediately and free look keeps that pose", () => {
   const camera = new PerspectiveCamera(65),

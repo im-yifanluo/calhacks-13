@@ -4,9 +4,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { Group, type Vector3 } from "three";
 import type { DynamicObject, Keyframe, MemoryManifest } from "@memreplay/shared";
-import type { LoadedMemory, LoadedObject } from "../src/loader";
-import { STEP } from "../src/physics";
-import type { Viewer } from "../src/viewer";
+import type { LoadedMemory, LoadedObject } from "../src/engine/loader";
+import { STEP } from "../src/engine/physics";
+import type { Viewer } from "../src/engine/viewer";
 
 /** A keyframe at time t and position (x, y, z), unrotated; `extra` adds fields such as `v`. */
 export const frame = (t: number, x: number, y = 1, z = 0, extra: Partial<Keyframe> = {}): Keyframe => ({

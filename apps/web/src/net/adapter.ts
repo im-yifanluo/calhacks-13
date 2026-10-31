@@ -4,9 +4,9 @@
 import type { Keyframe } from "@memreplay/shared";
 import type { Identity } from "spacetimedb";
 import type { DbConnection } from "../module_bindings";
-import type { Branch as ViewerBranch } from "../timeline.js";
-import { validateTrack } from "../tracks.js";
-import type { GrabRequest, InteractionAuthority, Viewer, ViewerEvent } from "../viewer.js";
+import type { Branch as ViewerBranch } from "../engine/timeline";
+import { validateTrack } from "../engine/tracks";
+import type { GrabRequest, InteractionAuthority, Viewer, ViewerEvent } from "../engine/viewer";
 import type {
   Branch as BranchRow,
   BranchKeyframes,
@@ -297,7 +297,7 @@ export class NetAdapter implements InteractionAuthority {
 
   /**
    * Removes every hook, listener and timer. Queued calls are dropped, and nothing more is sent: anything still held
-   * stays held until the connection closes. session.ts disposes the adapter on pagehide and disconnects right after;
+   * stays held until the connection closes. party/session.ts disposes the adapter on pagehide and disconnects right after;
    * the server then clears the hold and, when the grab's take has nothing recorded yet, puts the room back on the
    * parent take. Releasing here would look like an ordinary give-back and leave everyone on an empty take.
    */

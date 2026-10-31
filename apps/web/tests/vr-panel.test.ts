@@ -20,7 +20,7 @@ import {
   scrubTime,
   SUMMON,
   VRPanel,
-} from "../src/vr-panel";
+} from "../src/xr/panel";
 import { approx, stubCanvasDocument } from "./helpers";
 
 const { close } = approx(1e-9, { inclusive: true });

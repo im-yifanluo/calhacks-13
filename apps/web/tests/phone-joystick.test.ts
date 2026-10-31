@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import * as THREE from "three";
-import { PhoneJoystick, WALK_SPEED } from "../src/phone-joystick";
+import { PhoneJoystick, WALK_SPEED } from "../src/input/joystick";
 
 describe("phone WALK pad", () => {
   afterEach(() => vi.unstubAllGlobals());

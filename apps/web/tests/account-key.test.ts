@@ -10,8 +10,8 @@ import {
   saveAccount,
   savedAccount,
   type AccountKey,
-} from "../src/account-key";
-import { verifySignInKey } from "../src/auth";
+} from "../src/account/key";
+import { verifySignInKey } from "../src/account/auth";
 
 function storage() {
   const map = new Map<string, string>();

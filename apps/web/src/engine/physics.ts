@@ -1,8 +1,8 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import { Object3D, Quaternion, Vector3 } from "three";
 import type { DynamicObject, Keyframe } from "@memreplay/shared";
-import type { GeometryData, LoadedObject } from "./loader.js";
-import { keyframe } from "./tracks.js";
+import type { GeometryData, LoadedObject } from "./loader";
+import { keyframe } from "./tracks";
 
 export const STEP = 1 / 60;
 export interface BodyEntry {

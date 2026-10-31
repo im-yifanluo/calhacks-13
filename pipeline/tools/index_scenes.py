@@ -2,7 +2,7 @@
 """Index the scenes copied into apps/web/public/memories/<id>/ for local development.
 
 Writes apps/web/public/memories/index.json, which the viewer's dev seeding (apps/web/src/library/dev-seed.ts) and the
-local scenes page (/scenes/) read. Run it after pulling or publishing scenes into that folder:
+local scenes page (/scenes/index.html) read. Run it after pulling or publishing scenes into that folder:
 
     python pipeline/tools/index_scenes.py
 """

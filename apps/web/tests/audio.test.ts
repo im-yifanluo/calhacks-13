@@ -1,7 +1,7 @@
 // The clip's audio (source.audioUrl) following the timeline: AudioSync against a fake media element.
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { AudioSync } from "../src/audio";
+import { AudioSync } from "../src/engine/audio";
 
 /** A media element whose clock only moves when the test advances it. */
 class FakeMedia {

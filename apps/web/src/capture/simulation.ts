@@ -1,5 +1,5 @@
-import type { Multiplayer } from "./net";
-import { RecordedUpload } from "./recorded-upload";
+import type { Multiplayer } from "../net";
+import { RecordedUpload } from "../upload/recorded";
 
 export function captureSimulation(net: Multiplayer, onComplete: (requestId: string) => void) {
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { DbConnection } from "../../apps/web/src/module_bindings";
-import { decodeAccountKey } from "../../apps/web/src/account-key";
+import { decodeAccountKey } from "../../apps/web/src/account/key";
 const base = process.argv[2];
 if (!base || new URL(base).protocol !== "https:" || new URL(base).origin !== base)
   throw new Error("Usage: npx tsx tests/e2e/upload-public.ts https://<API-origin>");

@@ -19,7 +19,7 @@ import {
   roomCode,
   roomUrl,
   sameManifest,
-} from "../src/session";
+} from "../src/party/session";
 import type { Player } from "../src/net";
 
 describe("messages", () => {

@@ -1,7 +1,7 @@
-import { getImportedScene, listImportedScenes, localSceneLink, saveImportedScene } from "./scene-store";
-import type { ScenePackage } from "./scene-bundle";
-import type { Multiplayer } from "./net";
-import { savedAccount } from "./account-key";
+import { getImportedScene, listImportedScenes, localSceneLink, saveImportedScene } from "../scenes/store";
+import type { ScenePackage } from "../scenes/bundle";
+import type { Multiplayer } from "../net";
+import { savedAccount } from "../account/key";
 
 export function mountSceneImport(net: Multiplayer) {
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -56,7 +56,7 @@ export function mountSceneImport(net: Multiplayer) {
     if (!pkg) return;
     show("Checking assets and timeline…");
     try {
-      const { inspectScene } = await import("./scene-bundle");
+      const { inspectScene } = await import("../scenes/bundle");
       const scene = await inspectScene(pkg, choice.value);
       if (current !== revision) return;
       const cameraCount = Array.isArray(scene.manifest.camera.track) ? scene.manifest.camera.track.length : "External";
@@ -79,7 +79,7 @@ export function mountSceneImport(net: Multiplayer) {
     revision++;
     show("Opening scene package…");
     try {
-      const reader = await import("./scene-bundle");
+      const reader = await import("../scenes/bundle");
       pkg = kind === "zip" ? await reader.readSceneZip(files[0]) : reader.readSceneFolder(files);
       choice.replaceChildren(
         ...pkg.manifests.map(
@@ -104,7 +104,7 @@ export function mountSceneImport(net: Multiplayer) {
     show("Saving scene in this browser…");
     void (async () => {
       try {
-        const { inspectScene } = await import("./scene-bundle");
+        const { inspectScene } = await import("../scenes/bundle");
         const scene = { ...(await inspectScene(pkg!, choice.value)), id: crypto.randomUUID(), importedAt: Date.now() };
         await saveImportedScene(scene);
         if (!(await getImportedScene(scene.id))) throw new Error("Scene could not be saved.");

@@ -1,24 +1,24 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { SparkRenderer } from "@sparkjsdev/spark";
-import { loadMemory } from "./loader.js";
-import { initPhysics } from "./physics.js";
-import { Viewer } from "./viewer.js";
-import { XRInput } from "./input-xr.js";
-import { desktopInput } from "./input-desktop.js";
-import { wearerPose, releaseWearer } from "./camera-mode.js";
-import { sampleTrack } from "./tracks.js";
-import { mountAudio } from "./audio.js";
-import { mountAuth } from "./auth.js";
-import { DEFAULT_MANIFEST, loadedManifest, Session } from "./session.js";
-import { PhoneJoystick, isTouchDevice } from "./phone-joystick.js";
-import { PathGuide } from "./guided.js";
-import { PathFollower, placeHead } from "./follow.js";
-import { applyExposure, clearExposure } from "./exposure.js";
-import { AutoHide, formatTime, mountVRButton, percentAt, popover, Toast } from "./ui.js";
-import { mountSceneOnly } from "./scene-only.js";
-import "./style.css";
-import { getImportedScene } from "./scene-store";
+import { loadMemory } from "./engine/loader";
+import { initPhysics } from "./engine/physics";
+import { Viewer } from "./engine/viewer";
+import { XRInput } from "./xr/input";
+import { desktopInput } from "./input/desktop";
+import { wearerPose, releaseWearer } from "./camera/wearer";
+import { sampleTrack } from "./engine/tracks";
+import { mountAudio } from "./engine/audio";
+import { mountAuth } from "./account/auth";
+import { DEFAULT_MANIFEST, loadedManifest, Session } from "./party/session";
+import { PhoneJoystick, isTouchDevice } from "./input/joystick";
+import { PathGuide } from "./camera/guided";
+import { PathFollower, placeHead } from "./camera/follow";
+import { applyExposure, clearExposure } from "./camera/exposure";
+import { AutoHide, formatTime, mountVRButton, percentAt, popover, Toast } from "./ui/overlay";
+import { mountSceneOnly } from "./ui/scene-only";
+import "./styles/viewer.css";
+import { getImportedScene } from "./scenes/store";
 
 declare global {
   interface Window {
@@ -51,14 +51,14 @@ const toast = new Toast(element("toast"), status);
 async function main(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const importId = params.get("import");
-  let importedSource: (import("./loader").MemorySource & { dispose: () => void }) | undefined;
+  let importedSource: (import("./engine/loader").MemorySource & { dispose: () => void }) | undefined;
   if (importId) {
     const stored = await getImportedScene(importId);
     if (!stored)
       throw new Error(
         "This import is not saved for your signed-in account on this browser. Sign in with its password in the library, or import the .memos.zip again.",
       );
-    const { localSceneSource } = await import("./scene-bundle");
+    const { localSceneSource } = await import("./scenes/bundle");
     importedSource = localSceneSource(stored);
     addEventListener("pagehide", () => importedSource?.dispose(), { once: true });
   }
@@ -128,7 +128,7 @@ async function main(): Promise<void> {
     enableLod: params.get("lod") !== "0",
   });
   scene.add(spark);
-  // Shared rooms (session.ts) connect while the memory loads. Without a room the viewer stays local.
+  // Shared rooms (party/session.ts) connect while the memory loads. Without a room the viewer stays local.
   const session = new Session({
     renderer,
     scene,
@@ -226,7 +226,7 @@ async function main(): Promise<void> {
     rig.rotation.set(0, vrSpawn.yaw, 0);
   }
   scene.add(memory.root);
-  // The recorded path on the floor; guided mode keeps you near it and fogs what the camera never saw (guided.ts).
+  // The recorded path on the floor; guided mode keeps you near it and fogs what the camera never saw (camera/guided.ts).
   const guide = new PathGuide(
     memory.cameraTrack,
     memory.manifest.world.floorY,

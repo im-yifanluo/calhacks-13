@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { createServer } from "node:http";
-import { RecordedUpload } from "../src/recorded-upload";
+import { RecordedUpload } from "../src/upload/recorded";
 
 test("automatic capture retries confirmation without another PUT and independently verifies stored bytes", async () => {
   let puts = 0,

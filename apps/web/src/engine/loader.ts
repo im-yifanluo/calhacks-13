@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { SplatMesh, type SplatFileType } from "@sparkjsdev/spark";
 import type { DynamicObject, Keyframe, MemoryManifest } from "@memreplay/shared";
-import { tuple, validateTrack } from "./tracks.js";
+import { tuple, validateTrack } from "./tracks";
 
 export interface GeometryData {
   vertices: Float32Array;

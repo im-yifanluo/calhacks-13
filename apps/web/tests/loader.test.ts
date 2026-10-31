@@ -10,7 +10,7 @@ import {
   pointsFrameAt,
   primitiveGeometry,
   proxyGeometry,
-} from "../src/loader";
+} from "../src/engine/loader";
 import { approx } from "./helpers";
 
 const { close } = approx(1e-6);

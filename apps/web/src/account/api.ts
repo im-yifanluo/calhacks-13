@@ -1,4 +1,4 @@
-import { databaseSettings, decodeAccountKey, type AccountKey } from "./account-key";
+import { databaseSettings, decodeAccountKey, type AccountKey } from "./key";
 
 export const isPassword = (value: unknown): value is string =>
   typeof value === "string" && value.length === 6 && /^[0-9]{6}$/.test(value);

@@ -1,9 +1,9 @@
 import * as THREE from "three";
 import type { DynamicObject, Keyframe } from "@memreplay/shared";
-import { type LoadedMemory, type LoadedObject, proxyGeometry } from "./loader.js";
-import { colliderDepth, Physics, STEP } from "./physics.js";
-import { SAME_TIME, Timeline, type Branch } from "./timeline.js";
-import { keyframe, keyframeVelocity, sampleTrack, trackVelocity, validateTrack } from "./tracks.js";
+import { type LoadedMemory, type LoadedObject, proxyGeometry } from "./loader";
+import { colliderDepth, Physics, STEP } from "./physics";
+import { SAME_TIME, Timeline, type Branch } from "./timeline";
+import { keyframe, keyframeVelocity, sampleTrack, trackVelocity, validateTrack } from "./tracks";
 
 /** What a grab at the very end of the memory says. */
 export const AT_END = "That's the end of the memory. Scrub back or press Play, then pause to grab something.";

@@ -4,15 +4,15 @@
 import * as THREE from "three";
 import type { Identity } from "spacetimedb";
 import type { MemoryManifest } from "@memreplay/shared";
-import { type Failure, Multiplayer, type Player } from "./net/index.js";
-import { NetAdapter } from "./net/adapter.js";
-import { validateManifest } from "./loader.js";
-import { isTouchDevice } from "./phone-joystick.js";
-import { uploadPanel } from "./upload.js";
-import { dragToClose } from "./ui.js";
-import { previewMissing, previewUrl, viewerLink } from "./library-state.js";
-import { localMemoryUrls, seedLocalMemories, seedSummary } from "./dev-seed.js";
-import type { Viewer } from "./viewer.js";
+import { type Failure, Multiplayer, type Player } from "../net";
+import { NetAdapter } from "../net/adapter";
+import { validateManifest } from "../engine/loader";
+import { isTouchDevice } from "../input/joystick";
+import { uploadPanel } from "../upload/panel";
+import { dragToClose } from "../ui/overlay";
+import { previewMissing, previewUrl, viewerLink } from "../library/state";
+import { localMemoryUrls, seedLocalMemories, seedSummary } from "../library/dev-seed";
+import type { Viewer } from "../engine/viewer";
 
 /** main.ts loads this manifest when the URL has no ?memory= (its built-in demo). */
 export const DEFAULT_MANIFEST = "/demo/memory.json";

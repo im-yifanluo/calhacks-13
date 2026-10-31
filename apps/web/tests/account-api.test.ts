@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { accountPassword, createPasswordAccount, restorePassword } from "../src/account-api";
-import { encodeAccountKey } from "../src/account-key";
+import { accountPassword, createPasswordAccount, restorePassword } from "../src/account/api";
+import { encodeAccountKey } from "../src/account/key";
 
 const account = { server: "https://db.test", database: "memos", identity: "a".repeat(64), token: "aaa.bbb.ccc" };
 const response = {

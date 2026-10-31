@@ -1,7 +1,7 @@
 // Take inheritance: the canonical rule in Timeline.track() (see its doc comment).
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { Timeline } from "../src/timeline";
+import { Timeline } from "../src/engine/timeline";
 import { frame, times } from "./helpers";
 
 const original = [frame(0, 0), frame(10, 0)];

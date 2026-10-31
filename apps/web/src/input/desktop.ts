@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { Viewer } from "./viewer.js";
+import type { Viewer } from "../engine/viewer";
 
 /** A press on an object turns into a grab once the pointer has moved more than this many CSS pixels… */
 export const DRAG_START_PX = 6;
@@ -22,7 +22,7 @@ export function dragPoint(ray: THREE.Ray, plane: THREE.Plane, out: THREE.Vector3
 }
 
 /**
- * Mouse and touch: drag a paused object to throw it. Phone locomotion is the WALK pad (phone-joystick.ts).
+ * Mouse and touch: drag a paused object to throw it. Phone locomotion is the WALK pad (joystick.ts).
  * Pressing an object holds the camera still; the grab starts only once the press moves or is held (pressStartsGrab).
  * The viewer keeps the held object above the floor.
  */

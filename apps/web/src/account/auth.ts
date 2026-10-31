@@ -1,5 +1,5 @@
-import { DbConnection, tables } from "./module_bindings";
-import type { Multiplayer } from "./net/index";
+import { DbConnection, tables } from "../module_bindings";
+import type { Multiplayer } from "../net";
 import {
   accountStorageKey,
   databaseSettings,
@@ -8,8 +8,8 @@ import {
   saveAccount,
   savedAccount,
   type AccountKey,
-} from "./account-key";
-import { accountPassword, createPasswordAccount, isPassword, restorePassword } from "./account-api";
+} from "./key";
+import { accountPassword, createPasswordAccount, isPassword, restorePassword } from "./api";
 
 /** Verify with the configured host before replacing any currently signed-in identity. */
 export function verifySignInKey(input: string, timeoutMs = 15000): Promise<{ account: AccountKey; name: string }> {

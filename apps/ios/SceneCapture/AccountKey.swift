@@ -30,7 +30,7 @@ struct HostedAccount: Decodable {
     }
 }
 
-/// Same wire format as apps/web/src/account-key.ts. Decoding never authenticates a password.
+/// Same wire format as apps/web/src/account/key.ts. Decoding never authenticates a password.
 struct AccountKey: Codable, Equatable {
     let server: String
     let database: String

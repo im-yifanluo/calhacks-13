@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { zipSync, strToU8 } from "fflate";
-import { assetPath, inspectScene, localSceneSource, readSceneZip } from "../src/scene-bundle";
+import { assetPath, inspectScene, localSceneSource, readSceneZip } from "../src/scenes/bundle";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 

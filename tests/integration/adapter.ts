@@ -14,8 +14,8 @@ import type { Keyframe } from "@memreplay/shared";
 import { DbConnection } from "../../apps/web/src/module_bindings";
 import { NetAdapter } from "../../apps/web/src/net/adapter";
 import { Multiplayer } from "../../apps/web/src/net/index";
-import { initPhysics } from "../../apps/web/src/physics";
-import { Viewer } from "../../apps/web/src/viewer";
+import { initPhysics } from "../../apps/web/src/engine/physics";
+import { Viewer } from "../../apps/web/src/engine/viewer";
 
 const database = process.env.STDB_DATABASE || "memory-replay";
 const uri = process.env.STDB_WS_URL || `ws://127.0.0.1:${process.env.STDB_PORT || 3055}`;

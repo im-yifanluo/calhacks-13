@@ -1,5 +1,5 @@
-import type { ImportedScene } from "./scene-bundle";
-import { savedAccount, type AccountKey } from "./account-key";
+import type { ImportedScene } from "./bundle";
+import { savedAccount, type AccountKey } from "../account/key";
 export type OwnedScene = ImportedScene & { account: string };
 export function sceneAccount(
   account: Pick<AccountKey, "server" | "database" | "identity"> | undefined,

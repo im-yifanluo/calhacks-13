@@ -1,4 +1,4 @@
-import type { Multiplayer } from "./net";
+import type { Multiplayer } from "../net";
 export function uploadPanel(net: Multiplayer, root: HTMLElement, onComplete?: (requestId: string) => void) {
   root.innerHTML = `<h2>Upload a video</h2><p>Pick a clip exported from Meta AI.</p>
   <label>Title<input id="upload-title" maxlength="120" required placeholder="Saturday at the park"></label>

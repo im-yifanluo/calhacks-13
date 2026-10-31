@@ -1,9 +1,9 @@
 import { mountScenePublish } from "./scene-publish";
-import { Multiplayer, type Memory } from "./net";
-import { uploadPanel } from "./upload";
-import { httpURL, memoryPresentation, previewMissing, previewUrl, viewerLink } from "./library-state";
-import { mountAuth } from "./auth";
-import "./library.css";
+import { Multiplayer, type Memory } from "../net";
+import { uploadPanel } from "../upload/panel";
+import { httpURL, memoryPresentation, previewMissing, previewUrl, viewerLink } from "./state";
+import { mountAuth } from "../account/auth";
+import "../styles/library.css";
 import { localMemoryUrls, seedLocalMemories, seedSummary } from "./dev-seed";
 import { mountSceneImport } from "./scene-import";
 

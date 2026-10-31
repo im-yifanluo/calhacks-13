@@ -11,7 +11,7 @@ export const isTouchDevice = () => matchMedia("(pointer: coarse)").matches || na
 /**
  * The phone WALK pad (from jerry's input-touch.ts). Dragging inside the pad moves the orbit camera
  * and its target together across the floor, in the direction the camera faces. It listens only to
- * its own element: grabbing and throwing on the canvas stay with input-desktop.ts, which already
+ * its own element: grabbing and throwing on the canvas stay with desktop.ts, which already
  * handles touch.
  */
 export class PhoneJoystick {

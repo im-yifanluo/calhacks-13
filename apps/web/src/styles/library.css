@@ -974,7 +974,7 @@ aside {
   margin-top: var(--space-1);
 }
 
-/* Upload panel (markup injected by upload.ts, wrapped in #upload-fields by library.ts). */
+/* Upload panel (markup injected by upload/panel.ts, wrapped in #upload-fields by library/main.ts). */
 #upload-fields {
   border: 0;
   padding: 0;

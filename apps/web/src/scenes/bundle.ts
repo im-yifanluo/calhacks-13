@@ -1,7 +1,7 @@
 import { unzip } from "fflate";
 import type { Keyframe, MemoryManifest } from "@memreplay/shared";
-import { validateManifest } from "./loader";
-import { validateTrack } from "./tracks";
+import { validateManifest } from "../engine/loader";
+import { validateTrack } from "../engine/tracks";
 
 export const MAX_BUNDLE_BYTES = 250 * 1024 * 1024;
 const MAX_FILES = 4000;

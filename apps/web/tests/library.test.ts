@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { memoryPresentation, viewerLink } from "../src/library-state";
+import { memoryPresentation, viewerLink } from "../src/library/state";
 const origin = "https://memos.example";
 const row = { status: "uploaded", progress: 0, manifestUrl: "", error: "" };
 describe("memory library handoff", () => {

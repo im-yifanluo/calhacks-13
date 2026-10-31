@@ -2,11 +2,11 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 import { Object3D, Quaternion, Vector3 } from "three";
 import type { DynamicObject, Keyframe } from "@memreplay/shared";
-import { sampleTrack, trackVelocity, validateTrack } from "../src/tracks";
-import { Timeline } from "../src/timeline";
-import { initPhysics, Physics, STEP } from "../src/physics";
-import { validateManifest } from "../src/loader";
-import { Viewer, type ViewerEvent } from "../src/viewer";
+import { sampleTrack, trackVelocity, validateTrack } from "../src/engine/tracks";
+import { Timeline } from "../src/engine/timeline";
+import { initPhysics, Physics, STEP } from "../src/engine/physics";
+import { validateManifest } from "../src/engine/loader";
+import { Viewer, type ViewerEvent } from "../src/engine/viewer";
 import { approx, fixture, frame, mockManifest } from "./helpers";
 
 const track: Keyframe[] = [frame(0, 0), { ...frame(2, 2), q: [0, 1, 0, 0], s: 2 }];

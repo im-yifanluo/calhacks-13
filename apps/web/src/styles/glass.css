@@ -7,7 +7,7 @@
  * - Colour only for meaning: takes (amber), lost tracking (coral), live (green), errors (rose).
  * - Blur only on the controls layer, never nested, never animated. Fallbacks for no backdrop-filter, reduced
  *   transparency, more contrast and reduced motion.
- * The VR panel (vr-panel.ts) draws the same tokens onto a canvas; keep them in step.
+ * The VR panel (xr/panel.ts) draws the same tokens onto a canvas; keep them in step.
  */
 :root {
   --font:

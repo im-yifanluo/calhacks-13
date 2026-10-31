@@ -1,4 +1,4 @@
-import type { Multiplayer } from "./net/index.js";
+import type { Multiplayer } from "../net";
 
 /**
  * Local development only: put every scene under apps/web/public/memories/ (not in git; listed in index.json by

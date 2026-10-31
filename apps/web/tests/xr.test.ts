@@ -2,7 +2,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import { ArrayCamera, Euler, Group, type Object3D, PerspectiveCamera, Vector3 } from "three";
-import { headForward, snapTurn, stickMove } from "../src/input-xr";
+import { headForward, snapTurn, stickMove } from "../src/xr/input";
 import { approx } from "./helpers";
 
 // No Quest is available, so these check the locomotion math against the scene graph main.ts builds, with the head

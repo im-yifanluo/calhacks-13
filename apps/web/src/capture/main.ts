@@ -1,7 +1,7 @@
-import { Multiplayer, type Memory } from "./net";
-import { uploadPanel } from "./upload";
-import { captureSimulation } from "./capture-simulation";
-import "./capture.css";
+import { Multiplayer, type Memory } from "../net";
+import { uploadPanel } from "../upload/panel";
+import { captureSimulation } from "./simulation";
+import "../styles/capture.css";
 const net = new Multiplayer();
 /** A test upload (presign with pipeline:false) is assigned to its uploader, not the worker. */
 const testUpload = (m: Memory) => m.pipelineIdentity.isEqual(m.owner);

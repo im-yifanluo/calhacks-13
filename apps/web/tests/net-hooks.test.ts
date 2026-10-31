@@ -3,9 +3,9 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 import { Quaternion, Vector3 } from "three";
 import type { Keyframe, Vec3 } from "@memreplay/shared";
-import { Timeline } from "../src/timeline";
-import { initPhysics, STEP } from "../src/physics";
-import { Viewer, type ViewerEvent } from "../src/viewer";
+import { Timeline } from "../src/engine/timeline";
+import { initPhysics, STEP } from "../src/engine/physics";
+import { Viewer, type ViewerEvent } from "../src/engine/viewer";
 import { approx, fixture, frame, mockManifest, settle, times } from "./helpers";
 
 const { close } = approx(1e-5);

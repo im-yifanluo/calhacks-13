@@ -1,6 +1,6 @@
 import { MathUtils, type Object3D, Vector3 } from "three";
 import type { Keyframe } from "@memreplay/shared";
-import { segment } from "./tracks.js";
+import { segment } from "../engine/tracks";
 
 /**
  * Follow mode (the default for a recorded memory): while the memory plays you walk the wearer's recorded path, and

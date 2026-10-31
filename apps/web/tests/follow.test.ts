@@ -4,7 +4,7 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 import { Euler, Group, PerspectiveCamera, Vector3 } from "three";
 import type { Keyframe, Quat } from "@memreplay/shared";
-import { GLIDE_SECONDS, PathFollower, pathPosition, placeHead } from "../src/follow";
+import { GLIDE_SECONDS, PathFollower, pathPosition, placeHead } from "../src/camera/follow";
 import { approx } from "./helpers";
 
 const { close, vec } = approx(1e-9, { inclusive: true });

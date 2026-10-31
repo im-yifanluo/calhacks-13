@@ -1,7 +1,7 @@
 import { PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { Keyframe } from "@memreplay/shared";
-import { sampleTrack } from "./tracks";
+import { sampleTrack } from "../engine/tracks";
 
 /** Lock immediately, even while paused or between animation frames. */
 export function wearerPose(camera: PerspectiveCamera, track: Keyframe[], time: number, fov: number) {

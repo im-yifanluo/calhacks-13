@@ -1,5 +1,5 @@
-import type { Multiplayer } from "./net";
-import { inspectScene, filePath, type ScenePackage } from "./scene-bundle";
+import type { Multiplayer } from "../net";
+import { inspectScene, filePath, type ScenePackage } from "../scenes/bundle";
 
 /** Publish each scene independently, retaining its request ID for safe retries. */
 export function mountScenePublish(net: Multiplayer) {

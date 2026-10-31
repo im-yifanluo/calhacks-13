@@ -1,5 +1,5 @@
 import type { Keyframe } from "@memreplay/shared";
-import { validateTrack } from "./tracks.js";
+import { validateTrack } from "./tracks";
 
 /** Two clock times closer than this (seconds) are the same instant. */
 export const SAME_TIME = 0.001;

@@ -6,7 +6,7 @@ import {
   resolveReconnectPolicy,
   UnknownCallResultError,
 } from "spacetimedb";
-import { accountStorageKey, databaseSettings, encodeAccountKey } from "../src/account-key";
+import { accountStorageKey, databaseSettings, encodeAccountKey } from "../src/account/key";
 import { DbConnection } from "../src/module_bindings";
 import {
   claimStoredToken,
