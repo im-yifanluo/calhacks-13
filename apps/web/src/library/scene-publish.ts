@@ -1,4 +1,5 @@
 import type { Multiplayer } from "../net";
+import { randomUuid } from "../lib/ids";
 import { inspectScene, filePath, type ScenePackage } from "../scenes/bundle";
 
 /** Publish each scene independently, retaining its request ID for safe retries. */
@@ -27,7 +28,7 @@ export function mountScenePublish(net: Multiplayer) {
           return {
             pkg: { files: subset, manifests: [manifest] },
             manifest,
-            requestId: crypto.randomUUID(),
+            requestId: randomUuid(),
             done: false,
           };
         });

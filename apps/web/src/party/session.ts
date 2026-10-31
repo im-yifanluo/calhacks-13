@@ -10,6 +10,7 @@ import { validateManifest } from "../engine/loader";
 import { isTouchDevice } from "../input/joystick";
 import { uploadPanel } from "../upload/panel";
 import { dragToClose } from "../ui/overlay";
+import { randomUuid } from "../lib/ids";
 import { previewMissing, previewUrl, viewerLink } from "../library/state";
 import { localMemoryUrls, seedLocalMemories, seedSummary } from "../library/dev-seed";
 import type { Viewer } from "../engine/viewer";
@@ -25,14 +26,6 @@ const POSE_INTERVAL_MS = 80;
 const POSE_REFRESH_MS = 1000;
 /** How long an informational message stays up (ms). */
 export const NOTICE_MS = 6000;
-
-/** LAN HTTP pages have getRandomValues, but not the secure-context-only randomUUID API. */
-export function memoryRequestId(): string {
-  return (
-    crypto.randomUUID?.() ??
-    Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("")
-  );
-}
 
 export interface NoticeOptions {
   /** What the message is about. A later success of the same kind (resolve) clears an error. */
@@ -469,8 +462,7 @@ export class Session {
     ui.panel.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        // A fresh visit shows the party-code field; invite links open the scene directly (stdb/jerry-p4).
-        this.expand(!host.localImport && (!this.urlRoom || innerWidth > 650));
+        this.expand(false);
         ui.toggle.focus();
       }
     });
@@ -634,7 +626,7 @@ export class Session {
         sameManifest(m.manifestUrl, manifestUrl, location.href) && m.status === "ready" && m.title === manifest.title,
     );
     if (existing) return existing.id;
-    const requestId = memoryRequestId();
+    const requestId = randomUuid();
     await this.net.callConnected(() =>
       this.net.connection!.reducers.createMemory({
         requestId,
@@ -905,7 +897,7 @@ export class Session {
       if (!response.ok) throw new Error(`Manifest returned ${response.status}`);
       const manifest = (await response.json()) as MemoryManifest;
       validateManifest(manifest);
-      const requestId = memoryRequestId();
+      const requestId = randomUuid();
       const error = await this.net.attempt(
         () =>
           this.net.connection!.reducers.createMemory({

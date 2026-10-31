@@ -1,6 +1,7 @@
 import { getImportedScene, listImportedScenes, localSceneLink, saveImportedScene } from "../scenes/store";
 import type { ScenePackage } from "../scenes/bundle";
 import type { Multiplayer } from "../net";
+import { randomUuid } from "../lib/ids";
 import { savedAccount } from "../account/key";
 
 export function mountSceneImport(net: Multiplayer) {
@@ -105,7 +106,7 @@ export function mountSceneImport(net: Multiplayer) {
     void (async () => {
       try {
         const { inspectScene } = await import("../scenes/bundle");
-        const scene = { ...(await inspectScene(pkg!, choice.value)), id: crypto.randomUUID(), importedAt: Date.now() };
+        const scene = { ...(await inspectScene(pkg!, choice.value)), id: randomUuid(), importedAt: Date.now() };
         await saveImportedScene(scene);
         if (!(await getImportedScene(scene.id))) throw new Error("Scene could not be saved.");
         location.href = localSceneLink(scene.id);

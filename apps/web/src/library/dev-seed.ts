@@ -1,3 +1,4 @@
+import { randomUuid } from "../lib/ids";
 import type { Multiplayer } from "../net";
 
 /**
@@ -6,10 +7,6 @@ import type { Multiplayer } from "../net";
  * seen with real data. Memories already in the library are skipped. Nothing here runs in a production build.
  */
 export const LOCAL_INDEX = "/memories/index.json";
-
-const requestId = () =>
-  crypto.randomUUID?.() ??
-  Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 
 /** The memory.json URLs of the local scenes, or none (not a dev server, or no scenes unpacked). */
 export async function localMemoryUrls(origin = location.origin): Promise<string[]> {
@@ -60,7 +57,7 @@ export async function seedLocalMemories(
         const error = await net.attempt(
           () =>
             net.connection!.reducers.createMemory({
-              requestId: requestId(),
+              requestId: randomUuid(),
               title,
               sourceUrl: "",
               manifestUrl: url,
