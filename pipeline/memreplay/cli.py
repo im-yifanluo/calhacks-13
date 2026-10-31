@@ -14,6 +14,7 @@ Steps (S0 is recording the clip; put it in the work dir as clip.mov or clip.mp4)
   objects     S5 object tracks + velocity; Claude picks shape, size, mass
   background  S6 gsplat on our cameras with people/props masked out -> bg.spz
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,13 +27,31 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-STAGES = {"normalize": "S1", "nouns": "S1", "vipe": "S2", "world": "S3", "l0": "S4", "objects": "S5", "background": "S6",
-          "refine": "S6a", "bake": "S6c", "layers": "S6b"}
-DONE_MARKER = {"normalize": "input/frames.json", "nouns": "nouns.json", "vipe": "vipe/pose/clip.npz",
-               "world": "world/cameras.json", "l0": "world/ghosts.json", "objects": "objects/objects.json",
-               "background": "world/bg_static.spz", "refine": "world/pose_refine.json", "bake": "gsplat_static/baked.ply",
-               "layers": "world/bg_room.spz"}
-KF_GAP_SEC = 0.5   # ViPE re-runs detection every 0.5 s (default 2 s leaves new things unmasked too long)
+STAGES = {
+    "normalize": "S1",
+    "nouns": "S1",
+    "vipe": "S2",
+    "world": "S3",
+    "l0": "S4",
+    "objects": "S5",
+    "background": "S6",
+    "refine": "S6a",
+    "bake": "S6c",
+    "layers": "S6b",
+}
+DONE_MARKER = {
+    "normalize": "input/frames.json",
+    "nouns": "nouns.json",
+    "vipe": "vipe/pose/clip.npz",
+    "world": "world/cameras.json",
+    "l0": "world/ghosts.json",
+    "objects": "objects/objects.json",
+    "background": "world/bg_static.spz",
+    "refine": "world/pose_refine.json",
+    "bake": "gsplat_static/baked.ply",
+    "layers": "world/bg_room.spz",
+}
+KF_GAP_SEC = 0.5  # ViPE re-runs detection every 0.5 s (default 2 s leaves new things unmasked too long)
 
 
 def run_vipe(work: Path) -> None:
@@ -43,10 +62,12 @@ def run_vipe(work: Path) -> None:
     nouns = Nouns.model_validate_json((work / "nouns.json").read_text()).nouns
     env_sh = Path(__file__).resolve().parents[1] / "runpod" / "env.sh"
     phrases = ",".join(nouns)
-    cmd = (f"source '{env_sh}' && use vipe && cd \"$SRC/vipe\" && uv run python run.py pipeline=default "
-           f"streams=raw_mp4_stream streams.base_path='{work}/input/clip.mp4' streams.frame_end=-1 "
-           f"pipeline.output.path='{work}/vipe' pipeline.output.save_artifacts=true pipeline.output.save_viz=false "
-           f"pipeline.init.instance.kf_gap_sec={KF_GAP_SEC} 'pipeline.init.instance.phrases=[{phrases}]'")
+    cmd = (
+        f"source '{env_sh}' && use vipe && cd \"$SRC/vipe\" && uv run python run.py pipeline=default "
+        f"streams=raw_mp4_stream streams.base_path='{work}/input/clip.mp4' streams.frame_end=-1 "
+        f"pipeline.output.path='{work}/vipe' pipeline.output.save_artifacts=true pipeline.output.save_viz=false "
+        f"pipeline.init.instance.kf_gap_sec={KF_GAP_SEC} 'pipeline.init.instance.phrases=[{phrases}]'"
+    )
     subprocess.run(["bash", "-c", cmd], check=True)
 
 
@@ -54,11 +75,13 @@ def run_stage(name: str, work: Path, args: argparse.Namespace | None = None) -> 
     work = Path(work).resolve()
     if name == "normalize":
         from . import normalize
+
         eye = getattr(args, "eye_height", None)
         normalize.run(work, eye_height_m=eye)
     elif name == "nouns":
         from . import claude, normalize
         from .handoff import Nouns
+
         sheet = normalize.contact_sheet(work, work / "input" / "sheet.jpg", n=8, width=256)
         nouns = Nouns().nouns
         if claude.available():
@@ -76,30 +99,37 @@ def run_stage(name: str, work: Path, args: argparse.Namespace | None = None) -> 
         run_vipe(work)
     elif name == "world":
         from . import world
+
         world.run(work)
     elif name == "l0":
         from . import l0, objects
+
         objects.observe(work)
-        objects.select(work)          # which segmented things become props (the rest stays in the room)
+        objects.select(work)  # which segmented things become props (the rest stays in the room)
         l0.run(work)
     elif name == "objects":
         from . import objects
+
         if not (work / "objects" / "observations.json").exists():
             objects.observe(work)
         objects.run(work)
     elif name == "refine":
         from . import refine_poses
+
         refine_poses.run(work)
     elif name == "bake":
         from . import background, bake
+
         ply = bake.run(work)
         if ply is not None:
             background.convert(work, ply, static=True)
     elif name == "layers":
         from . import layers
+
         layers.run(work)
     elif name == "background":
         from . import background
+
         # `memreplay run` trains the static room (props stay in; S6b carves them out); `stage background` without
         # --static trains the older room-without-props splat
         background.run(work, steps_scaler=getattr(args, "steps_scaler", None), static=getattr(args, "static", True))
@@ -121,7 +151,7 @@ def run_all(work: Path, title: str, args: argparse.Namespace) -> Path:
         print(f"[run] {name} ...", flush=True)
         run_stage(name, work, args)
         timings[name] = round(time.time() - t0, 1)
-        if name in ("l0", "objects", "layers"):            # a viewable memory after every layer
+        if name in ("l0", "objects", "layers"):  # a viewable memory after every layer
             merge(work, title, args.memory_id or work.name, args.device)
     out = merge(work, title, args.memory_id or work.name, args.device)
     if (work / "world" / "bg_static.spz").exists():
@@ -132,6 +162,8 @@ def run_all(work: Path, title: str, args: argparse.Namespace) -> Path:
     log.write_text(json.dumps(old, indent=2))
     print(f"[run] done: {out}  timings {timings}")
     return out
+
+
 BG_SPLAT_MAX = 500_000  # Spark's default splat budget on Quest
 
 
@@ -175,11 +207,13 @@ def merge(work: Path, title: str, memory_id: str, device: str, static: bool = Fa
 
     # Background: the trained splat (S6) if it exists, otherwise the L0 points (S4).
     if static and (work / "world" / "bg_static.spz").exists():
-        background = Background(url="world/bg_static.spz", format="spz",
-                                splatCount=int(world.diagnostics.get("static_splat_count", 0)))
-    elif (work / "world" / "bg_room.spz").exists():           # the static room with the props carved out (S6b)
-        background = Background(url="world/bg_room.spz", format="spz",
-                                splatCount=int(world.diagnostics.get("room_splat_count", 0)))
+        background = Background(
+            url="world/bg_static.spz", format="spz", splatCount=int(world.diagnostics.get("static_splat_count", 0))
+        )
+    elif (work / "world" / "bg_room.spz").exists():  # the static room with the props carved out (S6b)
+        background = Background(
+            url="world/bg_room.spz", format="spz", splatCount=int(world.diagnostics.get("room_splat_count", 0))
+        )
     elif (work / "world" / "bg.spz").exists():
         background = Background(url="world/bg.spz", format="spz", splatCount=world.bgSplatCount)
     elif (work / "world" / "bg_points.ply").exists():
@@ -195,7 +229,7 @@ def merge(work: Path, title: str, memory_id: str, device: str, static: bool = Fa
         warn("no world/room_collider.glb: thrown objects will only land on the floor plane")
 
     objects = []
-    for frag in (() if static else (work / "world" / "ghosts.json", work / "objects" / "objects.json")):
+    for frag in () if static else (work / "world" / "ghosts.json", work / "objects" / "objects.json"):
         if frag.exists():
             objects += ObjectsFragment.model_validate_json(frag.read_text()).objects
         else:
@@ -212,7 +246,7 @@ def merge(work: Path, title: str, memory_id: str, device: str, static: bool = Fa
     cam_frames = sorted(cams.frames, key=lambda c: c.t)
     first = cam_frames[0]
     gaps: list[tuple[float, float]] = []
-    for c in cam_frames:                                   # runs of untrusted keyframes -> gaps (0.3 s slack)
+    for c in cam_frames:  # runs of untrusted keyframes -> gaps (0.3 s slack)
         if c.good:
             continue
         if gaps and c.t - gaps[-1][1] <= 0.35:
@@ -220,7 +254,7 @@ def merge(work: Path, title: str, memory_id: str, device: str, static: bool = Fa
         else:
             gaps.append((c.t, c.t))
     gaps = [(round(max(0.0, a - 0.3), 2), round(b + 0.3, 2)) for a, b in gaps if b - a >= 0.5]
-    exp_file = work / "world" / "exposure.json"                 # S6c bake: per-frame gain/bias vs the exported room
+    exp_file = work / "world" / "exposure.json"  # S6c bake: per-frame gain/bias vs the exported room
     exposure = {int(k): v for k, v in json.loads(exp_file.read_text()).items()} if exp_file.exists() else {}
     exp_idx = sorted(exposure)
 
@@ -230,8 +264,10 @@ def merge(work: Path, title: str, memory_id: str, device: str, static: bool = Fa
         k = min(exp_idx, key=lambda i: abs(i - idx))
         return [round(float(x), 4) for x in exposure[k]] if abs(k - idx) <= 3 * frames.key_stride else None
 
-    track = [Keyframe(t=c.t, p=(c.c2w[3], c.c2w[7], c.c2w[11]), q=quat_from_c2w_opencv(c.c2w), e=exposure_at(c.idx))
-             for c in cam_frames]
+    track = [
+        Keyframe(t=c.t, p=(c.c2w[3], c.c2w[7], c.c2w[11]), q=quat_from_c2w_opencv(c.c2w), e=exposure_at(c.idx))
+        for c in cam_frames
+    ]
     audio = "input/audio.m4a" if (work / "input" / "audio.m4a").exists() else None
     if static and not memory_id.endswith("-static"):
         memory_id += "-static"
@@ -239,8 +275,14 @@ def merge(work: Path, title: str, memory_id: str, device: str, static: bool = Fa
         id=memory_id,
         title=title,
         createdAt=datetime.now(timezone.utc).isoformat(),
-        source=Source(device=device, durationSec=frames.duration_sec, fps=frames.fps,
-                      width=frames.width, height=frames.height, audioUrl=audio),
+        source=Source(
+            device=device,
+            durationSec=frames.duration_sec,
+            fps=frames.fps,
+            width=frames.width,
+            height=frames.height,
+            audioUrl=audio,
+        ),
         world=World(floorY=world.floorY),
         timeline=Timeline(durationSec=frames.duration_sec, sampleHz=frames.fps / frames.key_stride, gaps=gaps or None),
         background=background,
@@ -254,7 +296,9 @@ def merge(work: Path, title: str, memory_id: str, device: str, static: bool = Fa
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="memreplay", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        prog="memreplay", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     sub = ap.add_subparsers(dest="cmd", required=True)
     st = sub.add_parser("stage", help="run one pipeline step")
     st.add_argument("name", choices=list(STAGES))
@@ -295,19 +339,23 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "compare":
         from . import compare
+
         shots = [(float(x.split("=", 1)[0]), Path(x.split("=", 1)[1])) for x in args.shot]
         compare.run(args.dir, args.video, shots, args.label)
         return 0
     if args.cmd == "clean":
         from . import cleanup
+
         print(json.dumps(cleanup.clean_memory_dir(args.dir), indent=2))
         return 0
     if args.cmd == "verify":
         from . import verify
+
         print(json.dumps(verify.run(args.work), indent=2))
         return 0
     if args.cmd == "publish":
         from . import worker
+
         if args.to == "s3":
             print(worker.publish_s3(args.work, args.prefix or f"memories/{Path(args.work).name}"))
         else:
@@ -316,6 +364,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.cmd == "worker":
         from . import worker
+
         worker.loop(once=args.once, memory_id=args.memory_id)
         return 0
 

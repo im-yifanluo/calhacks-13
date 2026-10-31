@@ -15,8 +15,10 @@ function ensureFilter(): SVGFEColorMatrixElement {
   if (matrix) return matrix;
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("width", "0"); svg.setAttribute("height", "0");
-  svg.style.position = "absolute"; svg.style.pointerEvents = "none";
+  svg.setAttribute("width", "0");
+  svg.setAttribute("height", "0");
+  svg.style.position = "absolute";
+  svg.style.pointerEvents = "none";
   const filter = document.createElementNS(ns, "filter");
   filter.setAttribute("id", FILTER_ID);
   filter.setAttribute("color-interpolation-filters", "sRGB");
@@ -32,10 +34,13 @@ function ensureFilter(): SVGFEColorMatrixElement {
 /** The exposure recorded nearest to `time` (keyframes without one count as neutral). */
 export function exposureAt(track: Keyframe[], time: number): number[] | null {
   if (track.length === 0) return null;
-  let lo = 0, hi = track.length - 1;
-  while (lo < hi) {                                   // first keyframe with t >= time
+  let lo = 0,
+    hi = track.length - 1;
+  while (lo < hi) {
+    // first keyframe with t >= time
     const mid = (lo + hi) >> 1;
-    if (track[mid].t < time) lo = mid + 1; else hi = mid;
+    if (track[mid].t < time) lo = mid + 1;
+    else hi = mid;
   }
   const k = lo > 0 && Math.abs(track[lo - 1].t - time) < Math.abs(track[lo].t - time) ? lo - 1 : lo;
   return track[k].e ?? null;
@@ -43,11 +48,17 @@ export function exposureAt(track: Keyframe[], time: number): number[] | null {
 
 export function applyExposure(el: HTMLElement, track: Keyframe[], time: number): void {
   const e = exposureAt(track, time);
-  if (!e) { clearExposure(el); return; }
+  if (!e) {
+    clearExposure(el);
+    return;
+  }
   const [gr, gg, gb, br, bg, bb] = e;
   const values = `${gr} 0 0 0 ${br}  0 ${gg} 0 0 ${bg}  0 0 ${gb} 0 ${bb}  0 0 0 1 0`;
   const m = ensureFilter();
-  if (values !== lastValues) { m.setAttribute("values", values); lastValues = values; }
+  if (values !== lastValues) {
+    m.setAttribute("values", values);
+    lastValues = values;
+  }
   const css = `url(#${FILTER_ID})`;
   if (el.style.filter !== css) el.style.filter = css;
 }

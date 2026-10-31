@@ -5,8 +5,7 @@ import "./capture.css";
 const net = new Multiplayer();
 /** A test upload (presign with pipeline:false) is assigned to its uploader, not the worker. */
 const testUpload = (m: Memory) => m.pipelineIdentity.isEqual(m.owner);
-const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
-  document.getElementById(id) as T;
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const select = $<HTMLSelectElement>("recordings"),
   video = $<HTMLVideoElement>("stored-video");
 let selected = new URLSearchParams(location.search).get("request") || "",
@@ -15,14 +14,9 @@ let selected = new URLSearchParams(location.search).get("request") || "",
 function show() {
   proofGeneration++;
   const memory = net.memories.find((m) => m.requestId === selected);
-  $("row-id").textContent = memory
-    ? `#${memory.id} · confirmed in SpacetimeDB`
-    : "—";
+  $("row-id").textContent = memory ? `#${memory.id} · confirmed in SpacetimeDB` : "—";
   $("row-status").textContent = memory
-    ? memory.status +
-      (testUpload(memory)
-        ? " · test upload, not queued for the 3D pipeline"
-        : "")
+    ? memory.status + (testUpload(memory) ? " · test upload, not queued for the 3D pipeline" : "")
     : "—";
   const link = $<HTMLAnchorElement>("source-link");
   link.textContent = memory?.sourceUrl || "—";
@@ -88,20 +82,13 @@ function render() {
   $("connection").textContent = net.status;
   $("connection").classList.toggle("connected", net.ready);
   $("error").textContent = net.error;
-  const memories = net.memories
-    .filter((m) => m.sourceUrl)
-    .sort((a, b) => Number(b.id - a.id));
+  const memories = net.memories.filter((m) => m.sourceUrl).sort((a, b) => Number(b.id - a.id));
   const next = memories.map((m) => `${m.id}:${m.status}:${m.title}`).join("|");
   if (next === signature) return;
   signature = next;
   select.replaceChildren();
   for (const m of memories)
-    select.add(
-      new Option(
-        `#${m.id} · ${m.title} · ${m.status}${testUpload(m) ? " · test" : ""}`,
-        m.requestId,
-      ),
-    );
+    select.add(new Option(`#${m.id} · ${m.title} · ${m.status}${testUpload(m) ? " · test" : ""}`, m.requestId));
   if (!selected) selected = memories[0]?.requestId || "";
   select.value = selected;
   if (!memories.length) select.add(new Option("No uploaded videos yet", ""));

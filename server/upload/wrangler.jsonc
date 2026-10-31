@@ -4,7 +4,7 @@
   "main": "cloudflare.mjs",
   "compatibility_date": "2026-05-15",
   "compatibility_flags": ["nodejs_compat"],
-  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "memos-scene-assets" }]
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "memos-scene-assets" }],
   // Set STDB_HTTP_URL, STDB_DATABASE, PUBLIC_ORIGIN, PIPELINE_IDENTITY and
   // UPLOAD_SIGNING_SECRET before deployment. Local tests inject isolated values.
 }

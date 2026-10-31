@@ -16,6 +16,7 @@ then count the bytes), a few minutes in total, no redirects.
 
 CLI: python3 scripts/source_check.py URL BASE [OWNER]  (exit 0 allowed, 1 refused)
 """
+
 import re
 import sys
 from urllib.parse import urlsplit
@@ -50,7 +51,7 @@ def allowed_source(url, base, owner=None):
     if not u.path.startswith(prefix):
         return False
     # The key's alphabet has no "%" or "..": nothing can escape the prefix.
-    match = KEY.fullmatch(u.path[len(prefix):])
+    match = KEY.fullmatch(u.path[len(prefix) :])
     if not match:
         return False
     return owner is None or match.group(1).lower() == str(owner).lower().removeprefix("0x")

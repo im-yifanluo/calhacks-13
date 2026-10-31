@@ -65,14 +65,21 @@ describe("messages", () => {
     vi.useFakeTimers();
     const hint = "In room ABC1234. Pause to grab and throw; everyone sees the same take.";
     let line = "";
-    const status = new Notice((text) => (line = text), (text) => line === text, () => hint);
+    const status = new Notice(
+      (text) => (line = text),
+      (text) => line === text,
+      () => hint,
+    );
     status.show(hint, { persist: true });
     vi.advanceTimersByTime(NOTICE_MS * 3);
     expect(line).toBe(hint);
     status.show("You no longer hold the ball: the room released it.", { kind: "hold" });
     vi.advanceTimersByTime(NOTICE_MS);
     expect(line).toBe(hint);
-    status.show("Could not change the shared clock: Wait for objects to settle or release them first", { kind: "clock", error: true });
+    status.show("Could not change the shared clock: Wait for objects to settle or release them first", {
+      kind: "clock",
+      error: true,
+    });
     vi.advanceTimersByTime(60_000);
     expect(line).toMatch(/^Could not change the shared clock/);
     status.resolve("clock"); // the next play, pause or seek went through
@@ -113,7 +120,9 @@ describe("room URLs and manifests", () => {
       expect(sameManifest(old, current, base)).toBe(true);
       expect(loadedManifest(base, { getItem: () => old })).toBe(current);
       expect(resolveManifestUrl("https://cdn.example/memory.json", base)).toBe("https://cdn.example/memory.json");
-      expect(resolveManifestUrl("https://old.example.evil.test/memory.json", base)).toBe("https://old.example.evil.test/memory.json");
+      expect(resolveManifestUrl("https://old.example.evil.test/memory.json", base)).toBe(
+        "https://old.example.evil.test/memory.json",
+      );
       expect(resolveManifestUrl("http://old.example/memory.json", base)).toBe("http://old.example/memory.json");
     } finally {
       vi.unstubAllEnvs();
@@ -122,30 +131,16 @@ describe("room URLs and manifests", () => {
 
   test("the loaded manifest is ?memory=, else the demo default, made absolute", () => {
     expect(loadedManifest(page)).toBe(`${page}demo/memory.json`);
-    expect(loadedManifest(`${page}?memory=/local/a/memory.json&room=X`)).toBe(
-      `${page}local/a/memory.json`,
+    expect(loadedManifest(`${page}?memory=/local/a/memory.json&room=X`)).toBe(`${page}local/a/memory.json`);
+    expect(loadedManifest(`${page}?memory=${encodeURIComponent("https://cdn.example/m/memory.json")}`)).toBe(
+      "https://cdn.example/m/memory.json",
     );
-    expect(
-      loadedManifest(
-        `${page}?memory=${encodeURIComponent("https://cdn.example/m/memory.json")}`,
-      ),
-    ).toBe("https://cdn.example/m/memory.json");
   });
 
   test("a relative manifest equals its absolute form; another file or query does not", () => {
-    expect(
-      sameManifest("/mock/memory.json", `${page}mock/memory.json`, page),
-    ).toBe(true);
-    expect(
-      sameManifest("/mock/memory.json", `${page}mock/memory.json?copy=2`, page),
-    ).toBe(false);
-    expect(
-      sameManifest(
-        "/mock/memory.json",
-        "https://other.example/mock/memory.json",
-        page,
-      ),
-    ).toBe(false);
+    expect(sameManifest("/mock/memory.json", `${page}mock/memory.json`, page)).toBe(true);
+    expect(sameManifest("/mock/memory.json", `${page}mock/memory.json?copy=2`, page)).toBe(false);
+    expect(sameManifest("/mock/memory.json", "https://other.example/mock/memory.json", page)).toBe(false);
   });
 
   test("party addresses use /CODE and leaving always returns to the server root", () => {
@@ -203,27 +198,17 @@ describe("room URLs and manifests", () => {
 describe("presence", () => {
   test("device labels", () => {
     expect(deviceKind(true, "Mozilla/5.0 (Macintosh)", false)).toBe("quest");
-    expect(
-      deviceKind(
-        false,
-        "Mozilla/5.0 (X11; Linux x86_64; Quest 3) OculusBrowser/38",
-        false,
-      ),
-    ).toBe("quest");
+    expect(deviceKind(false, "Mozilla/5.0 (X11; Linux x86_64; Quest 3) OculusBrowser/38", false)).toBe("quest");
     expect(deviceKind(false, "Mozilla/5.0 (iPhone)", true)).toBe("phone");
     expect(deviceKind(false, "Mozilla/5.0 (Macintosh)", false)).toBe("desktop");
   });
 
   test("hands only for headset rows that differ from the head", () => {
     const head = new THREE.Vector3(0, 1.6, 0);
-    expect(handVisible("quest", head, new THREE.Vector3(0.3, 1.2, -0.2))).toBe(
-      true,
-    );
+    expect(handVisible("quest", head, new THREE.Vector3(0.3, 1.2, -0.2))).toBe(true);
     expect(handVisible("quest", head, head.clone())).toBe(false); // not tracked: head sent
     expect(handVisible("quest", head, new THREE.Vector3(0, 0, 0))).toBe(false); // default row
-    expect(
-      handVisible("desktop", head, new THREE.Vector3(0.3, 1.2, -0.2)),
-    ).toBe(false);
+    expect(handVisible("desktop", head, new THREE.Vector3(0.3, 1.2, -0.2))).toBe(false);
   });
 
   test("player colors are readable on the dark scene", () => {
@@ -267,11 +252,7 @@ describe("presence", () => {
       const avatars = new Avatars(scene);
       const me = player(1n);
       const other = player(2n, { device: "quest", lx: 0.7, ly: 1.2, lz: 1.8 });
-      avatars.update(
-        [me, other, player(3n, { online: false })],
-        me.identity,
-        1 / 60,
-      );
+      avatars.update([me, other, player(3n, { online: false })], me.identity, 1 / 60);
       expect(avatars.size).toBe(1);
       const root = avatars.group.children[0];
       const [head, left, right] = root.children;

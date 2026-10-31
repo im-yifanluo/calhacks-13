@@ -16,6 +16,7 @@ Environment:
 Exit codes: 0 accepted; 1 rejected (the HTTP status and the reducer's reason are printed) or
 SpacetimeDB unreachable; 2 bad arguments or settings.
 """
+
 import argparse
 import http.client
 import json
@@ -71,8 +72,16 @@ def main(argv=None):
     if urllib.parse.urlsplit(base).scheme not in ("http", "https"):
         p.error("STDB_HTTP_URL must be an http(s) URL")
     try:
-        code = report(a.memory_id, a.status, a.progress, a.manifest_url, a.error,
-                      base=base, database=os.environ["STDB_DATABASE"], token=os.environ["PIPELINE_TOKEN"])
+        code = report(
+            a.memory_id,
+            a.status,
+            a.progress,
+            a.manifest_url,
+            a.error,
+            base=base,
+            database=os.environ["STDB_DATABASE"],
+            token=os.environ["PIPELINE_TOKEN"],
+        )
     except urllib.error.HTTPError as e:  # before OSError: an HTTPError is a URLError
         try:
             reason = e.read().decode("utf-8", "replace").strip()[:1000]

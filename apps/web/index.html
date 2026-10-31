@@ -4,13 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0a0f" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%23ffffff' stroke-width='4'/%3E%3C/svg%3E" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%23ffffff' stroke-width='4'/%3E%3C/svg%3E"
+    />
     <title>memos</title>
     <meta name="application-name" content="memos" />
     <meta name="apple-mobile-web-app-title" content="memos" />
   </head>
   <body>
-    <main id="stage" aria-label="Interactive 3D memory. When controls are hidden, use Show UI, double-tap the scene, or press H or Escape to show them."></main>
+    <main
+      id="stage"
+      aria-label="Interactive 3D memory. When controls are hidden, use Show UI, double-tap the scene, or press H or Escape to show them."
+    ></main>
 
     <!-- Top: what you are watching, entering VR, and the shared room. -->
     <header id="topbar">
@@ -18,19 +24,67 @@
         <span class="brand-dot" aria-hidden="true"></span>
         <div class="title-text">
           <h1 id="title">memos</h1>
-          <p><span id="mode">Loading</span><span class="sep" aria-hidden="true"> · </span><span id="asset-info">opening the scene</span></p>
+          <p>
+            <span id="mode">Loading</span><span class="sep" aria-hidden="true"> · </span
+            ><span id="asset-info">opening the scene</span>
+          </p>
         </div>
       </div>
       <div class="top-actions">
-        <button id="camera-mode" class="glass pill" disabled aria-pressed="false" title="Follow the recorded camera path">Camera: Free look</button>
-        <button id="hide-ui" class="glass pill" disabled aria-describedby="hide-ui-help" title="Hide controls, leaving a faint Show UI button. H / Escape or a double-tap also restores them."><svg class="i-hide" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12s3-6 8.5-6c1.6 0 3 .5 4.2 1.2M20.5 12s-3 6-8.5 6c-1.6 0-3-.5-4.2-1.2" /><path d="M9.9 14.1a3 3 0 0 1 4.2-4.2" /><path d="M4.5 19.5 19.5 4.5" /></svg><svg class="i-show" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12s3-6 8.5-6 8.5 6 8.5 6-3 6-8.5 6-8.5-6-8.5-6z" /><circle cx="12" cy="12" r="2.8" /></svg><span class="label">Hide UI</span></button>
-        <a href="/library.html" class="glass pill"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.6" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6" /></svg><span>Memories</span></a>
+        <button
+          id="camera-mode"
+          class="glass pill"
+          disabled
+          aria-pressed="false"
+          title="Follow the recorded camera path"
+        >
+          Camera: Free look
+        </button>
+        <button
+          id="hide-ui"
+          class="glass pill"
+          disabled
+          aria-describedby="hide-ui-help"
+          title="Hide controls, leaving a faint Show UI button. H / Escape or a double-tap also restores them."
+        >
+          <svg class="i-hide" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3.5 12s3-6 8.5-6c1.6 0 3 .5 4.2 1.2M20.5 12s-3 6-8.5 6c-1.6 0-3-.5-4.2-1.2" />
+            <path d="M9.9 14.1a3 3 0 0 1 4.2-4.2" />
+            <path d="M4.5 19.5 19.5 4.5" /></svg
+          ><svg class="i-show" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3.5 12s3-6 8.5-6 8.5 6 8.5 6-3 6-8.5 6-8.5-6-8.5-6z" />
+            <circle cx="12" cy="12" r="2.8" /></svg
+          ><span class="label">Hide UI</span>
+        </button>
+        <a href="/library.html" class="glass pill"
+          ><svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="4" y="4" width="6.5" height="6.5" rx="1.6" />
+            <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6" />
+            <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6" />
+            <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6" /></svg
+          ><span>Memories</span></a
+        >
         <button id="vr-entry" class="glass pill accent" hidden>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.6C3 8.2 4.1 7 5.6 7h12.8C19.9 7 21 8.2 21 9.6v3.9c0 1.4-1.1 2.5-2.6 2.5h-3.1l-1.9-2.4h-2.8L8.7 16H5.6C4.1 16 3 14.9 3 13.5z" /></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M3 9.6C3 8.2 4.1 7 5.6 7h12.8C19.9 7 21 8.2 21 9.6v3.9c0 1.4-1.1 2.5-2.6 2.5h-3.1l-1.9-2.4h-2.8L8.7 16H5.6C4.1 16 3 14.9 3 13.5z"
+            />
+          </svg>
           <span>Enter VR</span>
         </button>
-        <button id="room-toggle" class="glass pill" aria-expanded="false" aria-controls="room-panel" aria-haspopup="dialog">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2" /><path d="M3.5 19.5c.6-3.3 2.8-5.2 5.5-5.2s4.9 1.9 5.5 5.2" /><circle cx="17" cy="9.5" r="2.4" /><path d="M16 14.4c2.3.2 3.9 1.9 4.5 5.1" /></svg>
+        <button
+          id="room-toggle"
+          class="glass pill"
+          aria-expanded="false"
+          aria-controls="room-panel"
+          aria-haspopup="dialog"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="9" cy="8.5" r="3.2" />
+            <path d="M3.5 19.5c.6-3.3 2.8-5.2 5.5-5.2s4.9 1.9 5.5 5.2" />
+            <circle cx="17" cy="9.5" r="2.4" />
+            <path d="M16 14.4c2.3.2 3.9 1.9 4.5 5.1" />
+          </svg>
           <span class="sr-only">Room: </span><span id="room-summary">Solo</span>
         </button>
       </div>
@@ -42,21 +96,39 @@
       <div id="toast" class="glass toast"><p id="status" role="status" aria-live="polite">Opening your memory…</p></div>
       <p id="warning" class="glass toast warning" role="alert" hidden></p>
     </div>
-    <div id="loading" class="glass card" role="status"><span class="spinner" aria-hidden="true"></span><span>Opening your memory…</span></div>
+    <div id="loading" class="glass card" role="status">
+      <span class="spinner" aria-hidden="true"></span><span>Opening your memory…</span>
+    </div>
 
     <!-- The dock: playback within thumb reach. -->
     <section id="hud" class="glass dock" aria-label="Playback">
       <!-- Which view you are in (follow the walk, free camera, wearer's view); a click switches to the next. -->
-      <button id="view-mode" type="button" title="View: follow the walk, free camera or wearer's view. Click to switch." hidden><span class="dot" aria-hidden="true"></span><span class="sr-only">View: </span><span id="view-mode-label">Following the walk</span></button>
+      <button
+        id="view-mode"
+        type="button"
+        title="View: follow the walk, free camera or wearer's view. Click to switch."
+        hidden
+      >
+        <span class="dot" aria-hidden="true"></span><span class="sr-only">View: </span
+        ><span id="view-mode-label">Following the walk</span>
+      </button>
       <fieldset id="timeline-controls" disabled>
         <legend class="sr-only">Playback and takes</legend>
         <div class="dock-grid">
           <button id="restart" class="icon" aria-label="Back to the start" title="Back to the start">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 5.5v13" /><path d="M18 6.2 9.5 12l8.5 5.8z" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6.5 5.5v13" />
+              <path d="M18 6.2 9.5 12l8.5 5.8z" />
+            </svg>
           </button>
           <button id="play" class="play" aria-label="Play">
-            <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.6c0-.8.9-1.3 1.6-.9l9 5.9c.6.4.6 1.4 0 1.8l-9 5.9c-.7.4-1.6-.1-1.6-.9z" /></svg>
-            <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1.2" /><rect x="13.5" y="5" width="4" height="14" rx="1.2" /></svg>
+            <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8.5 5.6c0-.8.9-1.3 1.6-.9l9 5.9c.6.4.6 1.4 0 1.8l-9 5.9c-.7.4-1.6-.1-1.6-.9z" />
+            </svg>
+            <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="6.5" y="5" width="4" height="14" rx="1.2" />
+              <rect x="13.5" y="5" width="4" height="14" rx="1.2" />
+            </svg>
           </button>
           <output id="time-now" class="time" aria-hidden="true">0:00</output>
           <div class="scrubber">
@@ -66,9 +138,24 @@
             <div id="markers" aria-label="Takes along the timeline"></div>
           </div>
           <output id="time-total" class="time" aria-hidden="true">0:00</output>
-          <label class="take"><span class="sr-only">Take</span><select id="branches"><option value="original">Original</option></select></label>
-          <button id="more-toggle" class="icon" aria-label="View options" aria-expanded="false" aria-controls="more-sheet">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="18.5" cy="12" r="1.7" /></svg>
+          <label class="take"
+            ><span class="sr-only">Take</span
+            ><select id="branches">
+              <option value="original">Original</option>
+            </select></label
+          >
+          <button
+            id="more-toggle"
+            class="icon"
+            aria-label="View options"
+            aria-expanded="false"
+            aria-controls="more-sheet"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="5.5" cy="12" r="1.7" />
+              <circle cx="12" cy="12" r="1.7" />
+              <circle cx="18.5" cy="12" r="1.7" />
+            </svg>
           </button>
         </div>
       </fieldset>
@@ -77,26 +164,55 @@
     <!-- View options, above the dock. -->
     <section id="more-sheet" class="glass strong popover" aria-label="View options" hidden>
       <div id="more-toggles">
-        <label class="toggle" title="While it plays, walk the recorded path and look anywhere; pause to roam"><input id="follow" type="checkbox" role="switch" /> <span>Follow the walk</span></label>
-        <label class="toggle" title="See the memory through the glasses, as it was recorded"><input id="eyes" type="checkbox" role="switch" /> <span>Wearer's view</span></label>
-        <label class="toggle" title="Stay near where the glasses went; what they never saw fades out"><input id="guided" type="checkbox" role="switch" /> <span>Guided path</span></label>
-        <label class="toggle" title="Show the physics shapes"><input id="debug" type="checkbox" role="switch" /> <span>Colliders</span></label>
+        <label class="toggle" title="While it plays, walk the recorded path and look anywhere; pause to roam"
+          ><input id="follow" type="checkbox" role="switch" /> <span>Follow the walk</span></label
+        >
+        <label class="toggle" title="See the memory through the glasses, as it was recorded"
+          ><input id="eyes" type="checkbox" role="switch" /> <span>Wearer's view</span></label
+        >
+        <label class="toggle" title="Stay near where the glasses went; what they never saw fades out"
+          ><input id="guided" type="checkbox" role="switch" /> <span>Guided path</span></label
+        >
+        <label class="toggle" title="Show the physics shapes"
+          ><input id="debug" type="checkbox" role="switch" /> <span>Colliders</span></label
+        >
       </div>
       <div class="popover-actions">
         <button id="export" title="Download your takes as JSON">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11" /><path d="m7.5 10.5 4.5 4.5 4.5-4.5" /><path d="M5 19.5h14" /></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 4v11" />
+            <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
+            <path d="M5 19.5h14" />
+          </svg>
           Export takes
         </button>
       </div>
       <details class="help">
         <summary>How to use</summary>
         <ul>
-          <li id="hide-ui-help">Use Hide UI at the top (or press <kbd>H</kbd>) to clear the view. A faint Show UI button stays available; tap it, double-tap the scene, or press <kbd>H</kbd> / <kbd>Esc</kbd> to restore controls. This also works in Wearer's view.</li>
-          <li>Follow the walk (the default for hosted recordings): while it plays you move along the recorded path and drag to look anywhere. Pause<span class="pointer-fine"> (<kbd>Space</kbd>)</span> to roam freely; Play glides you back onto the path. The chip above the dock switches to a free camera or the wearer's view.</li>
-          <li class="pointer-fine">Drag to look around, scroll to zoom. <kbd>Space</kbd> plays or pauses, <kbd>←</kbd> <kbd>→</kbd> step, <kbd>[</kbd> <kbd>]</kbd> switch takes.</li>
+          <li id="hide-ui-help">
+            Use Hide UI at the top (or press <kbd>H</kbd>) to clear the view. A faint Show UI button stays available;
+            tap it, double-tap the scene, or press <kbd>H</kbd> / <kbd>Esc</kbd> to restore controls. This also works in
+            Wearer's view.
+          </li>
+          <li>
+            Follow the walk (the default for hosted recordings): while it plays you move along the recorded path and
+            drag to look anywhere. Pause<span class="pointer-fine"> (<kbd>Space</kbd>)</span> to roam freely; Play
+            glides you back onto the path. The chip above the dock switches to a free camera or the wearer's view.
+          </li>
+          <li class="pointer-fine">
+            Drag to look around, scroll to zoom. <kbd>Space</kbd> plays or pauses, <kbd>←</kbd> <kbd>→</kbd> step,
+            <kbd>[</kbd> <kbd>]</kbd> switch takes.
+          </li>
           <li class="pointer-coarse">Drag the scene to look around, pinch to zoom, and use the pad to walk.</li>
-          <li>Pause, then drag an object and let go: it stays there, frozen with everything else, until you press Play. Each change makes a new take; the original is always kept.</li>
-          <li>On a Quest: Enter VR, point and pull the trigger to use the panel, and hold grip to grab. Drag the bar under the panel to move it; B or Y hides it.</li>
+          <li>
+            Pause, then drag an object and let go: it stays there, frozen with everything else, until you press Play.
+            Each change makes a new take; the original is always kept.
+          </li>
+          <li>
+            On a Quest: Enter VR, point and pull the trigger to use the panel, and hold grip to grab. Drag the bar under
+            the panel to move it; B or Y hides it.
+          </li>
         </ul>
       </details>
     </section>
@@ -105,8 +221,13 @@
     <dialog id="room-panel" class="glass strong sheet" aria-labelledby="room-heading">
       <div class="sheet-head">
         <span class="grabber" aria-hidden="true"></span>
-        <div class="sheet-title"><h2 id="room-heading" tabindex="-1" autofocus>Watch together</h2><p id="room-connection" role="status">Connecting…</p></div>
-        <button id="room-reconnect" type="button" title="Retry this device's connection to the shared server" hidden>Reconnect</button>
+        <div class="sheet-title">
+          <h2 id="room-heading" tabindex="-1" autofocus>Watch together</h2>
+          <p id="room-connection" role="status">Connecting…</p>
+        </div>
+        <button id="room-reconnect" type="button" title="Retry this device's connection to the shared server" hidden>
+          Reconnect
+        </button>
         <button id="room-close" class="icon" aria-label="Close">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" /></svg>
         </button>
@@ -114,7 +235,18 @@
       <div id="room-body">
         <form id="party-join-form" class="group" aria-label="Join a party" novalidate>
           <label class="field" for="room-code">Party code</label>
-          <div class="row join"><input id="room-code" placeholder="Enter party code" maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" aria-describedby="party-code-help" /><button id="room-join" type="submit" class="primary" disabled>Join party</button></div>
+          <div class="row join">
+            <input
+              id="room-code"
+              placeholder="Enter party code"
+              maxlength="32"
+              autocomplete="off"
+              autocapitalize="characters"
+              spellcheck="false"
+              enterkeyhint="go"
+              aria-describedby="party-code-help"
+            /><button id="room-join" type="submit" class="primary" disabled>Join party</button>
+          </div>
           <p id="party-code-help">Ask the host for their 7-character code.</p>
           <button id="room-solo" type="button" class="wide">Explore solo</button>
         </form>
@@ -122,28 +254,60 @@
         <p id="room-error" role="alert"></p>
         <div id="party-code-share" class="group" hidden>
           <span>Your party code</span>
-          <div class="row"><strong id="party-current-code"></strong><button id="party-copy-code" type="button">Copy code</button></div>
+          <div class="row">
+            <strong id="party-current-code"></strong><button id="party-copy-code" type="button">Copy code</button>
+          </div>
           <p>Share the code or the invite link.</p>
         </div>
         <section id="auth-bar" class="group" aria-label="Account">
-          <div class="account-row"><span id="auth-status" role="status">Guest</span><button id="auth-signout" type="button" hidden>Sign out</button></div>
+          <div class="account-row">
+            <span id="auth-status" role="status">Guest</span
+            ><button id="auth-signout" type="button" hidden>Sign out</button>
+          </div>
           <div id="account-signed-out">
             <form id="account-create" novalidate>
               <label for="account-name">Sign-in name</label>
-              <div class="row"><input id="account-name" maxlength="40" autocomplete="nickname" placeholder="Your name" /><button type="submit" data-account-action="create">Sign in</button></div>
+              <div class="row">
+                <input id="account-name" maxlength="40" autocomplete="nickname" placeholder="Your name" /><button
+                  type="submit"
+                  data-account-action="create"
+                >
+                  Sign in
+                </button>
+              </div>
               <p>Get a generated six-digit password to keep this identity and sign in on another device.</p>
             </form>
-            <details><summary>I have a six-digit password</summary>
+            <details>
+              <summary>I have a six-digit password</summary>
               <form id="account-login" novalidate>
                 <label for="account-key-input">Password</label>
-                <input id="account-key-input" type="password" inputmode="numeric" pattern="[0-9]{6}" autocomplete="current-password" spellcheck="false" maxlength="6" minlength="6" placeholder="6-digit password" />
+                <input
+                  id="account-key-input"
+                  type="password"
+                  inputmode="numeric"
+                  pattern="[0-9]{6}"
+                  autocomplete="current-password"
+                  spellcheck="false"
+                  maxlength="6"
+                  minlength="6"
+                  placeholder="6-digit password"
+                />
                 <button type="submit" data-account-action="login">Sign in with password</button>
               </form>
             </details>
-            <details><summary>Restore an older saved account</summary>
+            <details>
+              <summary>Restore an older saved account</summary>
               <form id="account-legacy-login" novalidate>
                 <label for="account-legacy-input">Old saved credential</label>
-                <input id="account-legacy-input" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="16384" placeholder="Paste your old memos1. credential" />
+                <input
+                  id="account-legacy-input"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  autocapitalize="off"
+                  maxlength="16384"
+                  placeholder="Paste your old memos1. credential"
+                />
                 <button type="submit" data-account-action="restore">Restore account</button>
                 <p>After signing in, choose Copy password to get your six-digit password.</p>
               </form>
@@ -151,14 +315,23 @@
           </div>
           <div id="account-signed-in" hidden>
             <p id="account-id"></p>
-            <div class="row"><button id="account-copy-key" type="button">Copy password</button><button id="account-save-key" type="button">Save password file</button></div>
-            <p>Keep your password private. Anyone with it can sign in as you. A lost password cannot be recovered by name.</p>
+            <div class="row">
+              <button id="account-copy-key" type="button">Copy password</button
+              ><button id="account-save-key" type="button">Save password file</button>
+            </div>
+            <p>
+              Keep your password private. Anyone with it can sign in as you. A lost password cannot be recovered by
+              name.
+            </p>
           </div>
           <p id="auth-notice" role="status" aria-live="polite"></p>
         </section>
         <!-- Your memories as cards: a tap opens one to explore (it replaced a dropdown). -->
         <section class="group" aria-labelledby="my-memories-heading">
-          <div class="group-head"><h3 id="my-memories-heading">Your memories</h3><a href="/library.html">Library</a></div>
+          <div class="group-head">
+            <h3 id="my-memories-heading">Your memories</h3>
+            <a href="/library.html">Library</a>
+          </div>
           <ul id="memory-cards" class="memory-cards" aria-labelledby="my-memories-heading"></ul>
           <!-- The party's scene; the cards drive it. -->
           <select id="room-memories" hidden aria-hidden="true" tabindex="-1"></select>
@@ -166,24 +339,45 @@
         <section class="group">
           <strong id="room-label">Explore solo or join a party</strong>
           <p id="party-role" role="status"></p>
-          <label id="party-speed-label" class="field" hidden>Playback speed<select id="party-speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+          <label id="party-speed-label" class="field" hidden
+            >Playback speed<select id="party-speed">
+              <option value="0.25">0.25×</option>
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="1.5">1.5×</option>
+              <option value="2">2×</option>
+            </select></label
+          >
           <p id="party-scene-status" role="status">Create a party to watch together, or join one with a code.</p>
           <progress id="party-progress" max="1" value="0" hidden aria-label="Scene reconstruction progress"></progress>
           <ul id="room-people" aria-label="People in this party"></ul>
-          <div class="row"><button id="room-copy-link" disabled>Copy invite link</button><button id="room-leave" disabled>Leave</button></div>
-          <label id="party-invite-label" class="field" hidden>Anyone with this link can join<input id="party-invite" readonly aria-label="Party invite link" /></label>
+          <div class="row">
+            <button id="room-copy-link" disabled>Copy invite link</button
+            ><button id="room-leave" disabled>Leave</button>
+          </div>
+          <label id="party-invite-label" class="field" hidden
+            >Anyone with this link can join<input id="party-invite" readonly aria-label="Party invite link"
+          /></label>
         </section>
         <section class="group">
           <label class="field">Your name<input id="player-name" maxlength="40" autocomplete="nickname" /></label>
           <p id="party-scene-choice"></p>
           <button id="room-create" class="primary wide" disabled>Create a party</button>
-          <div id="party-scene-actions" class="row" hidden><button id="party-attach">Use the selected memory</button><button id="party-cancel" hidden>Cancel pending scene</button></div>
+          <div id="party-scene-actions" class="row" hidden>
+            <button id="party-attach">Use the selected memory</button
+            ><button id="party-cancel" hidden>Cancel pending scene</button>
+          </div>
         </section>
         <details class="group" id="library-details">
           <summary>Add a memory</summary>
           <p><a href="/library#import-scene">Import a 3D memory (.memos.zip or folder)</a></p>
-          <label class="field">memory.json link<input id="library-url" type="url" placeholder="Leave blank for the sample" /></label>
-          <div class="row"><button id="library-add" disabled>Add to library</button><button id="upload-toggle" aria-expanded="false" aria-controls="upload-panel">Upload a video</button></div>
+          <label class="field"
+            >memory.json link<input id="library-url" type="url" placeholder="Leave blank for the sample"
+          /></label>
+          <div class="row">
+            <button id="library-add" disabled>Add to library</button
+            ><button id="upload-toggle" aria-expanded="false" aria-controls="upload-panel">Upload a video</button>
+          </div>
           <div id="upload-panel" hidden></div>
           <button id="library-seed" type="button" class="wide" hidden>Load local memories</button>
           <p><a href="/capture.html">Capture test page</a></p>
@@ -192,9 +386,13 @@
       </div>
     </dialog>
 
-    <div id="joystick" role="group" aria-label="Walk: drag inside the pad" title="Drag to walk"><span class="joystick-label">WALK</span><span class="knob"></span></div>
+    <div id="joystick" role="group" aria-label="Walk: drag inside the pad" title="Drag to walk">
+      <span class="joystick-label">WALK</span><span class="knob"></span>
+    </div>
     <button id="reload" class="glass pill" hidden>Reload viewer</button>
-    <aside id="xr-preview-note" class="glass pill" hidden>VR panel preview · the mouse stands in for a controller · <a href="?">Leave</a></aside>
+    <aside id="xr-preview-note" class="glass pill" hidden>
+      VR panel preview · the mouse stands in for a controller · <a href="?">Leave</a>
+    </aside>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -7,8 +7,9 @@ import type { Multiplayer } from "./net/index.js";
  */
 export const LOCAL_INDEX = "/memories/status.json";
 
-const requestId = () => crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)),
-  (byte) => byte.toString(16).padStart(2, "0")).join("");
+const requestId = () =>
+  crypto.randomUUID?.() ??
+  Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 
 /** The memory.json URLs of the local scenes, or none (not a dev server, or no scenes unpacked). */
 export async function localMemoryUrls(origin = location.origin): Promise<string[]> {
@@ -26,13 +27,26 @@ export async function localMemoryUrls(origin = location.origin): Promise<string[
   }
 }
 
-export interface SeedResult { added: number; skipped: number; failed: string[] }
+export interface SeedResult {
+  added: number;
+  skipped: number;
+  failed: string[];
+}
 
 /** Add each local scene that is not in the library yet. `onProgress` gets (done, total). */
-export async function seedLocalMemories(net: Multiplayer, onProgress?: (done: number, total: number) => void): Promise<SeedResult> {
+export async function seedLocalMemories(
+  net: Multiplayer,
+  onProgress?: (done: number, total: number) => void,
+): Promise<SeedResult> {
   const urls = await localMemoryUrls();
   const result: SeedResult = { added: 0, skipped: 0, failed: [] };
-  const same = (a: string, b: string) => { try { return new URL(a, location.origin).href === b; } catch { return false; } };
+  const same = (a: string, b: string) => {
+    try {
+      return new URL(a, location.origin).href === b;
+    } catch {
+      return false;
+    }
+  };
   for (const [index, url] of urls.entries()) {
     if (net.memories.some((m) => same(m.manifestUrl, url))) result.skipped++;
     else {
@@ -43,14 +57,25 @@ export async function seedLocalMemories(net: Multiplayer, onProgress?: (done: nu
         const seconds = Number(manifest.timeline?.durationSec);
         if (typeof manifest.title !== "string" || !Number.isFinite(seconds)) throw new Error("not a memory.json");
         const title = manifest.title;
-        const error = await net.attempt(() => net.connection!.reducers.createMemory({
-          requestId: requestId(), title, sourceUrl: "", manifestUrl: url, pipelineIdentity: net.identity!,
-          durationUs: BigInt(Math.round(seconds * 1e6)),
-        }), null, true);
+        const error = await net.attempt(
+          () =>
+            net.connection!.reducers.createMemory({
+              requestId: requestId(),
+              title,
+              sourceUrl: "",
+              manifestUrl: url,
+              pipelineIdentity: net.identity!,
+              durationUs: BigInt(Math.round(seconds * 1e6)),
+            }),
+          null,
+          true,
+        );
         if (error) throw new Error(error);
         result.added++;
       } catch (error) {
-        result.failed.push(`${url.split("/").slice(-2, -1)[0]}: ${error instanceof Error ? error.message : String(error)}`);
+        result.failed.push(
+          `${url.split("/").slice(-2, -1)[0]}: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
     onProgress?.(index + 1, urls.length);

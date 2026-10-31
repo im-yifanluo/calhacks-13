@@ -7,6 +7,7 @@
   pictures       verify/reproj_<idx>.jpg (real | points | difference), verify/map.png (top-down)
 Writes <work>/verify/report.json.
 """
+
 from __future__ import annotations
 
 import json
@@ -38,7 +39,7 @@ def render_points(xyz, rgb, K, c2w, w, h, radius_m: float = 0.012):
     img = np.zeros((h, w, 3), np.uint8)
     zbuf = np.full((h, w), np.inf, np.float32)
     idx = np.flatnonzero(ok)
-    idx = idx[np.argsort(-z[idx])]                         # far first, near overwrite
+    idx = idx[np.argsort(-z[idx])]  # far first, near overwrite
     r = np.clip((K[0, 0] * radius_m / z[idx]).astype(int), 0, 6)
     ui, vi = np.round(u[idx]).astype(int), np.round(v[idx]).astype(int)
     for rr in range(0, 7):
@@ -63,6 +64,7 @@ def reprojection(work: Path, n_frames: int = 6) -> dict:
     out = work / "verify"
     out.mkdir(exist_ok=True)
     from .objects import scene_static_ids
+
     keep_in_room = scene_static_ids(work)
     errs, covs, pics = [], [], []
     cams = [c for c in cams if c.good] or cams
@@ -82,8 +84,12 @@ def reprojection(work: Path, n_frames: int = 6) -> dict:
         cv2.imwrite(str(p), cv2.cvtColor(cv2.resize(strip, None, fx=0.5, fy=0.5), cv2.COLOR_RGB2BGR))
         pics.append(p.name)
     good = [e for e in errs if e is not None]
-    return {"median_abs_colour_error": float(np.median(good)) if good else None, "per_frame_error": errs,
-            "coverage": float(np.mean(covs)), "pictures": pics}
+    return {
+        "median_abs_colour_error": float(np.median(good)) if good else None,
+        "per_frame_error": errs,
+        "coverage": float(np.mean(covs)),
+        "pictures": pics,
+    }
 
 
 def objects_check(work: Path) -> dict:
@@ -93,8 +99,11 @@ def objects_check(work: Path) -> dict:
     if not p.exists():
         return {"count": 0}
     objs = {o["id"]: o for o in json.loads(p.read_text())["objects"]}
-    sel = {e["id"]: e for e in json.loads((work / "objects" / "selection.json").read_text())} \
-        if (work / "objects" / "selection.json").exists() else {}
+    sel = (
+        {e["id"]: e for e in json.loads((work / "objects" / "selection.json").read_text())}
+        if (work / "objects" / "selection.json").exists()
+        else {}
+    )
     cams = {c.idx: c for c in Cameras.model_validate_json((work / "world" / "cameras.json").read_text()).frames}
     v = Vipe(work / "vipe")
     support = Support(work)
@@ -105,7 +114,7 @@ def objects_check(work: Path) -> dict:
         ts = np.array([k["t"] for k in o["track"]])
         P = np.array([k["p"] for k in o["track"]])
         e = sel.get(oid)
-        sightings = [s for s in (e["obs"] if e else []) if not s["touches_border"]]   # whole views only
+        sightings = [s for s in (e["obs"] if e else []) if not s["touches_border"]]  # whole views only
         sightings = sightings[:: max(1, len(sightings) // 40)]
         inside = tested = 0
         errs = []
@@ -128,10 +137,19 @@ def objects_check(work: Path) -> dict:
                 errs.append(float(np.hypot(u[0] - xs.mean(), vv[0] - ys.mean())))
         last = o["track"][-1]
         gap = last["p"][1] - half - support(last["p"][0], last["p"][2])
-        results.append({"id": oid, "label": o["label"], "shape": o["visual"].get("shape"), "mass": o["mass"],
-                        "centre_in_mask_frac": round(inside / tested, 3) if tested else None, "frames_tested": tested,
-                        "median_px_from_mask_centre": round(float(np.median(errs)), 1) if errs else None,
-                        "rest_gap_to_support_m": round(gap, 3), "settles": drop_test(o, support)})
+        results.append(
+            {
+                "id": oid,
+                "label": o["label"],
+                "shape": o["visual"].get("shape"),
+                "mass": o["mass"],
+                "centre_in_mask_frac": round(inside / tested, 3) if tested else None,
+                "frames_tested": tested,
+                "median_px_from_mask_centre": round(float(np.median(errs)), 1) if errs else None,
+                "rest_gap_to_support_m": round(gap, 3),
+                "settles": drop_test(o, support),
+            }
+        )
     return {"count": len(objs), "objects": results}
 
 
@@ -149,8 +167,10 @@ def drop_test(o: dict, support: Support, seconds: float = 3.0) -> dict:
             p[1] = ground
             v[1] = -0.3 * v[1]
             v[[0, 2]] *= 0.9
-    return {"final_height_above_support_m": round(float(p[1] - half - support(p[0], p[2])), 3),
-            "final_speed_m_s": round(float(np.linalg.norm(v)), 3)}
+    return {
+        "final_height_above_support_m": round(float(p[1] - half - support(p[0], p[2])), 3),
+        "final_speed_m_s": round(float(np.linalg.norm(v)), 3),
+    }
 
 
 def top_down(work: Path) -> str:
@@ -160,7 +180,7 @@ def top_down(work: Path) -> str:
     scale = 900 / max(hi - lo)
     W, H = int((hi[0] - lo[0]) * scale) + 1, int((hi[1] - lo[1]) * scale) + 1
     img = np.full((H, W, 3), 255, np.uint8)
-    order = np.argsort(xyz[:, 1])                          # higher points drawn last
+    order = np.argsort(xyz[:, 1])  # higher points drawn last
     px = ((xyz[order][:, [0, 2]] - lo) * scale).astype(int)
     ok = (px[:, 0] >= 0) & (px[:, 0] < W) & (px[:, 1] >= 0) & (px[:, 1] < H)
     img[px[ok, 1], px[ok, 0]] = rgb[order][ok]
@@ -183,7 +203,9 @@ def top_down(work: Path) -> str:
                 q = ((np.array([k["p"] for k in o["track"]])[:, [0, 2]] - lo) * scale).astype(np.int32)
                 cv2.polylines(img, [q.reshape(-1, 1, 2)], False, (255, 0, 0), 2)
                 cv2.circle(img, tuple(int(x) for x in q[-1]), 5, (255, 0, 0), -1)
-                cv2.putText(img, o["id"], tuple(int(x) + 6 for x in q[-1]), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 0, 0), 1)
+                cv2.putText(
+                    img, o["id"], tuple(int(x) + 6 for x in q[-1]), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 0, 0), 1
+                )
     out = work / "verify" / "map.png"
     out.parent.mkdir(exist_ok=True)
     cv2.imwrite(str(out), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
@@ -193,11 +215,26 @@ def top_down(work: Path) -> str:
 def run(work: Path) -> dict:
     work = Path(work)
     world = json.loads((work / "world" / "world.json").read_text())
-    rep = {"world": {"camera_height_m": world["median_camera_height_m"], "scale": world["scale"],
-                     **{k: world["diagnostics"].get(k) for k in ("floor_found", "floor_flatness_rms_m", "floor_rms_m",
-                                                                  "points_below_floor_frac", "camera_up_vs_floor_deg")}},
-           "background": {"points": world["bgPointsCount"], "splats": world["bgSplatCount"]},
-           "reprojection": reprojection(work), "objects": objects_check(work), "map": top_down(work)}
+    rep = {
+        "world": {
+            "camera_height_m": world["median_camera_height_m"],
+            "scale": world["scale"],
+            **{
+                k: world["diagnostics"].get(k)
+                for k in (
+                    "floor_found",
+                    "floor_flatness_rms_m",
+                    "floor_rms_m",
+                    "points_below_floor_frac",
+                    "camera_up_vs_floor_deg",
+                )
+            },
+        },
+        "background": {"points": world["bgPointsCount"], "splats": world["bgSplatCount"]},
+        "reprojection": reprojection(work),
+        "objects": objects_check(work),
+        "map": top_down(work),
+    }
     g = work / "world" / "ghosts.json"
     rep["people"] = len(json.loads(g.read_text())["objects"]) if g.exists() else 0
     (work / "verify" / "report.json").write_text(json.dumps(rep, indent=2))

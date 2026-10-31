@@ -1,12 +1,8 @@
 import type { Multiplayer } from "./net";
 import { RecordedUpload } from "./recorded-upload";
 
-export function captureSimulation(
-  net: Multiplayer,
-  onComplete: (requestId: string) => void,
-) {
-  const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
-    document.getElementById(id) as T;
+export function captureSimulation(net: Multiplayer, onComplete: (requestId: string) => void) {
+  const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
   const canvas = $<HTMLCanvasElement>("sim-canvas"),
     context = canvas.getContext("2d")!;
   const on = $<HTMLButtonElement>("sim-on"),
@@ -18,13 +14,7 @@ export function captureSimulation(
   const status = $("sim-status"),
     badge = $("sim-state"),
     proof = $("sim-proof");
-  type Phase =
-    | "idle"
-    | "recording"
-    | "saving"
-    | "uploading"
-    | "failed"
-    | "passed";
+  type Phase = "idle" | "recording" | "saving" | "uploading" | "failed" | "passed";
   let phase: Phase = "idle",
     recorder: MediaRecorder | undefined,
     stream: MediaStream | undefined;
@@ -37,22 +27,14 @@ export function captureSimulation(
     recorderError = "";
   const mime =
     typeof MediaRecorder !== "undefined"
-      ? [
-          "video/mp4;codecs=avc1.42E01E",
-          "video/mp4",
-          "video/webm;codecs=vp8",
-          "video/webm",
-        ].find((type) => MediaRecorder.isTypeSupported(type))
+      ? ["video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp8", "video/webm"].find((type) =>
+          MediaRecorder.isTypeSupported(type),
+        )
       : undefined;
-  const supported = Boolean(
-    mime &&
-      typeof canvas.captureStream === "function" &&
-      globalThis.crypto?.subtle,
-  );
+  const supported = Boolean(mime && typeof canvas.captureStream === "function" && globalThis.crypto?.subtle);
 
   function controls() {
-    on.disabled =
-      !supported || !net.ready || !["idle", "passed"].includes(phase);
+    on.disabled = !supported || !net.ready || !["idle", "passed"].includes(phase);
     off.disabled = phase !== "recording";
     title.disabled = !["idle", "passed"].includes(phase);
     retry.hidden = phase !== "failed" || !attempt;
@@ -88,13 +70,7 @@ export function captureSimulation(
     }
     context.fillStyle = "#f4bd71";
     context.beginPath();
-    context.arc(
-      320 + Math.sin(seconds * 1.8) * 180,
-      190 + Math.cos(seconds * 2.4) * 28,
-      35,
-      0,
-      Math.PI * 2,
-    );
+    context.arc(320 + Math.sin(seconds * 1.8) * 180, 190 + Math.cos(seconds * 2.4) * 28, 35, 0, Math.PI * 2);
     context.fill();
     context.fillStyle = "#a8f0d4";
     context.fillRect(82, 150, 70, 85);
@@ -102,19 +78,9 @@ export function captureSimulation(
     context.font = "600 19px system-ui";
     context.fillText("SIMULATED CAMERA · NO GLASSES", 24, 38);
     context.font = "15px system-ui";
-    context.fillText(
-      active
-        ? recordingTitle.slice(0, 55)
-        : "Tap On to record this animated scene",
-      24,
-      66,
-    );
+    context.fillText(active ? recordingTitle.slice(0, 55) : "Tap On to record this animated scene", 24, 66);
     context.font = "600 24px monospace";
-    context.fillText(
-      `${active ? "REC" : "OFF"}  ${seconds.toFixed(1)}s`,
-      24,
-      326,
-    );
+    context.fillText(`${active ? "REC" : "OFF"}  ${seconds.toFixed(1)}s`, 24, 326);
     $("sim-timer").textContent = `${seconds.toFixed(1)} s / 30 s`;
   }
   function release() {
@@ -146,8 +112,7 @@ export function captureSimulation(
     duration = Math.max(0.05, (performance.now() - started) / 1000);
     phase = "saving";
     controls();
-    status.textContent =
-      "Off received. Finishing the video; upload starts automatically…";
+    status.textContent = "Off received. Finishing the video; upload starts automatically…";
     if (timer) clearInterval(timer);
     timer = undefined;
     if (recorder.state !== "inactive") recorder.stop(); // Final data arrives before onstop.
@@ -188,16 +153,11 @@ export function captureSimulation(
         draw(duration, false);
         const type = active.mimeType.split(";")[0],
           extension = type === "video/mp4" ? "mp4" : "webm";
-        const file = new File(
-          chunks,
-          `of-simulation-${Date.now()}.${extension}`,
-          { type },
-        );
+        const file = new File(chunks, `of-simulation-${Date.now()}.${extension}`, { type });
         if (recorderError || file.size === 0 || duration < 0.25) {
           phase = "failed";
           status.textContent =
-            recorderError ||
-            "Clip too short. Choose New test, tap On, wait at least one second, then tap Off.";
+            recorderError || "Clip too short. Choose New test, tap On, wait at least one second, then tap Off.";
           controls();
           return;
         }
@@ -222,8 +182,7 @@ export function captureSimulation(
       draw(0, true);
       active.start(250);
       controls();
-      status.textContent =
-        "Recording the animated test scene. Wait 3–5 seconds, then tap Off. Keep this tab visible.";
+      status.textContent = "Recording the animated test scene. Wait 3–5 seconds, then tap Off. Keep this tab visible.";
       timer = setInterval(() => {
         const seconds = (performance.now() - started) / 1000;
         draw(seconds, true);
@@ -244,8 +203,7 @@ export function captureSimulation(
   reset.onclick = () => {
     attempt = undefined;
     phase = "idle";
-    status.textContent =
-      "Ready for a new test. The previous clip's download remains available until On is pressed.";
+    status.textContent = "Ready for a new test. The previous clip's download remains available until On is pressed.";
     controls();
     draw(0, false);
   };
@@ -256,8 +214,7 @@ export function captureSimulation(
       event.ctrlKey ||
       event.metaKey ||
       event.altKey ||
-      (target instanceof HTMLElement &&
-        (target.isContentEditable || target.closest("input, textarea, select")))
+      (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select")))
     )
       return;
     if (event.key.toLowerCase() === "o") {

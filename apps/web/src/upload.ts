@@ -1,9 +1,5 @@
 import type { Multiplayer } from "./net";
-export function uploadPanel(
-  net: Multiplayer,
-  root: HTMLElement,
-  onComplete?: (requestId: string) => void,
-) {
+export function uploadPanel(net: Multiplayer, root: HTMLElement, onComplete?: (requestId: string) => void) {
   root.innerHTML = `<h2>Upload a video</h2><p>Pick a clip exported from Meta AI.</p>
   <label>Title<input id="upload-title" maxlength="120" required placeholder="Saturday at the park"></label>
   <label>Video<input id="upload-file" type="file" accept="video/mp4,video/quicktime,.mp4,.mov"></label>
@@ -34,15 +30,13 @@ export function uploadPanel(
   start.onclick = async () => {
     start.disabled = true;
     try {
-      if (!net.ready || !net.identity)
-        throw new Error("Connect to SpacetimeDB first");
-      const file =
-        root.querySelector<HTMLInputElement>("#upload-file")!.files?.[0];
-      const title = root
-        .querySelector<HTMLInputElement>("#upload-title")!
-        .value.trim();
+      if (!net.ready || !net.identity) throw new Error("Connect to SpacetimeDB first");
+      const file = root.querySelector<HTMLInputElement>("#upload-file")!.files?.[0];
+      const title = root.querySelector<HTMLInputElement>("#upload-title")!.value.trim();
       if (!file || !title) throw new Error("Select a video and enter a title");
-      const configuration = await fetch(`${import.meta.env.VITE_UPLOAD_API || ""}/api/account/config`, { signal: AbortSignal.timeout(10000) });
+      const configuration = await fetch(`${import.meta.env.VITE_UPLOAD_API || ""}/api/account/config`, {
+        signal: AbortSignal.timeout(10000),
+      });
       if (!configuration.ok) throw new Error("Upload service unavailable. Please retry.");
       const limits = await configuration.json();
       if (file.size > limits.maxUploadBytes)
@@ -50,34 +44,24 @@ export function uploadPanel(
       const durationSec = await videoDuration(file);
       const identity = net.identity.toHexString();
       const api = async (path: string, body: unknown) => {
-        const response = await fetch(
-          `${import.meta.env.VITE_UPLOAD_API || ""}/api/uploads/${path}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${net.token}`,
-            },
-            body: JSON.stringify(body),
+        const response = await fetch(`${import.meta.env.VITE_UPLOAD_API || ""}/api/uploads/${path}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${net.token}`,
           },
-        );
-        const data = await response.json().catch(() => {
-          throw new Error(
-            "Upload service unavailable. Start the configured upload service.",
-          );
+          body: JSON.stringify(body),
         });
-        if (!response.ok)
-          throw new Error(data.error || "Upload service unavailable");
+        const data = await response.json().catch(() => {
+          throw new Error("Upload service unavailable. Start the configured upload service.");
+        });
+        if (!response.ok) throw new Error(data.error || "Upload service unavailable");
         return data;
       };
       const fingerprint = `${file.name}:${file.size}:${file.lastModified}:${title}`;
-      const saved = JSON.parse(
-        sessionStorage.getItem("memreplay-upload") || "null",
-      );
+      const saved = JSON.parse(sessionStorage.getItem("memreplay-upload") || "null");
       let pending =
-        saved?.fingerprint === fingerprint &&
-        saved.owner === identity &&
-        saved.receiptExpiresAt > Date.now()
+        saved?.fingerprint === fingerprint && saved.owner === identity && saved.receiptExpiresAt > Date.now()
           ? saved
           : null;
       if (!pending?.uploaded) {
@@ -85,11 +69,7 @@ export function uploadPanel(
         const prepared = await api("presign", {
           identity,
           name: file.name,
-          type:
-            file.type ||
-            (file.name.toLowerCase().endsWith(".mov")
-              ? "video/quicktime"
-              : "video/mp4"),
+          type: file.type || (file.name.toLowerCase().endsWith(".mov") ? "video/quicktime" : "video/mp4"),
           size: file.size,
           title,
           durationSec,
@@ -107,8 +87,7 @@ export function uploadPanel(
           xhr = new XMLHttpRequest();
           xhr.open("PUT", prepared.putUrl);
           xhr.timeout = 15 * 60 * 1000;
-          for (const [key, value] of Object.entries(prepared.headers))
-            xhr.setRequestHeader(key, String(value));
+          for (const [key, value] of Object.entries(prepared.headers)) xhr.setRequestHeader(key, String(value));
           xhr.upload.onprogress = (e) => {
             if (e.lengthComputable) {
               progress.value = (e.loaded / e.total) * 100;
@@ -116,15 +95,8 @@ export function uploadPanel(
             }
           };
           xhr.onload = () =>
-            xhr!.status >= 200 && xhr!.status < 300
-              ? resolve()
-              : reject(new Error(`Storage returned ${xhr!.status}`));
-          xhr.onerror = () =>
-            reject(
-              new Error(
-                "Storage upload failed. Check bucket CORS and connectivity.",
-              ),
-            );
+            xhr!.status >= 200 && xhr!.status < 300 ? resolve() : reject(new Error(`Storage returned ${xhr!.status}`));
+          xhr.onerror = () => reject(new Error("Storage upload failed. Check bucket CORS and connectivity."));
           xhr.onabort = () => reject(new Error("Upload cancelled"));
           xhr.ontimeout = () => reject(new Error("Upload timed out"));
           xhr.send(file);
@@ -145,8 +117,7 @@ export function uploadPanel(
         : "Uploaded. Pipeline progress appears in the memory list.";
       onComplete?.(result.requestId);
     } catch (error) {
-      status.textContent =
-        error instanceof Error ? error.message : String(error);
+      status.textContent = error instanceof Error ? error.message : String(error);
     } finally {
       start.disabled = false;
       cancel.hidden = true;
@@ -158,10 +129,7 @@ function videoDuration(file: File): Promise<number> {
     const url = URL.createObjectURL(file),
       video = document.createElement("video");
     video.preload = "metadata";
-    const timer = setTimeout(
-      () => done(new Error("Cannot read video duration")),
-      15000,
-    );
+    const timer = setTimeout(() => done(new Error("Cannot read video duration")), 15000);
     const done = (value: number | Error) => {
       clearTimeout(timer);
       video.removeAttribute("src");
@@ -170,15 +138,8 @@ function videoDuration(file: File): Promise<number> {
       value instanceof Error ? reject(value) : resolve(value);
     };
     video.onloadedmetadata = () =>
-      Number.isFinite(video.duration)
-        ? done(video.duration)
-        : done(new Error("Invalid video duration"));
-    video.onerror = () =>
-      done(
-        new Error(
-          "This browser cannot read the video. Export an MP4/H.264 copy and retry.",
-        ),
-      );
+      Number.isFinite(video.duration) ? done(video.duration) : done(new Error("Invalid video duration"));
+    video.onerror = () => done(new Error("This browser cannot read the video. Export an MP4/H.264 copy and retry."));
     video.src = url;
   });
 }

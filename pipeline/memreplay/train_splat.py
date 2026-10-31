@@ -4,6 +4,7 @@ gsplat's training loop already drops masked pixels from the loss (data["mask"]),
 knows per-camera masks. We add <data_dir>/masks/<image stem>.png (white = static) per image, then hand over to
 simple_trainer.py unchanged. Usage: python -m memreplay.train_splat mcmc --data_dir ... (simple_trainer flags).
 """
+
 from __future__ import annotations
 
 import os
@@ -15,10 +16,10 @@ from pathlib import Path
 def main() -> None:
     examples = Path(os.environ.get("SRC", "/workspace/src")) / "gsplat" / "examples"
     sys.path.insert(0, str(examples))
+    import datasets.colmap as colmap  # gsplat's examples package
     import imageio.v2 as imageio
     import numpy as np
     import torch
-    import datasets.colmap as colmap  # gsplat's examples package
 
     original = colmap.Dataset.__getitem__
 

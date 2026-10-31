@@ -8,9 +8,16 @@ export function validateTrack(value: unknown, label = "track"): asserts value is
   if (!Array.isArray(value) || value.length === 0) throw new Error(`${label}: expected nonempty keyframes`);
   let previous = -Infinity;
   for (const frame of value) {
-    if (!frame || !Number.isFinite(frame.t) || frame.t < 0 || frame.t <= previous ||
-      !tuple(frame.p, 3) || !tuple(frame.q, 4) || Math.hypot(...frame.q) < 1e-8 ||
-      (frame.s !== undefined && (!Number.isFinite(frame.s) || frame.s <= 0))) {
+    if (
+      !frame ||
+      !Number.isFinite(frame.t) ||
+      frame.t < 0 ||
+      frame.t <= previous ||
+      !tuple(frame.p, 3) ||
+      !tuple(frame.q, 4) ||
+      Math.hypot(...frame.q) < 1e-8 ||
+      (frame.s !== undefined && (!Number.isFinite(frame.s) || frame.s <= 0))
+    ) {
       throw new Error(`${label}: invalid pose or timestamps (must strictly increase)`);
     }
     // Optional velocity in m/s. Absent means "derive it from the track". Anything else malformed (null, two numbers,
@@ -27,10 +34,12 @@ export function tuple(value: unknown, length: number): value is number[] {
 }
 
 export function segment(track: Keyframe[], t: number): [Keyframe, Keyframe] {
-  let low = 0, high = track.length - 1;
+  let low = 0,
+    high = track.length - 1;
   while (low + 1 < high) {
     const mid = (low + high) >>> 1;
-    if (track[mid].t <= t) low = mid; else high = mid;
+    if (track[mid].t <= t) low = mid;
+    else high = mid;
   }
   return [track[low], track[high]];
 }
@@ -48,7 +57,10 @@ export function sampleTrack(track: Keyframe[], t: number, out: Object3D): void {
 export function trackVelocity(track: Keyframe[], t: number, out = new Vector3()): Vector3 {
   if (track.length < 2 || t < track[0].t || t >= track.at(-1)!.t) return out.set(0, 0, 0);
   const [a, b] = segment(track, t);
-  return out.fromArray(b.p).sub(p.fromArray(a.p)).divideScalar(b.t - a.t);
+  return out
+    .fromArray(b.p)
+    .sub(p.fromArray(a.p))
+    .divideScalar(b.t - a.t);
 }
 
 /**

@@ -18,11 +18,17 @@ const server = createServer((req, res) => {
 });
 server.requestTimeout = storage === "local" ? 15 * 60 * 1000 : 30000;
 server.headersTimeout = 15000;
-server.listen(port, process.env.UPLOAD_HOST || "0.0.0.0", () => console.log(`memos upload API listening on port ${port} (${storage} storage)`));
+server.listen(port, process.env.UPLOAD_HOST || "0.0.0.0", () =>
+  console.log(`memos upload API listening on port ${port} (${storage} storage)`),
+);
 let stopping = false;
-for (const signal of ["SIGTERM", "SIGINT"]) process.on(signal, () => {
-  if (stopping) return;
-  stopping = true;
-  server.close(() => process.exit(0));
-  setTimeout(() => { server.closeAllConnections(); process.exit(1); }, 10000).unref();
-});
+for (const signal of ["SIGTERM", "SIGINT"])
+  process.on(signal, () => {
+    if (stopping) return;
+    stopping = true;
+    server.close(() => process.exit(0));
+    setTimeout(() => {
+      server.closeAllConnections();
+      process.exit(1);
+    }, 10000).unref();
+  });

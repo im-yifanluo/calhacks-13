@@ -7,6 +7,7 @@ Run from /workspace/4dgs/A/4DGaussians with the 4dgs venv:
 Writes <out>/renders/*.png, metrics.json, video.mp4 (GT | 4DGS along the recorded path), video_fixedcam.mp4
 (camera frozen mid-clip, time plays), frames/t_%04d.ply + .spz + frames.json, frames_dyn/ + static.ply (split).
 """
+
 import json
 import math
 import os
@@ -50,9 +51,19 @@ def make_cam(c, max_idx, image=None, c2w=None, t=None):
     W, H = c["w"], c["h"]
     img = torch.zeros(3, H, W) if image is None else image
     tt = c["idx"] / max_idx if t is None else t
-    return Camera(colmap_id=c["idx"], R=R, T=T, FoVx=focal2fov(K[0, 0], W), FoVy=focal2fov(K[0, 0], H),
-                  image=img, gt_alpha_mask=None, image_name=f"{c['idx']:05d}", uid=c["idx"], data_device="cuda",
-                  time=tt)
+    return Camera(
+        colmap_id=c["idx"],
+        R=R,
+        T=T,
+        FoVx=focal2fov(K[0, 0], W),
+        FoVy=focal2fov(K[0, 0], H),
+        image=img,
+        gt_alpha_mask=None,
+        image_name=f"{c['idx']:05d}",
+        uid=c["idx"],
+        data_device="cuda",
+        time=tt,
+    )
 
 
 def load_rgb(data, idx):
@@ -66,9 +77,34 @@ def to8(x):
 
 class Video:
     def __init__(self, path, w, h, fps):
-        self.p = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
-                                   "-s", f"{w}x{h}", "-r", str(fps), "-i", "-", "-c:v", "libx264", "-pix_fmt",
-                                   "yuv420p", "-crf", "20", "-preset", "fast", str(path)], stdin=subprocess.PIPE)
+        self.p = subprocess.Popen(
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "rgb24",
+                "-s",
+                f"{w}x{h}",
+                "-r",
+                str(fps),
+                "-i",
+                "-",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-crf",
+                "20",
+                "-preset",
+                "fast",
+                str(path),
+            ],
+            stdin=subprocess.PIPE,
+        )
 
     def add(self, rgb):
         self.p.stdin.write(np.ascontiguousarray(rgb).tobytes())
@@ -81,8 +117,15 @@ class Video:
 def quat_mul(a, b):  # (w,x,y,z)
     aw, ax, ay, az = a.unbind(-1)
     bw, bx, by, bz = b.unbind(-1)
-    return torch.stack([aw * bw - ax * bx - ay * by - az * bz, aw * bx + ax * bw + ay * bz - az * by,
-                        aw * by - ax * bz + ay * bw + az * bx, aw * bz + ax * by - ay * bx + az * bw], -1)
+    return torch.stack(
+        [
+            aw * bw - ax * bx - ay * by - az * bz,
+            aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw,
+        ],
+        -1,
+    )
 
 
 def rot_to_quat(R):
@@ -97,11 +140,28 @@ def rot_to_quat(R):
 
 def write_ply(path, xyz, fdc, op_logit, log_scale, quat):
     n = len(xyz)
-    names = ["x", "y", "z", "f_dc_0", "f_dc_1", "f_dc_2", "opacity", "scale_0", "scale_1", "scale_2",
-             "rot_0", "rot_1", "rot_2", "rot_3"]
+    names = [
+        "x",
+        "y",
+        "z",
+        "f_dc_0",
+        "f_dc_1",
+        "f_dc_2",
+        "opacity",
+        "scale_0",
+        "scale_1",
+        "scale_2",
+        "rot_0",
+        "rot_1",
+        "rot_2",
+        "rot_3",
+    ]
     a = np.concatenate([xyz, fdc, op_logit, log_scale, quat], 1).astype("<f4")
-    hdr = ("ply\nformat binary_little_endian 1.0\nelement vertex %d\n" % n +
-           "".join(f"property float {k}\n" for k in names) + "end_header\n")
+    hdr = (
+        "ply\nformat binary_little_endian 1.0\nelement vertex %d\n" % n
+        + "".join(f"property float {k}\n" for k in names)
+        + "end_header\n"
+    )
     with open(path, "wb") as f:
         f.write(hdr.encode())
         f.write(a.tobytes())
@@ -125,8 +185,12 @@ def main():
     parser.add_argument("--keep_ply", type=int, default=1, help="0: delete the PLYs once the spz files exist")
     parser.add_argument("--dyn_out", type=int, default=1, help="0: skip frames_dyn/ + static.ply when not split")
     parser.add_argument("--bake_view", type=int, default=1, help="bake SH colour seen from the recorded camera")
-    parser.add_argument("--gs_scale_div", type=float, default=1.0,
-                        help="divide Gaussian sizes by this at export (run a: cameras had scale s in the rotation)")
+    parser.add_argument(
+        "--gs_scale_div",
+        type=float,
+        default=1.0,
+        help="divide Gaussian sizes by this at export (run a: cameras had scale s in the rotation)",
+    )
     args = get_combined_args(parser)
     args = merge_hparams(args, mmengine.Config.fromfile(args.configs))
     do = set(args.do.split(","))
@@ -139,8 +203,7 @@ def main():
         gaussians = GaussianModel(dataset.sh_degree, hyper.extract(args))
         scene = Scene(dataset, gaussians, load_iteration=args.iteration, shuffle=False)
         pipe = pipeline.extract(args)
-        bg = torch.tensor([1, 1, 1] if dataset.white_background else [0, 0, 0], dtype=torch.float32,
-                          device="cuda")
+        bg = torch.tensor([1, 1, 1] if dataset.white_background else [0, 0, 0], dtype=torch.float32, device="cuda")
         N = gaussians.get_xyz.shape[0]
         log(f"post: loaded {args.model_path} iter {scene.loaded_iter}: {N} Gaussians")
         metrics_path = out / "metrics.json"
@@ -151,11 +214,13 @@ def main():
 
         if "eval" in do:
             from memreplay.vipe_io import PEOPLE_PHRASES, Vipe
+
             v = Vipe(Path(args.work) / "vipe")
             pid = v.ids_with(PEOPLE_PHRASES)
             print("people masks:", v.dir, v.has_masks, pid, flush=True)
             try:
                 import lpips
+
                 lp = lpips.LPIPS(net="alex", verbose=False).cuda()
             except Exception as e:  # noqa: BLE001
                 print("no lpips:", e)
@@ -167,13 +232,16 @@ def main():
                 gt = load_rgb(args.data, c["idx"])
                 img = rend(make_cam(c, max_idx, gt))
                 gt = gt.cuda()
-                if "exp" in c:   # trained on exposure-normalized frames: score in video space, y = g x + b
+                if "exp" in c:  # trained on exposure-normalized frames: score in video space, y = g x + b
                     ge = torch.tensor(c["exp"], dtype=torch.float32, device="cuda")
                     gt = (gt * ge[:3, None, None] + ge[3:, None, None]).clamp(0, 1)
                     img = (img * ge[:3, None, None] + ge[3:, None, None]).clamp(0, 1)
                 mse = ((img - gt) ** 2).mean().item()
-                row = {"idx": c["idx"], "psnr": -10 * math.log10(max(mse, 1e-10)),
-                       "ssim": ssim(img[None], gt[None]).item()}
+                row = {
+                    "idx": c["idx"],
+                    "psnr": -10 * math.log10(max(mse, 1e-10)),
+                    "ssim": ssim(img[None], gt[None]).item(),
+                }
                 if lp is not None:
                     row["lpips"] = lp(img[None] * 2 - 1, gt[None] * 2 - 1).item()
                 m = v.mask(c["idx"])
@@ -187,16 +255,32 @@ def main():
                         row["people_frac"] = pm.float().mean().item()
                     row["psnr_static"] = -10 * math.log10(max(se[~pm].mean().item(), 1e-10))
                 rows.append(row)
-                cv2.imwrite(str(out / "renders" / f"{c['idx']:05d}.jpg"),
-                            cv2.cvtColor(np.concatenate([to8(gt), to8(img)], 1), cv2.COLOR_RGB2BGR),
-                            [cv2.IMWRITE_JPEG_QUALITY, 92])
-            mean = {k: float(np.mean([r[k] for r in rows if k in r])) for k in
-                    ["psnr", "ssim", "lpips", "psnr_people", "psnr_static"] if any(k in r for r in rows)}
+                cv2.imwrite(
+                    str(out / "renders" / f"{c['idx']:05d}.jpg"),
+                    cv2.cvtColor(np.concatenate([to8(gt), to8(img)], 1), cv2.COLOR_RGB2BGR),
+                    [cv2.IMWRITE_JPEG_QUALITY, 92],
+                )
+            mean = {
+                k: float(np.mean([r[k] for r in rows if k in r]))
+                for k in ["psnr", "ssim", "lpips", "psnr_people", "psnr_static"]
+                if any(k in r for r in rows)
+            }
             ms = 1000 * (time.time() - t0) / max(1, len(rows))
-            M.update({"method": "4DGaussians (HexPlane deformation), monocular", "model": args.model_path,
-                      "iteration": scene.loaded_iter, "num_gaussians": N, "test_every": 12,
-                      "num_test": len(rows), "res": [meta["w"], meta["h"]], "mean": mean, "per_frame": rows,
-                      "eval_ms_per_frame_incl_io": ms, "lpips_net": "alex" if lp else None})
+            M.update(
+                {
+                    "method": "4DGaussians (HexPlane deformation), monocular",
+                    "model": args.model_path,
+                    "iteration": scene.loaded_iter,
+                    "num_gaussians": N,
+                    "test_every": 12,
+                    "num_test": len(rows),
+                    "res": [meta["w"], meta["h"]],
+                    "mean": mean,
+                    "per_frame": rows,
+                    "eval_ms_per_frame_incl_io": ms,
+                    "lpips_net": "alex" if lp else None,
+                }
+            )
             metrics_path.write_text(json.dumps(M, indent=1))
             log(f"post eval: {len(rows)} held-out frames: " + ", ".join(f"{k}={v:.4f}" for k, v in mean.items()))
 
@@ -219,10 +303,16 @@ def main():
                 img = rend(make_cam(mid, max_idx, t=c["idx"] / max_idx))
                 vid.add(to8(img)[: H - H % 2, : W - W % 2])
             vid.close()
-            M.update({"video": str(out / "video.mp4"), "video_fixedcam": str(out / "video_fixedcam.mp4"),
-                      "render_fps_incl_io": render_fps, "render_fps_fixedcam": len(cams) / (time.time() - t1)})
+            M.update(
+                {
+                    "video": str(out / "video.mp4"),
+                    "video_fixedcam": str(out / "video_fixedcam.mp4"),
+                    "render_fps_incl_io": render_fps,
+                    "render_fps_fixedcam": len(cams) / (time.time() - t1),
+                }
+            )
             metrics_path.write_text(json.dumps(M, indent=1))
-            log(f"post video: {len(cams)} frames, {render_fps:.1f} fps incl. io -> {out/'video.mp4'}")
+            log(f"post video: {len(cams)} frames, {render_fps:.1f} fps incl. io -> {out / 'video.mp4'}")
 
         if "export" in do:
             t0 = time.time()
@@ -247,8 +337,12 @@ def main():
                 tn = min(t * fps, max_idx) / max_idx
                 tt = torch.full((N, 1), tn, device="cuda")
                 x, sc, r, o, sh = gaussians._deformation(xyz0, sc0, rot0, op0, sh0, tt)
-                if split:   # static Gaussians never went through the deformation field in training
-                    x, sc, r = torch.where(tab[:, None], x, xyz0), torch.where(tab[:, None], sc, sc0), torch.where(tab[:, None], r, rot0)
+                if split:  # static Gaussians never went through the deformation field in training
+                    x, sc, r = (
+                        torch.where(tab[:, None], x, xyz0),
+                        torch.where(tab[:, None], sc, sc0),
+                        torch.where(tab[:, None], r, rot0),
+                    )
                     o, sh = torch.where(tab[:, None], o, op0), torch.where(tab[:, None, None], sh, sh0)
                 # bake the view-dependent colour (degree-3 SH, also deformed over time) for the recorded camera at
                 # this time into the DC term: the viewer gets the colour the glasses saw, at 1/16 of the size
@@ -289,22 +383,44 @@ def main():
             fs = torch.stack([s_[4] for s_ in states]).mean(0)
             if split or args.dyn_out:
                 write_ply(out / "static.ply", *finish(xs, scs, rs, os_, fs, st))
-            fj = {"fps": args.export_fps, "count": len(times), "frame": "world", "file": "t_%04d.spz",
-                  "duration_sec": float(dur), "t0_sec": 0.0, "source": "4DGaussians",
-                  "T_train_to_world": S.flatten().tolist(), "gs_scale_div": args.gs_scale_div,
-                  "colour": "SH baked for the recorded camera at each time" if args.bake_view else "DC only",
-                  "gaussians_per_frame": {"min": min(sizes), "max": max(sizes)},
-                  "dynamic_split": {"thresh_m": None if split else args.dyn_thresh, "by": "trained static/dynamic flag" if split else "displacement", "dynamic": int(dyn.sum()), "static": int(st.sum()),
-                                    "static_file": "static.spz", "dyn_dir": "frames_dyn"}}
+            fj = {
+                "fps": args.export_fps,
+                "count": len(times),
+                "frame": "world",
+                "file": "t_%04d.spz",
+                "duration_sec": float(dur),
+                "t0_sec": 0.0,
+                "source": "4DGaussians",
+                "T_train_to_world": S.flatten().tolist(),
+                "gs_scale_div": args.gs_scale_div,
+                "colour": "SH baked for the recorded camera at each time" if args.bake_view else "DC only",
+                "gaussians_per_frame": {"min": min(sizes), "max": max(sizes)},
+                "dynamic_split": {
+                    "thresh_m": None if split else args.dyn_thresh,
+                    "by": "trained static/dynamic flag" if split else "displacement",
+                    "dynamic": int(dyn.sum()),
+                    "static": int(st.sum()),
+                    "static_file": "static.spz",
+                    "dyn_dir": "frames_dyn",
+                },
+            }
             (fdir / "frames.json").write_text(json.dumps(fj, indent=1))
-            (ddir / "frames.json").write_text(json.dumps({**fj, "note": "dynamic Gaussians only; pair with static.spz"},
-                                                         indent=1))
-            log(f"post export: {len(times)} PLYs ({min(sizes)}-{max(sizes)} Gaussians), dynamic {int(dyn.sum())}/{N} "
-                f"(> {args.dyn_thresh} m), {time.time()-t0:.0f}s; converting to spz")
-            plys = sorted(fdir.glob("t_*.ply")) + sorted(ddir.glob("t_*.ply")) + ([out / "static.ply"] if (out / "static.ply").exists() else [])
-            cmds = "\n".join(f"{p} {p.with_suffix('.spz')}" for p in plys)   # paths have no spaces
-            r = subprocess.run(["xargs", "-P", "32", "-n", "2", "splat-transform", "-w"], input=cmds.encode(),
-                               capture_output=True)
+            (ddir / "frames.json").write_text(
+                json.dumps({**fj, "note": "dynamic Gaussians only; pair with static.spz"}, indent=1)
+            )
+            log(
+                f"post export: {len(times)} PLYs ({min(sizes)}-{max(sizes)} Gaussians), dynamic {int(dyn.sum())}/{N} "
+                f"(> {args.dyn_thresh} m), {time.time() - t0:.0f}s; converting to spz"
+            )
+            plys = (
+                sorted(fdir.glob("t_*.ply"))
+                + sorted(ddir.glob("t_*.ply"))
+                + ([out / "static.ply"] if (out / "static.ply").exists() else [])
+            )
+            cmds = "\n".join(f"{p} {p.with_suffix('.spz')}" for p in plys)  # paths have no spaces
+            r = subprocess.run(
+                ["xargs", "-P", "32", "-n", "2", "splat-transform", "-w"], input=cmds.encode(), capture_output=True
+            )
             if r.returncode:
                 log(f"splat-transform failed: {r.stderr.decode()[-500:]}")
             if not args.keep_ply:
@@ -312,12 +428,20 @@ def main():
                     if p.with_suffix(".spz").exists():
                         p.unlink()
             tot = lambda g: sum(p.stat().st_size for p in g)  # noqa: E731
-            M["export"] = {"dir": str(fdir), "count": len(times), "fps": args.export_fps,
-                           "ply_mb": tot(fdir.glob("t_*.ply")) / 1e6, "ply_mb_each": max([p.stat().st_size for p in fdir.glob("t_*.ply")] or [0]) / 1e6, "spz_mb": tot(fdir.glob("t_*.spz")) / 1e6,
-                           "dyn_spz_mb": tot(ddir.glob("t_*.spz")) / 1e6,
-                           "static_spz_mb": (out / "static.spz").stat().st_size / 1e6 if (out / "static.spz").exists() else None,
-                           "n_spz": len(list(fdir.glob("t_*.spz"))), "gaussians_per_frame": fj["gaussians_per_frame"],
-                           "dynamic_split": fj["dynamic_split"], "seconds": time.time() - t0}
+            M["export"] = {
+                "dir": str(fdir),
+                "count": len(times),
+                "fps": args.export_fps,
+                "ply_mb": tot(fdir.glob("t_*.ply")) / 1e6,
+                "ply_mb_each": max([p.stat().st_size for p in fdir.glob("t_*.ply")] or [0]) / 1e6,
+                "spz_mb": tot(fdir.glob("t_*.spz")) / 1e6,
+                "dyn_spz_mb": tot(ddir.glob("t_*.spz")) / 1e6,
+                "static_spz_mb": (out / "static.spz").stat().st_size / 1e6 if (out / "static.spz").exists() else None,
+                "n_spz": len(list(fdir.glob("t_*.spz"))),
+                "gaussians_per_frame": fj["gaussians_per_frame"],
+                "dynamic_split": fj["dynamic_split"],
+                "seconds": time.time() - t0,
+            }
             metrics_path.write_text(json.dumps(M, indent=1))
             log(f"post export done: {M['export']}")
 

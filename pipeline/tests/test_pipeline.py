@@ -1,4 +1,5 @@
 """S3-S7 on a synthetic ViPE output with known ground truth (memreplay.synthetic). No GPU, no network."""
+
 from __future__ import annotations
 
 import json
@@ -6,7 +7,6 @@ import struct
 
 import numpy as np
 import pytest
-
 from memreplay import l0, objects, synthetic, world
 from memreplay.cli import merge
 from memreplay.handoff import Cameras, read_points_sequence
@@ -30,9 +30,9 @@ def test_world_frame_recovers_floor_and_heading(work):
     info = json.loads((work / "world/world.json").read_text())
     assert info["diagnostics"]["floor_found"]
     assert abs(info["median_camera_height_m"] - synthetic.CAM_H) < 0.05
-    assert info["scale"] == 1.0                                # metric input: no rescale
+    assert info["scale"] == 1.0  # metric input: no rescale
     cams = Cameras.model_validate_json((work / "world/cameras.json").read_text()).frames
-    for c in cams[::10]:                                       # recovered cameras == ground truth cameras
+    for c in cams[::10]:  # recovered cameras == ground truth cameras
         true = synthetic.camera(c.t)
         got = np.array(c.c2w).reshape(4, 4)
         assert np.linalg.norm(got[:3, 3] - true[:3, 3]) < 0.05
@@ -44,11 +44,13 @@ def test_room_points_and_collider(work):
     floor = xyz[np.abs(xyz[:, 1]) < 0.05]
     assert len(floor) > 1000 and np.sqrt(np.mean(floor[:, 1] ** 2)) < 0.02
     lo, hi = synthetic.TABLE
-    top = xyz[(xyz[:, 0] > lo[0] + 0.1) & (xyz[:, 0] < hi[0] - 0.1) & (xyz[:, 2] > lo[2] + 0.1) & (xyz[:, 2] < hi[2] - 0.1)]
-    assert abs(np.median(top[:, 1]) - hi[1]) < 0.04           # table top found at 0.75 m
+    top = xyz[
+        (xyz[:, 0] > lo[0] + 0.1) & (xyz[:, 0] < hi[0] - 0.1) & (xyz[:, 2] > lo[2] + 0.1) & (xyz[:, 2] < hi[2] - 0.1)
+    ]
+    assert abs(np.median(top[:, 1]) - hi[1]) < 0.04  # table top found at 0.75 m
     sup = objects.Support(work)
-    assert abs(sup(0.6, -1.7) - hi[1]) < 0.08                 # collider: table under the ball
-    assert sup(-1.5, -1.0) < 0.05                             # collider: open floor
+    assert abs(sup(0.6, -1.7) - hi[1]) < 0.08  # collider: table under the ball
+    assert sup(-1.5, -1.0) < 0.05  # collider: open floor
 
 
 def test_person_ghost(work):
@@ -82,7 +84,9 @@ def test_ball_track_follows_the_throw(work):
 
 def test_memory_json_is_complete(work):
     m = json.loads((work / "memory.json").read_text())
-    assert m["background"]["url"] == "world/bg_points.ply" and m["background"]["colliderUrl"] == "world/room_collider.glb"
+    assert (
+        m["background"]["url"] == "world/bg_points.ply" and m["background"]["colliderUrl"] == "world/room_collider.glb"
+    )
     assert {o["label"] for o in m["objects"]} == {"person", "ball"}
     assert len(m["camera"]["track"]) == synthetic.FPS * 6 // 3
     assert (work / "world/room_collider.glb").read_bytes()[:4] == b"glTF"

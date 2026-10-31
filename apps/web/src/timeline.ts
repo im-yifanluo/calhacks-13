@@ -25,7 +25,9 @@ export class Timeline {
     if (!Number.isFinite(duration) || duration <= 0) throw new Error("Invalid timeline duration");
   }
 
-  get active(): Branch { return this.branches.find(b => b.id === this.activeId)!; }
+  get active(): Branch {
+    return this.branches.find((b) => b.id === this.activeId)!;
+  }
 
   tick(dt: number): void {
     if (this.playing) {
@@ -41,8 +43,11 @@ export class Timeline {
 
   fork(): Branch {
     const branch: Branch = {
-      id: `local-${this.nextId++}`, parentId: this.activeId,
-      name: `Take ${this.nextId - 1}`, forkTime: this.time, tracks: new Map(),
+      id: `local-${this.nextId++}`,
+      parentId: this.activeId,
+      name: `Take ${this.nextId - 1}`,
+      forkTime: this.time,
+      tracks: new Map(),
     };
     this.branches.push(branch);
     this.activeId = branch.id;
@@ -51,7 +56,7 @@ export class Timeline {
   }
 
   select(id: string): void {
-    const branch = this.branches.find(b => b.id === id);
+    const branch = this.branches.find((b) => b.id === id);
     if (!branch) throw new Error(`Unknown branch: ${id}`);
     this.activeId = id;
     this.seek(branch.forkTime);
@@ -60,29 +65,41 @@ export class Timeline {
 
   /** Import parent rows before children. IDs can be SpacetimeDB u64 values converted to strings. */
   upsertBranch(row: Omit<Branch, "tracks">): void {
-    if (row.id === "original" || !row.id || !row.parentId || row.id === row.parentId ||
-      !Number.isFinite(row.forkTime) || row.forkTime < 0 || row.forkTime > this.duration ||
-      !this.branches.some(b => b.id === row.parentId)) throw new Error("Invalid branch or missing parent");
-    let parent = this.branches.find(b => b.id === row.parentId);
+    if (
+      row.id === "original" ||
+      !row.id ||
+      !row.parentId ||
+      row.id === row.parentId ||
+      !Number.isFinite(row.forkTime) ||
+      row.forkTime < 0 ||
+      row.forkTime > this.duration ||
+      !this.branches.some((b) => b.id === row.parentId)
+    )
+      throw new Error("Invalid branch or missing parent");
+    let parent = this.branches.find((b) => b.id === row.parentId);
     while (parent) {
       if (parent.id === row.id) throw new Error("Branch cycle");
       const parentId: string | null = parent.parentId;
-      parent = this.branches.find(b => b.id === parentId);
+      parent = this.branches.find((b) => b.id === parentId);
     }
-    const existing = this.branches.find(b => b.id === row.id);
+    const existing = this.branches.find((b) => b.id === row.id);
     if (existing) Object.assign(existing, row);
     else this.branches.push({ ...row, tracks: new Map() });
   }
 
   appendRecording(branchId: string, objectId: string, frames: Keyframe[]): void {
-    const branch = this.branches.find(b => b.id === branchId);
+    const branch = this.branches.find((b) => b.id === branchId);
     if (!branch || branch.id === "original") throw new Error("Recordings require an existing alternate branch");
     validateTrack(frames, objectId);
-    if (frames[0].t < branch.forkTime || frames.at(-1)!.t > this.duration) throw new Error("Recording outside branch timeline");
+    if (frames[0].t < branch.forkTime || frames.at(-1)!.t > this.duration)
+      throw new Error("Recording outside branch timeline");
     // Chunk overlap/retransmission is harmless; newest samples at the same timestamp win.
-    const merged = new Map((branch.tracks.get(objectId) ?? []).map(f => [f.t, f]));
+    const merged = new Map((branch.tracks.get(objectId) ?? []).map((f) => [f.t, f]));
     for (const frame of frames) merged.set(frame.t, { ...frame, p: [...frame.p], q: [...frame.q] });
-    branch.tracks.set(objectId, [...merged.values()].sort((a, b) => a.t - b.t));
+    branch.tracks.set(
+      objectId,
+      [...merged.values()].sort((a, b) => a.t - b.t),
+    );
   }
 
   /**
@@ -91,12 +108,18 @@ export class Timeline {
    * start before the branch's fork time: the server accepts a branch's own edits there (seek back on a take, grab).
    */
   setRecording(branchId: string, objectId: string, frames: Keyframe[] | null): void {
-    const branch = this.branches.find(b => b.id === branchId);
+    const branch = this.branches.find((b) => b.id === branchId);
     if (!branch || branch.id === "original") throw new Error("Recordings require an existing alternate branch");
-    if (!frames?.length) { branch.tracks.delete(objectId); return; }
+    if (!frames?.length) {
+      branch.tracks.delete(objectId);
+      return;
+    }
     validateTrack(frames, objectId);
     if (frames.at(-1)!.t > this.duration) throw new Error("Recording outside the clip");
-    branch.tracks.set(objectId, frames.map(f => ({ ...f, p: [...f.p], q: [...f.q], ...(f.v && { v: [...f.v] }) })));
+    branch.tracks.set(
+      objectId,
+      frames.map((f) => ({ ...f, p: [...f.p], q: [...f.q], ...(f.v && { v: [...f.v] }) })),
+    );
   }
 
   /**
@@ -129,10 +152,14 @@ export class Timeline {
   }
 
   private parent(branch: Branch): Branch | undefined {
-    return branch.parentId === null ? undefined : this.branches.find(b => b.id === branch.parentId);
+    return branch.parentId === null ? undefined : this.branches.find((b) => b.id === branch.parentId);
   }
 
   export(memoryId: string): unknown {
-    return { version: 1, memoryId, branches: this.branches.map(b => ({ ...b, tracks: Object.fromEntries(b.tracks) })) };
+    return {
+      version: 1,
+      memoryId,
+      branches: this.branches.map((b) => ({ ...b, tracks: Object.fromEntries(b.tracks) })),
+    };
   }
 }

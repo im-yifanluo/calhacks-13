@@ -14,7 +14,8 @@ export const GLIDE_SECONDS = 0.6;
 /** A playing clock that moved this much more (or less) than the frame's dt was a seek or a re-anchor, not playback. */
 export const JUMP_SECONDS = 0.25;
 
-const next = new Vector3(), head = new Vector3();
+const next = new Vector3(),
+  head = new Vector3();
 
 /** Where the recorded camera was at time t: linear between keyframes, endpoints held (as tracks.sampleTrack does). */
 export function pathPosition(track: Keyframe[], t: number, out = new Vector3()): Vector3 {
@@ -31,10 +32,15 @@ export class PathFollower {
   private glideFrom: Vector3 | null = null;
   private glideElapsed = 0;
 
-  constructor(readonly track: Keyframe[], readonly glideSeconds = GLIDE_SECONDS) {}
+  constructor(
+    readonly track: Keyframe[],
+    readonly glideSeconds = GLIDE_SECONDS,
+  ) {}
 
   /** A glide back onto the path is under way. */
-  get gliding(): boolean { return this.glideFrom !== null; }
+  get gliding(): boolean {
+    return this.glideFrom !== null;
+  }
 
   /**
    * One frame. `lock`: follow mode is on and the memory plays. `current`: where the eyes are now (world). Returns
@@ -43,7 +49,11 @@ export class PathFollower {
    * moving path position and lands on it after glideSeconds (eased in and out).
    */
   step(lock: boolean, time: number, current: Vector3, dt: number, out: Vector3, speed = 1): Vector3 | null {
-    if (!lock) { this.engaged = false; this.glideFrom = null; return null; }
+    if (!lock) {
+      this.engaged = false;
+      this.glideFrom = null;
+      return null;
+    }
     const jumped = this.engaged && Math.abs(time - this.lastTime - Math.max(0, dt) * speed) > JUMP_SECONDS;
     pathPosition(this.track, time, out);
     if (!this.engaged || jumped) {
@@ -51,7 +61,8 @@ export class PathFollower {
       this.glideFrom = current.distanceTo(out) > 1e-3 ? (this.glideFrom ?? new Vector3()).copy(current) : null;
       this.glideElapsed = 0;
     } else if (this.glideFrom) this.glideElapsed += Math.max(0, dt);
-    this.engaged = true; this.lastTime = time;
+    this.engaged = true;
+    this.lastTime = time;
     if (this.glideFrom) {
       const k = this.glideElapsed / this.glideSeconds;
       if (k >= 1) this.glideFrom = null;

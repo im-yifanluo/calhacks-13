@@ -5,7 +5,7 @@ import { Timeline } from "../.test-dist/timeline.js";
 
 const frame = (t, x, y = 1, z = 0) => ({ t, p: [x, y, z], q: [0, 0, 0, 1] });
 const original = [frame(0, 0), frame(10, 0)];
-const times = track => track.map(f => f.t);
+const times = (track) => track.map((f) => f.t);
 
 /** Branch rows as the network adapter imports them, parents first: [id, parentId, forkTime]. */
 function tree(rows) {
@@ -15,7 +15,10 @@ function tree(rows) {
 }
 
 test("a parent edited after the child exists: the edit never leaks into the child", () => {
-  const timeline = tree([["P", "original", 1], ["C", "P", 2]]);
+  const timeline = tree([
+    ["P", "original", 1],
+    ["C", "P", 2],
+  ]);
   timeline.setRecording("C", "ball", [frame(2, 9), frame(3, 9)]);
   timeline.select("C");
   assert.equal(timeline.track("cube", original, 5.5), original);
@@ -27,16 +30,23 @@ test("a parent edited after the child exists: the edit never leaks into the chil
 });
 
 test("a parent throw straddling the fork, in flight at the fork time, keeps flying in the child past the fork", () => {
-  const timeline = tree([["P", "original", 1], ["C", "P", 2]]);
+  const timeline = tree([
+    ["P", "original", 1],
+    ["C", "P", 2],
+  ]);
   timeline.setRecording("P", "ball", [frame(1.5, 0), frame(2, 1), frame(3, 2), frame(4, 3)]);
   timeline.select("C");
-  for (const t of [1.5, 1.75, 2, 3.5, 9]) assert.deepEqual(times(timeline.track("ball", original, t)), [1.5, 2, 3, 4], `t=${t}`);
+  for (const t of [1.5, 1.75, 2, 3.5, 9])
+    assert.deepEqual(times(timeline.track("ball", original, t)), [1.5, 2, 3, 4], `t=${t}`);
   assert.equal(timeline.track("ball", original, 1.2), original, "before the throw the original applies");
 });
 
 test("an object thrown at the same instant as the fork continues in the child", () => {
   // In one pause at t = 2: throw the can on P, then pick the ball up again, which forks C at 2 (the server's "Edit ball").
-  const timeline = tree([["P", "original", 1], ["C", "P", 2]]);
+  const timeline = tree([
+    ["P", "original", 1],
+    ["C", "P", 2],
+  ]);
   timeline.setRecording("P", "can", [frame(2, 0), frame(3, 1)]);
   timeline.select("C");
   assert.deepEqual(times(timeline.track("can", original, 2)), [2, 3]);
@@ -63,7 +73,11 @@ test("a take's own edit before its fork time replays from its first frame", () =
 });
 
 test("grandparent chain: the limit is the smallest fork time on the path", () => {
-  const timeline = tree([["G", "original", 1], ["P", "G", 3], ["C", "P", 5]]);
+  const timeline = tree([
+    ["G", "original", 1],
+    ["P", "G", 3],
+    ["C", "P", 5],
+  ]);
   timeline.setRecording("G", "ball", [frame(4, 1), frame(4.5, 2)]); // made after P was forked at 3
   timeline.setRecording("G", "cube", [frame(2, 1), frame(2.5, 2)]); // before P's fork: P's history, so C's too
   timeline.select("C");
@@ -77,7 +91,11 @@ test("grandparent chain: the limit is the smallest fork time on the path", () =>
 });
 
 test("grandparent chain: a skipped ancestor still lowers the limit, and the nearest applicable recording wins", () => {
-  const timeline = tree([["G", "original", 1], ["P", "G", 2], ["C", "P", 6]]);
+  const timeline = tree([
+    ["G", "original", 1],
+    ["P", "G", 2],
+    ["C", "P", 6],
+  ]);
   timeline.setRecording("G", "ball", [frame(1.5, 1), frame(2, 1)]);
   timeline.setRecording("P", "ball", [frame(7, 3), frame(8, 3)]); // after C's fork at 6: skipped in C
   timeline.setRecording("G", "cube", [frame(2.5, 1), frame(3, 1)]); // after P's fork at 2, though before C's at 6
@@ -90,7 +108,11 @@ test("grandparent chain: a skipped ancestor still lowers the limit, and the near
 });
 
 test("before an inherited recording's first frame, older ancestors are tried", () => {
-  const timeline = tree([["G", "original", 1], ["P", "G", 3], ["C", "P", 4]]);
+  const timeline = tree([
+    ["G", "original", 1],
+    ["P", "G", 3],
+    ["C", "P", 4],
+  ]);
   timeline.setRecording("G", "ball", [frame(1, 1), frame(1.5, 1)]);
   timeline.setRecording("P", "ball", [frame(2.5, 2), frame(3.5, 2)]); // P's own edit before its fork time
   timeline.select("C");
@@ -103,17 +125,26 @@ test("before an inherited recording's first frame, older ancestors are tried", (
 // Original) and 2 (fork 2 s on 1). jerry's branchFrames froze inherited objects at the fork time; the canonical rule
 // plays an inherited recording in full, so the frames are compared instead.
 test("ported from jerry: a child ignores parent edits that start after its fork", () => {
-  const timeline = tree([["1", "original", 0], ["2", "1", 2]]);
+  const timeline = tree([
+    ["1", "original", 0],
+    ["2", "1", 2],
+  ]);
   timeline.select("2");
   timeline.setRecording("1", "ball", [{ t: 3, p: [3, 0, 0], q: [0, 0, 0, 1] }]);
   assert.equal(timeline.track("ball", original, 4), original);
-  timeline.setRecording("1", "ball", [{ t: 1, p: [1, 0, 0], q: [0, 0, 0, 1] }, { t: 3, p: [3, 0, 0], q: [0, 0, 0, 1] }]);
+  timeline.setRecording("1", "ball", [
+    { t: 1, p: [1, 0, 0], q: [0, 0, 0, 1] },
+    { t: 3, p: [3, 0, 0], q: [0, 0, 0, 1] },
+  ]);
   assert.deepEqual(times(timeline.track("ball", original, 4)), [1, 3]);
 });
 
 test("corrupt branch rows with a parent loop cannot hang track()", () => {
-  const timeline = tree([["A", "original", 1], ["B", "A", 2]]);
-  timeline.branches.find(b => b.id === "A").parentId = "B"; // upsertBranch refuses cycles; corrupt the rows directly
+  const timeline = tree([
+    ["A", "original", 1],
+    ["B", "A", 2],
+  ]);
+  timeline.branches.find((b) => b.id === "A").parentId = "B"; // upsertBranch refuses cycles; corrupt the rows directly
   timeline.select("B");
   assert.equal(timeline.track("ball", original, 3), original);
 });

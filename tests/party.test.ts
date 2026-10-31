@@ -1,9 +1,5 @@
 import { beforeEach, expect, test } from "vitest";
-import {
-  createModuleTestHarness,
-  TestAuth,
-  TestClock,
-} from "spacetimedb/server/test-utils";
+import { createModuleTestHarness, TestAuth, TestClock } from "spacetimedb/server/test-utils";
 import { ConnectionId, Timestamp, TimeDuration } from "spacetimedb";
 import db, * as mod from "../server/spacetime/src/index";
 const auth = (name: string, id: bigint, claims = {}) =>
@@ -21,8 +17,7 @@ const a = auth("Alice", 1n),
   c = auth("Charlie", 3n),
   worker = auth("worker", 4n);
 let h: ReturnType<typeof createModuleTestHarness<typeof db.schemaType>>;
-const call = (who: TestAuth, fn: any, args: any = {}) =>
-  h.withReducerTx(who, (ctx) => fn(ctx, args));
+const call = (who: TestAuth, fn: any, args: any = {}) => h.withReducerTx(who, (ctx) => fn(ctx, args));
 const identity = (who: TestAuth) => h.withReducerTx(who, (ctx) => ctx.sender);
 const room = () => [...h.db.room.iter()][0];
 const clock = () => h.db.timeline.roomId.find(room().id)!;
@@ -88,9 +83,7 @@ test("party permissions reject direct guest clock, branch, scene and leader writ
 
 test("transfer requires a connected member and immediately revokes the old leader", () => {
   party();
-  expect(() =>
-    call(a, mod.transferLeadership, { identity: identity(c) }),
-  ).toThrow(/connected/);
+  expect(() => call(a, mod.transferLeadership, { identity: identity(c) })).toThrow(/connected/);
   call(a, mod.transferLeadership, { identity: identity(b) });
   expect(room().host.isEqual(identity(b))).toBe(true);
   expect(() => call(a, mod.seek, { mediaUs: 0n })).toThrow(/leader/);
@@ -143,9 +136,7 @@ test("pending reconstruction keeps the demo live and only the assigned worker ca
     manifestUrl: "",
     error: "",
   };
-  expect(() => call(b, mod.setMemoryStatus, update)).toThrow(
-    /assigned pipeline/,
-  );
+  expect(() => call(b, mod.setMemoryStatus, update)).toThrow(/assigned pipeline/);
   call(worker, mod.setMemoryStatus, update);
   expect(h.db.party.roomId.find(room().id)?.pendingMemoryId).toBe(video.id);
   call(worker, mod.setMemoryStatus, {
@@ -192,9 +183,7 @@ test("cancelled or replaced reconstruction cannot override the selected scene", 
   call(a, mod.forkBranch, { name: "Old scene take" });
   const oldBranch = clock().branchId;
   call(a, mod.attachPartyMemory, { memoryId: video.id });
-  expect(() => call(a, mod.setBranch, { branchId: oldBranch })).toThrow(
-    /outside/,
-  );
+  expect(() => call(a, mod.setBranch, { branchId: oldBranch })).toThrow(/outside/);
 });
 
 test("registered names survive reconnects and joining cannot replace them", () => {

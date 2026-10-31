@@ -1,5 +1,12 @@
 import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
-import { ApiError, accountSettings, accountName, credentials, decodePersonalKey, encodePersonalKey } from "./accounts.mjs";
+import {
+  ApiError,
+  accountSettings,
+  accountName,
+  credentials,
+  decodePersonalKey,
+  encodePersonalKey,
+} from "./accounts.mjs";
 
 export function ticket(payload, secret) {
   const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
@@ -11,14 +18,10 @@ export function readTicket(value, secret) {
     .update(data ?? "")
     .digest();
   const received = Buffer.from(sig ?? "", "base64url");
-  if (
-    received.length !== expected.length ||
-    !timingSafeEqual(received, expected)
-  )
+  if (received.length !== expected.length || !timingSafeEqual(received, expected))
     throw new Error("Invalid upload receipt");
   const payload = JSON.parse(Buffer.from(data, "base64url").toString());
-  if (payload.expires < Date.now())
-    throw new Error("Upload receipt expired; request a new upload");
+  if (payload.expires < Date.now()) throw new Error("Upload receipt expired; request a new upload");
   return payload;
 }
 /**
@@ -28,18 +31,15 @@ export function readTicket(value, secret) {
  */
 export function metadata(body, owner, base) {
   const { name, type, size, title, durationSec, pipeline = true } = body;
-  if (typeof name !== "string" || !/^.+\.(mp4|mov|webm)$/i.test(name))
-    throw new Error("Select an MP4, MOV or WebM");
-  if (!["video/mp4", "video/quicktime", "video/webm"].includes(type))
-    throw new Error("Unsupported video type");
+  if (typeof name !== "string" || !/^.+\.(mp4|mov|webm)$/i.test(name)) throw new Error("Select an MP4, MOV or WebM");
+  if (!["video/mp4", "video/quicktime", "video/webm"].includes(type)) throw new Error("Unsupported video type");
   if (!Number.isSafeInteger(size) || size <= 0 || size > 2 * 1024 ** 3)
     throw new Error("Video must be 1 byte to 2 GiB");
   if (typeof title !== "string" || !title.trim() || title.length > 120)
     throw new Error("Title must be 1–120 characters");
   if (!Number.isFinite(durationSec) || durationSec <= 0 || durationSec > 3600)
     throw new Error("Video duration must be 0–3600 seconds");
-  if (typeof pipeline !== "boolean")
-    throw new Error("pipeline must be true or false");
+  if (typeof pipeline !== "boolean") throw new Error("pipeline must be true or false");
   const requestId = randomUUID();
   const extension = name.toLowerCase().split(".").pop();
   const key = `videos/${owner}/${requestId}.${extension}`;
@@ -57,10 +57,10 @@ export function metadata(body, owner, base) {
   };
 }
 /** Node system errors (ENOENT, ECONNREFUSED…) can name absolute paths on this machine. */
-const systemError = (error) =>
-  typeof error?.code === "string" && /^E[A-Z0-9_]+$/.test(error.code);
+const systemError = (error) => typeof error?.code === "string" && /^E[A-Z0-9_]+$/.test(error.code);
 async function json(req) {
-  const chunks = []; let size = 0;
+  const chunks = [];
+  let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
     if (size > 32768) throw new ApiError(413, "Request too large");
@@ -70,7 +70,9 @@ async function json(req) {
     const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error();
     return value;
-  } catch { throw new ApiError(400, "Send a JSON object"); }
+  } catch {
+    throw new ApiError(400, "Send a JSON object");
+  }
 }
 export function makeHandler({
   secret,
@@ -104,8 +106,7 @@ export function makeHandler({
       });
       res.end(JSON.stringify(data));
     };
-    if (origin && !allowedOrigins.includes(origin))
-      return send(403, { error: "Origin not allowed" });
+    if (origin && !allowedOrigins.includes(origin)) return send(403, { error: "Origin not allowed" });
     if (origin) {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Vary", "Origin");
@@ -118,13 +119,15 @@ export function makeHandler({
     }
     if (route.pathname === "/api/health") return send(200, { status: "ok" });
     if (route.pathname === "/api/account/config" && req.method === "GET" && accountConfig)
-      return send(200, { version: passwords ? 2 : 1, ...accountConfig, keyPrefix: "memos1.",
-        ...(passwords ? { passwordLength: 6 } : {}), maxUploadBytes, pipelineAvailable: pipelineEnabled });
-    if (
-      req.method === "POST" &&
-      route.pathname === "/api/identity" &&
-      registerIdentity
-    ) {
+      return send(200, {
+        version: passwords ? 2 : 1,
+        ...accountConfig,
+        keyPrefix: "memos1.",
+        ...(passwords ? { passwordLength: 6 } : {}),
+        maxUploadBytes,
+        pipelineAvailable: pipelineEnabled,
+      });
+    if (req.method === "POST" && route.pathname === "/api/identity" && registerIdentity) {
       try {
         return send(200, await registerIdentity());
       } catch {
@@ -132,41 +135,53 @@ export function makeHandler({
       }
     }
     const connectionsRoute = req.method === "GET" && route.pathname === "/api/connections" && connections;
-    const profileRoute = route.pathname === "/api/profile" &&
+    const profileRoute =
+      route.pathname === "/api/profile" &&
       ((req.method === "GET" && getProfile) || (req.method === "POST" && setProfile));
     const passwordRoute = route.pathname === "/api/account/password" && req.method === "POST";
-    const accountRoute = (route.pathname === "/api/account" || passwordRoute) && accountConfig && getAccount && registerAccount &&
+    const accountRoute =
+      (route.pathname === "/api/account" || passwordRoute) &&
+      accountConfig &&
+      getAccount &&
+      registerAccount &&
       ["GET", "POST"].includes(req.method);
-    const listing =
-      req.method === "GET" &&
-      route.pathname === "/api/memories" &&
-      listMemories;
+    const listing = req.method === "GET" && route.pathname === "/api/memories" && listMemories;
     if (
-      !listing && !profileRoute && !connectionsRoute && !accountRoute &&
-      (req.method !== "POST" ||
-        !["/api/uploads/presign", "/api/uploads/complete"].includes(
-          route.pathname,
-        ))
+      !listing &&
+      !profileRoute &&
+      !connectionsRoute &&
+      !accountRoute &&
+      (req.method !== "POST" || !["/api/uploads/presign", "/api/uploads/complete"].includes(route.pathname))
     )
       return send(404, { error: "Not found" });
     if (!(accountRoute && req.method === "POST" && !passwordRoute) && !req.headers.authorization?.startsWith("Bearer "))
       return send(401, { error: "Connect to SpacetimeDB first" });
     try {
-      const body = listing || connectionsRoute || ((profileRoute || accountRoute) && req.method === "GET")
-        ? { identity: route.searchParams.get("identity") }
-        : await json(req);
+      const body =
+        listing || connectionsRoute || ((profileRoute || accountRoute) && req.method === "GET")
+          ? { identity: route.searchParams.get("identity") }
+          : await json(req);
       // POST /account either creates/promotes an identity or restores an existing password.
       let credential;
-      const client = req.socket?.remoteAddress || 'unknown'; // Never trust arbitrary forwarding headers.
-      const restoring = accountRoute && req.method === "POST" && !passwordRoute && (body.personalKey !== undefined || body.password !== undefined);
+      const client = req.socket?.remoteAddress || "unknown"; // Never trust arbitrary forwarding headers.
+      const restoring =
+        accountRoute &&
+        req.method === "POST" &&
+        !passwordRoute &&
+        (body.personalKey !== undefined || body.password !== undefined);
       const creating = accountRoute && req.method === "POST" && !passwordRoute && !restoring;
       const name = creating ? accountName(body) : undefined;
       if (restoring) {
-        if (req.headers.authorization || body.identity !== undefined || body.name !== undefined || body.displayName !== undefined ||
-            (body.personalKey !== undefined && body.password !== undefined))
+        if (
+          req.headers.authorization ||
+          body.identity !== undefined ||
+          body.name !== undefined ||
+          body.displayName !== undefined ||
+          (body.personalKey !== undefined && body.password !== undefined)
+        )
           throw new ApiError(400, "Send only password when restoring an account");
         if (body.password !== undefined) {
-          if (!passwords) throw new ApiError(503, 'Six-digit passwords are not configured on this server');
+          if (!passwords) throw new ApiError(503, "Six-digit passwords are not configured on this server");
           credential = await passwords.restore(body.password, client);
         } else credential = decodePersonalKey(body.personalKey, accountConfig);
       } else if (creating && !req.headers.authorization) {
@@ -176,8 +191,7 @@ export function makeHandler({
       } else credential = credentials(req.headers.authorization, body.identity, accountConfig);
       const auth = `Bearer ${credential.token}`;
       body.identity = credential.identity;
-      if (!(await verify(credential.identity, auth)))
-        return send(401, { error: "Identity/token mismatch" });
+      if (!(await verify(credential.identity, auth))) return send(401, { error: "Identity/token mismatch" });
       if (accountRoute) {
         if (creating) await registerAccount(name, auth);
         const profile = await getAccount(credential.identity, auth);
@@ -185,12 +199,14 @@ export function makeHandler({
           throw new ApiError(401, "This identity has no registered password account");
         const result = { ...accountConfig, ...profile };
         if (passwordRoute) {
-          if (!passwords) throw new ApiError(503, 'Six-digit passwords are not configured on this server');
+          if (!passwords) throw new ApiError(503, "Six-digit passwords are not configured on this server");
           return send(200, { password: await passwords.issue(credential, client) });
         }
         if (req.method === "POST") {
           Object.assign(result, { token: credential.token, personalKey: encodePersonalKey(credential) });
-          if (passwords) result.password = restoring && body.password !== undefined ? body.password : await passwords.issue(credential, client);
+          if (passwords)
+            result.password =
+              restoring && body.password !== undefined ? body.password : await passwords.issue(credential, client);
         }
         return send(200, result);
       }
@@ -206,8 +222,7 @@ export function makeHandler({
         }
         return send(200, await getProfile(body.identity, auth));
       }
-      if (listing)
-        return send(200, { memories: await listMemories(body.identity, auth) });
+      if (listing) return send(200, { memories: await listMemories(body.identity, auth) });
       if (route.pathname === "/api/uploads/presign") {
         if (body.size > maxUploadBytes)
           throw new ApiError(413, `Video exceeds this server's ${maxUploadBytes} byte upload limit`);
@@ -216,13 +231,8 @@ export function makeHandler({
           throw new ApiError(503, "Reconstruction is not configured. Send pipeline:false to save the recording.");
         const data = metadata(body, body.identity, assetBase);
         // A test row is assigned to its uploader; for the worker itself that is its queue.
-        if (
-          !data.pipeline &&
-          data.owner.toLowerCase() === String(pipelineIdentity).toLowerCase()
-        )
-          throw new Error(
-            "The pipeline worker's identity cannot make test uploads",
-          );
+        if (!data.pipeline && data.owner.toLowerCase() === String(pipelineIdentity).toLowerCase())
+          throw new Error("The pipeline worker's identity cannot make test uploads");
         return send(200, {
           putUrl: await sign(data),
           receipt: ticket(data, secret),
@@ -237,26 +247,19 @@ export function makeHandler({
       const data = readTicket(body.receipt, secret);
       // Storage tickets (upload:local's PUT URLs) carry a kind; only receipts complete.
       if (data.kind) throw new Error("Invalid upload receipt");
-      if (data.owner !== body.identity)
-        return send(403, { error: "Receipt belongs to another identity" });
+      if (data.owner !== body.identity) return send(403, { error: "Receipt belongs to another identity" });
       const stored = await head(data.key);
       if (stored.size !== data.size || stored.type !== data.type)
-        throw new Error(
-          "Upload is incomplete or has incorrect content type/size",
-        );
+        throw new Error("Upload is incomplete or has incorrect content type/size");
       // The flag is inside the signed receipt, so a retry assigns the same identity
       // (create_memory rejects a repeated request ID with a different one).
       const queued = data.pipeline !== false;
       await createMemory(data, auth, queued ? pipelineIdentity : data.owner);
       const memory = listMemories
-        ? (await listMemories(data.owner, auth)).find(
-            (row) => row.requestId === data.requestId,
-          )
+        ? (await listMemories(data.owner, auth)).find((row) => row.requestId === data.requestId)
         : undefined;
       if (listMemories && !memory)
-        throw new Error(
-          "Upload stored, but database confirmation is missing. Retry completion.",
-        );
+        throw new Error("Upload stored, but database confirmation is missing. Retry completion.");
       return send(200, {
         requestId: data.requestId,
         status: memory?.status || "uploaded",
@@ -264,13 +267,10 @@ export function makeHandler({
         memory,
       });
     } catch (error) {
-      if (error instanceof ApiError && error.status === 429) res.setHeader('Retry-After', '900');
+      if (error instanceof ApiError && error.status === 429) res.setHeader("Retry-After", "900");
       if (systemError(error)) console.error("Upload request failed:", error);
       send(error instanceof ApiError ? error.status : 400, {
-        error:
-          error instanceof Error && !systemError(error)
-            ? error.message
-            : "Upload failed; retry",
+        error: error instanceof Error && !systemError(error) ? error.message : "Upload failed; retry",
       });
     }
   };
@@ -284,15 +284,22 @@ export function databaseConfig(env = process.env) {
     accountConfig: settings,
     registerAccount: async (name, auth) => {
       const response = await fetch(`${url}/call/register_account`, {
-        method: "POST", headers: { Authorization: auth, "Content-Type": "application/json" },
-        body: JSON.stringify([name]), signal: AbortSignal.timeout(10000),
+        method: "POST",
+        headers: { Authorization: auth, "Content-Type": "application/json" },
+        body: JSON.stringify([name]),
+        signal: AbortSignal.timeout(10000),
       });
-      if (!response.ok) throw new ApiError(response.status >= 500 ? 502 : 400, "Could not register this name. An existing password keeps its registered name.");
+      if (!response.ok)
+        throw new ApiError(
+          response.status >= 500 ? 502 : 400,
+          "Could not register this name. An existing password keeps its registered name.",
+        );
     },
     getAccount: async (identity, auth) => {
       if (!/^[a-f0-9]{64}$/.test(identity)) throw new ApiError(401, "Invalid identity");
       const response = await fetch(`${url}/sql`, {
-        method: "POST", headers: { Authorization: auth, "Content-Type": "text/plain" },
+        method: "POST",
+        headers: { Authorization: auth, "Content-Type": "text/plain" },
         body: `SELECT display_name, provider FROM profile WHERE identity = 0x${identity}`,
         signal: AbortSignal.timeout(10000),
       });
@@ -317,15 +324,18 @@ export function databaseConfig(env = process.env) {
     },
     setProfile: async (displayName, auth) => {
       const response = await fetch(`${url}/call/set_display_name`, {
-        method: "POST", headers: { Authorization: auth, "Content-Type": "application/json" },
-        body: JSON.stringify([displayName]), signal: AbortSignal.timeout(10000),
+        method: "POST",
+        headers: { Authorization: auth, "Content-Type": "application/json" },
+        body: JSON.stringify([displayName]),
+        signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) throw new Error("Could not save your name");
     },
     getProfile: async (identity, auth) => {
       if (!/^[a-f0-9]{64}$/i.test(identity)) throw new Error("Invalid identity");
       const response = await fetch(`${url}/sql`, {
-        method: "POST", headers: { Authorization: auth },
+        method: "POST",
+        headers: { Authorization: auth },
         body: `SELECT display_name FROM profile WHERE identity = 0x${identity}`,
         signal: AbortSignal.timeout(10000),
       });
@@ -334,8 +344,7 @@ export function databaseConfig(env = process.env) {
       return { identity, displayName: result.rows[0]?.[0] ?? "" };
     },
     listMemories: async (identity, auth) => {
-      if (!/^[a-f0-9]{64}$/i.test(identity))
-        throw new Error("Invalid identity");
+      if (!/^[a-f0-9]{64}$/i.test(identity)) throw new Error("Invalid identity");
       const response = await fetch(`${url}/sql`, {
         method: "POST",
         headers: { Authorization: auth },
@@ -350,18 +359,7 @@ export function databaseConfig(env = process.env) {
           .replace(/^0x/, "")
           .toLowerCase();
       return result.rows.map(
-        ([
-          id,
-          title,
-          sourceUrl,
-          status,
-          durationUs,
-          requestId,
-          pipelineIdentity,
-          manifestUrl,
-          progress,
-          error,
-        ]) => ({
+        ([id, title, sourceUrl, status, durationUs, requestId, pipelineIdentity, manifestUrl, progress, error]) => ({
           id: String(id),
           title,
           sourceUrl,
@@ -377,26 +375,14 @@ export function databaseConfig(env = process.env) {
       );
     },
     createMemory: async (d, auth, pipeline) => {
-      const response = await fetch(
-        `${base}/v1/database/${encodeURIComponent(env.STDB_DATABASE)}/call/create_memory`,
-        {
-          method: "POST",
-          headers: { Authorization: auth, "Content-Type": "application/json" },
-          body: JSON.stringify([
-            d.requestId,
-            d.title,
-            d.sourceUrl,
-            d.manifestUrl || "",
-            ["0x" + pipeline],
-            d.durationUs,
-          ]),
-          signal: AbortSignal.timeout(15000),
-        },
-      );
+      const response = await fetch(`${base}/v1/database/${encodeURIComponent(env.STDB_DATABASE)}/call/create_memory`, {
+        method: "POST",
+        headers: { Authorization: auth, "Content-Type": "application/json" },
+        body: JSON.stringify([d.requestId, d.title, d.sourceUrl, d.manifestUrl || "", ["0x" + pipeline], d.durationUs]),
+        signal: AbortSignal.timeout(15000),
+      });
       if (!response.ok)
-        throw new Error(
-          `createMemory failed (${response.status}): ${(await response.text()).slice(0, 300)}`,
-        );
+        throw new Error(`createMemory failed (${response.status}): ${(await response.text()).slice(0, 300)}`);
     },
   };
 }

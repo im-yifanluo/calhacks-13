@@ -14,6 +14,8 @@
     "build": "npm run build -w apps/web",
     "test": "vitest run && npm run test -w apps/web",
     "typecheck": "tsc -p server/spacetime/tsconfig.json && tsc -p apps/web/tsconfig.json --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "stdb:start": "spacetime start --listen-addr 127.0.0.1:${STDB_PORT:-3055}",
     "stdb:build": "spacetime build --module-path server/spacetime",
     "stdb:publish:local": "spacetime publish -s http://127.0.0.1:${STDB_PORT:-3055} --module-path server/spacetime memory-replay",

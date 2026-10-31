@@ -6,10 +6,15 @@ import { Euler, Group, PerspectiveCamera, Vector3 } from "three";
 import { GLIDE_SECONDS, PathFollower, pathPosition, placeHead } from "../.test-dist/follow.js";
 
 const close = (a, b, tolerance = 1e-9) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
-const vec = (vector, expected, tolerance = 1e-9) => expected.forEach((x, i) => close(vector.toArray()[i], x, tolerance));
+const vec = (vector, expected, tolerance = 1e-9) =>
+  expected.forEach((x, i) => close(vector.toArray()[i], x, tolerance));
 const q = [0, 0, 0, 1];
 // A 2 s walk along +x then +z, at eye height.
-const track = [{ t: 0, p: [0, 1.6, 0], q }, { t: 1, p: [2, 1.6, 0], q }, { t: 2, p: [2, 1.8, 4], q }];
+const track = [
+  { t: 0, p: [0, 1.6, 0], q },
+  { t: 1, p: [2, 1.6, 0], q },
+  { t: 2, p: [2, 1.8, 4], q },
+];
 
 test("pathPosition interpolates position between keyframes and holds the ends", () => {
   vec(pathPosition(track, 0), [0, 1.6, 0]);
@@ -21,10 +26,13 @@ test("pathPosition interpolates position between keyframes and holds the ends", 
 });
 
 test("locked and already on the path, the follower rides it frame by frame", () => {
-  const follower = new PathFollower(track), out = new Vector3(), eyes = new Vector3(0, 1.6, 0);
+  const follower = new PathFollower(track),
+    out = new Vector3(),
+    eyes = new Vector3(0, 1.6, 0);
   let t = 0;
   for (let frame = 0; frame < 60; frame++) {
-    const dt = 1 / 60; t = frame === 0 ? 0 : t + dt;
+    const dt = 1 / 60;
+    t = frame === 0 ? 0 : t + dt;
     assert.ok(follower.step(true, t, eyes, dt, out));
     eyes.copy(out);
   }
@@ -32,17 +40,24 @@ test("locked and already on the path, the follower rides it frame by frame", () 
 });
 
 test("paused, nothing is moved; resuming glides from where you are onto the path in GLIDE_SECONDS", () => {
-  const follower = new PathFollower(track), out = new Vector3();
+  const follower = new PathFollower(track),
+    out = new Vector3();
   const eyes = new Vector3(0, 1.6, 0);
   follower.step(true, 0, eyes, 0, out);
-  assert.equal(follower.step(false, 0.5, eyes, 1 / 60, out), null);      // paused: roam
-  eyes.set(5, 1.6, -3);                                                  // walked away
+  assert.equal(follower.step(false, 0.5, eyes, 1 / 60, out), null); // paused: roam
+  eyes.set(5, 1.6, -3); // walked away
   const dt = 1 / 60;
-  let t = 0.5, first = follower.step(true, t, eyes, dt, out).clone();   // resume
-  vec(first, [5, 1.6, -3]);                                              // the glide starts where you stand
+  let t = 0.5,
+    first = follower.step(true, t, eyes, dt, out).clone(); // resume
+  vec(first, [5, 1.6, -3]); // the glide starts where you stand
   assert.ok(follower.gliding);
   let frames = 0;
-  while (follower.gliding) { t += dt; eyes.copy(follower.step(true, t, eyes, dt, out)); frames++; assert.ok(frames < 200); }
+  while (follower.gliding) {
+    t += dt;
+    eyes.copy(follower.step(true, t, eyes, dt, out));
+    frames++;
+    assert.ok(frames < 200);
+  }
   close(frames * dt, GLIDE_SECONDS, dt + 1e-9);
   vec(eyes, pathPosition(track, t).toArray());
   // Halfway through a glide it is between the two (eased), not on either end.
@@ -51,16 +66,20 @@ test("paused, nothing is moved; resuming glides from where you are onto the path
   half.step(false, 0, out, 0, out);
   const start = new Vector3(0, 1.6, 10);
   half.step(true, 0, start, 0, out);
-  for (let k = 0; k < 18; k++) half.step(true, 0, start, 1 / 60, out);   // time held at 0 (a paused room clock replayed)
+  for (let k = 0; k < 18; k++) half.step(true, 0, start, 1 / 60, out); // time held at 0 (a paused room clock replayed)
   assert.ok(out.z > 0.5 && out.z < 9.5, `mid-glide z=${out.z}`);
 });
 
 test("a jump in the clock while playing glides instead of snapping; normal playback never does", () => {
-  const follower = new PathFollower(track), out = new Vector3(), eyes = new Vector3(0, 1.6, 0);
-  follower.step(true, 0, eyes, 0, out); eyes.copy(out);
-  follower.step(true, 0.1, eyes, 0.1, out); eyes.copy(out);
+  const follower = new PathFollower(track),
+    out = new Vector3(),
+    eyes = new Vector3(0, 1.6, 0);
+  follower.step(true, 0, eyes, 0, out);
+  eyes.copy(out);
+  follower.step(true, 0.1, eyes, 0.1, out);
+  eyes.copy(out);
   assert.equal(follower.gliding, false);
-  follower.step(true, 1.8, eyes, 1 / 60, out);                           // someone in the room scrubbed ahead
+  follower.step(true, 1.8, eyes, 1 / 60, out); // someone in the room scrubbed ahead
   assert.ok(follower.gliding);
   vec(out, eyes.toArray());
   // At double speed a frame advances 2·dt: still playback.
@@ -71,10 +90,15 @@ test("a jump in the clock while playing glides instead of snapping; normal playb
 });
 
 test("placeHead moves the VR rig so the headset lands on the target, keeping the rig's turn", () => {
-  const scene = new Group(), rig = new Group(), camera = new PerspectiveCamera();
-  scene.add(rig); rig.add(camera);
-  rig.position.set(1, 0, -2); rig.rotation.set(0, Math.PI / 3, 0);
-  camera.position.set(0.3, 1.55, -0.2); camera.quaternion.setFromEuler(new Euler(0.2, 0.7, 0, "YXZ"));
+  const scene = new Group(),
+    rig = new Group(),
+    camera = new PerspectiveCamera();
+  scene.add(rig);
+  rig.add(camera);
+  rig.position.set(1, 0, -2);
+  rig.rotation.set(0, Math.PI / 3, 0);
+  camera.position.set(0.3, 1.55, -0.2);
+  camera.quaternion.setFromEuler(new Euler(0.2, 0.7, 0, "YXZ"));
   scene.updateMatrixWorld(true);
   const target = new Vector3(4, 1.8, 5);
   placeHead(rig, camera, target);

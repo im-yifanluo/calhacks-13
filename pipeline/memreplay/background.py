@@ -1,9 +1,10 @@
 """S6 background splat: gsplat (MCMC) on our world-frame cameras with people and props masked out of the loss.
 
-  prepare()  <work>/colmap/{images,masks,sparse/0} from cameras.json, ViPE masks and bg_points.ply
-  train()    runs gsplat's examples/simple_trainer.py through train_splat.py (adds per-image masks)
-  convert()  last PLY -> world/bg.spz with splat-transform (<= 300k splats)
+prepare()  <work>/colmap/{images,masks,sparse/0} from cameras.json, ViPE masks and bg_points.ply
+train()    runs gsplat's examples/simple_trainer.py through train_splat.py (adds per-image masks)
+convert()  last PLY -> world/bg.spz with splat-transform (<= 300k splats)
 """
+
 from __future__ import annotations
 
 import os
@@ -62,7 +63,7 @@ def pick_frames(work: Path, cams: Cameras, n: int) -> list:
     edges = np.linspace(0, len(frames), n + 1).astype(int)
     picked = []
     for a, b in zip(edges[:-1], edges[1:]):
-        window = frames[a:max(b, a + 1)]
+        window = frames[a : max(b, a + 1)]
         scores = []
         for c in window:
             g = cv2.cvtColor(reader.get(c.idx), cv2.COLOR_RGB2GRAY)
@@ -84,7 +85,8 @@ def prepare(work: Path, static: bool = False) -> Path:
     reader = Frames(work / "input" / "clip.mp4")
     from .objects import scene_static_ids
     from .vipe_io import HAND_PHRASES, PEOPLE_PHRASES
-    if static:   # everything but people and hands belongs to the room, the sky included (SKY_DOME below)
+
+    if static:  # everything but people and hands belongs to the room, the sky included (SKY_DOME below)
         movers = set(v.ids_with(PEOPLE_PHRASES | HAND_PHRASES))
         keep_in_room = [i for i in v.phrases if i > 0 and i not in movers]
         if SKY_DOME:
@@ -95,8 +97,9 @@ def prepare(work: Path, static: bool = False) -> Path:
     K = np.array(c0.K).reshape(3, 3)
     # ViPE puts pixel centres at integer coordinates; COLMAP/gsplat at +0.5
     (col / "sparse/0/cameras.txt").write_text(
-        f"1 PINHOLE {c0.w} {c0.h} {K[0, 0]:.6f} {K[1, 1]:.6f} {K[0, 2] + 0.5:.6f} {K[1, 2] + 0.5:.6f}\n")
-    obs = {}                                                   # image id -> [(u, v, point3D id)], for POINTS2D
+        f"1 PINHOLE {c0.w} {c0.h} {K[0, 0]:.6f} {K[1, 1]:.6f} {K[0, 2] + 0.5:.6f} {K[1, 2] + 0.5:.6f}\n"
+    )
+    obs = {}  # image id -> [(u, v, point3D id)], for POINTS2D
     tracks = None
     if DEPTH_LOSS:
         # seed points sampled from ViPE's depth, one track per point, so gsplat's --depth_loss can supervise the
@@ -108,8 +111,12 @@ def prepare(work: Path, static: bool = False) -> Path:
     for i, c in enumerate(chosen, start=1):
         name = f"{c.idx:05d}"
         rgb = reader.get(c.idx)
-        cv2.imwrite(str(col / "images" / f"{name}.jpg"), cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 95])
-        static = v.static_mask(c.idx, margin_px=12, extra_static=keep_in_room)   # wider: passers-by were leaving streaks in the room
+        cv2.imwrite(
+            str(col / "images" / f"{name}.jpg"), cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 95]
+        )
+        static = v.static_mask(
+            c.idx, margin_px=12, extra_static=keep_in_room
+        )  # wider: passers-by were leaving streaks in the room
         if static is None:
             static = np.ones(rgb.shape[:2], bool)
         cv2.imwrite(str(col / "masks" / f"{name}.png"), static.astype(np.uint8) * 255)
@@ -118,22 +125,27 @@ def prepare(work: Path, static: bool = False) -> Path:
         q = _quat_wxyz(w2c[:3, :3])
         t = w2c[:3, 3]
         pts2d = " ".join(f"{u:.2f} {vv:.2f} {pid}" for u, vv, pid in obs.get(i, []))
-        lines.append(f"{i} {q[0]:.9f} {q[1]:.9f} {q[2]:.9f} {q[3]:.9f} {t[0]:.9f} {t[1]:.9f} {t[2]:.9f} 1 {name}.jpg\n{pts2d}\n")
+        lines.append(
+            f"{i} {q[0]:.9f} {q[1]:.9f} {q[2]:.9f} {q[3]:.9f} {t[0]:.9f} {t[1]:.9f} {t[2]:.9f} 1 {name}.jpg\n{pts2d}\n"
+        )
     (col / "sparse/0/images.txt").write_text("".join(lines))
     if not DEPTH_LOSS:
         seed_xyz, seed_rgb = read_splat_ply_xyz_rgb(work / "world" / "bg_points.ply")
         if len(seed_xyz) > INIT_POINTS:
             sel = np.random.default_rng(0).choice(len(seed_xyz), INIT_POINTS, replace=False)
             seed_xyz, seed_rgb = seed_xyz[sel], seed_rgb[sel]
-    pos_in_image = {}                                          # point id -> its index in that image's POINTS2D
+    pos_in_image = {}  # point id -> its index in that image's POINTS2D
     for img, lst in obs.items():
         for k, (_, _, pid) in enumerate(lst):
             pos_in_image[pid] = k
     with open(col / "sparse/0/points3D.txt", "w") as f:
-        for i, (p, c) in enumerate(zip(seed_xyz, seed_rgb), start=1):   # (the image loop above reuses `rgb`)
+        for i, (p, c) in enumerate(zip(seed_xyz, seed_rgb), start=1):  # (the image loop above reuses `rgb`)
             track = f" {tracks[i - 1]} {pos_in_image[i]}" if tracks is not None else ""
             f.write(f"{i} {p[0]:.5f} {p[1]:.5f} {p[2]:.5f} {c[0]} {c[1]} {c[2]} 0{track}\n")
-    print(f"[background] colmap dir: {len(chosen)} images, {len(seed_xyz)} seed points" + (" (from ViPE depth, with tracks)" if tracks is not None else ""))
+    print(
+        f"[background] colmap dir: {len(chosen)} images, {len(seed_xyz)} seed points"
+        + (" (from ViPE depth, with tracks)" if tracks is not None else "")
+    )
     return col
 
 
@@ -170,7 +182,9 @@ def depth_points(work: Path, v, chosen: list, reader) -> tuple[np.ndarray, np.nd
             if sky is not None and sky.any():
                 ps, vs, us = backproject(np.full_like(d, SKY_DISTANCE), v.K(c.idx), sky, stride=stride * 2)
                 if len(ps):
-                    p = np.concatenate([p, ps]); vv = np.concatenate([vv, vs]); uu = np.concatenate([uu, us])
+                    p = np.concatenate([p, ps])
+                    vv = np.concatenate([vv, vs])
+                    uu = np.concatenate([uu, us])
         pts.append(transform(wp.c2w(c.idx), p))
         cols.append(rgb[vv, uu])
         ids.append(np.full(len(p), i, np.int32))
@@ -183,14 +197,30 @@ def train(work: Path, steps_scaler: float = 0.25, static: bool = False) -> Path:
     out = work / ("gsplat_static" if static else "gsplat")
     env = dict(os.environ)
     cap = STATIC["cap"] if static else CAP
-    cmd = [sys.executable, "-m", "memreplay.train_splat", "mcmc", "--data_dir", str(work / "colmap"),
-           "--data_factor", "1", "--result_dir", str(out), "--strategy.cap-max", str(cap),
-           "--steps_scaler", str(steps_scaler), "--save_ply", "--disable_viewer",
-           "--no-normalize-world-space", "--app_opt"]
+    cmd = [
+        sys.executable,
+        "-m",
+        "memreplay.train_splat",
+        "mcmc",
+        "--data_dir",
+        str(work / "colmap"),
+        "--data_factor",
+        "1",
+        "--result_dir",
+        str(out),
+        "--strategy.cap-max",
+        str(cap),
+        "--steps_scaler",
+        str(steps_scaler),
+        "--save_ply",
+        "--disable_viewer",
+        "--no-normalize-world-space",
+        "--app_opt",
+    ]
     # --app_opt (per-image appearance embedding) is lost at export, so colours come out a little averaged, but without
     # it the MCMC training diverges on these auto-exposed phone clips: the loss climbs after ~20 % of the steps and
     # 85 % of the Gaussians end with opacity < 0.002 (room corner: 390k usable Gaussians with it, 13k without)
-    if static:   # refine ViPE's poses; evaluate on held-out frames at the end
+    if static:  # refine ViPE's poses; evaluate on held-out frames at the end
         steps = int(30_000 * steps_scaler)
         # gsplat's default pose_opt_lr (1e-5) moves cameras only ~2 mm; 1e-3 let the whole splat drift away from the
         # held-out cameras (room corner PSNR 19 -> 8), so path drift is left to S3's levelling instead
@@ -227,7 +257,7 @@ def convert(work: Path, ply: Path, static: bool = False) -> int:
 
 
 def run(work: Path, steps_scaler: float | None = None, static: bool = False) -> None:
-    work = Path(work).resolve()                                # train_splat changes directory
+    work = Path(work).resolve()  # train_splat changes directory
     FramesInfo.model_validate_json((Path(work) / "input" / "frames.json").read_text())
     if steps_scaler is None:
         steps_scaler = STATIC["steps_scaler"] if static else 0.25
@@ -235,5 +265,6 @@ def run(work: Path, steps_scaler: float | None = None, static: bool = False) -> 
     ply = train(work, steps_scaler, static)
     if static:
         from . import bake
-        ply = bake.run(work) or ply                            # colours at the mean appearance, not the zero one
+
+        ply = bake.run(work) or ply  # colours at the mean appearance, not the zero one
     convert(work, ply, static)

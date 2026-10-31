@@ -1,6 +1,9 @@
 /** Same portable password format as apps/web/src/account-key.ts. No credentials live in the database. */
 export class ApiError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
 }
 
 export function accountSettings(env) {
@@ -20,11 +23,22 @@ export function decodePersonalKey(value, settings) {
     throw new ApiError(401, "Use the complete password beginning with memos1.");
   let data;
   try {
-    data = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.from(value.trim().slice(7), "base64url")));
-    if (!data || typeof data !== "object" || typeof data.identity !== "string" || !/^[a-f0-9]{64}$/.test(data.identity) ||
-      typeof data.token !== "string" || data.token.length > 8192 ||
-      !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(data.token)) throw new Error();
-  } catch { throw new ApiError(401, "The password is incomplete or damaged"); }
+    data = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(Buffer.from(value.trim().slice(7), "base64url")),
+    );
+    if (
+      !data ||
+      typeof data !== "object" ||
+      typeof data.identity !== "string" ||
+      !/^[a-f0-9]{64}$/.test(data.identity) ||
+      typeof data.token !== "string" ||
+      data.token.length > 8192 ||
+      !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(data.token)
+    )
+      throw new Error();
+  } catch {
+    throw new ApiError(401, "The password is incomplete or damaged");
+  }
   if (data.server !== settings?.server || data.database !== settings?.database)
     throw new ApiError(401, "This password belongs to a different memos server or database");
   return { ...settings, identity: data.identity, token: data.token };

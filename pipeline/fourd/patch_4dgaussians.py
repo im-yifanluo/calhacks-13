@@ -4,6 +4,7 @@
 - scene/__init__.py: HexPlane bounds from <data>/aabb.json (robust box of the near points; convert.py writes it),
   optional FOURD_EXTENT env override of the camera extent (sets position/deformation lr scale)
 - depth-diff-gaussian-rasterization needs #include <cstdint> (gcc 14), simple-knn needs #include <cfloat>"""
+
 import re
 import sys
 from pathlib import Path
@@ -44,11 +45,13 @@ print("patched", root)
 g = root / "scene" / "gaussian_model.py"
 s = g.read_text()
 old = '        self._deformation_table = torch.gt(torch.ones((self.get_xyz.shape[0]),device="cuda"),0)\n    def training_setup'
-new = ('        self._deformation_table = torch.gt(torch.ones((self.get_xyz.shape[0]),device="cuda"),0)\n'
-       '        if os.environ.get("FOURD_DYN_FLAG"):   # [fourd] dynamic = init points flagged nx>0.5\n'
-       '            self._deformation_table = torch.tensor(np.asarray(pcd.normals)[:, 0] > 0.5, device="cuda")\n'
-       '            print("[fourd] dynamic init points:", int(self._deformation_table.sum()), "of", self._deformation_table.numel())\n'
-       '    def training_setup')
+new = (
+    '        self._deformation_table = torch.gt(torch.ones((self.get_xyz.shape[0]),device="cuda"),0)\n'
+    '        if os.environ.get("FOURD_DYN_FLAG"):   # [fourd] dynamic = init points flagged nx>0.5\n'
+    '            self._deformation_table = torch.tensor(np.asarray(pcd.normals)[:, 0] > 0.5, device="cuda")\n'
+    '            print("[fourd] dynamic init points:", int(self._deformation_table.sum()), "of", self._deformation_table.numel())\n'
+    "    def training_setup"
+)
 if "[fourd] dynamic" not in s:
     assert old in s, "gaussian_model.create_from_pcd changed"
     g.write_text(s.replace(old, new))
@@ -79,8 +82,10 @@ print("patched dyn split", root)
 t = root / "train.py"
 s = t.read_text()
 old = "            render_pkg = render(viewpoint_cam, gaussians, pipe, background, stage=stage,cam_type=scene.dataset_type)"
-new = ("            render_pkg = render(viewpoint_cam, gaussians, pipe, (torch.rand(3, device=\"cuda\") if os.environ.get(\"FOURD_RANDBG\")"
-       " else background), stage=stage,cam_type=scene.dataset_type)   # [fourd] random bg")
+new = (
+    '            render_pkg = render(viewpoint_cam, gaussians, pipe, (torch.rand(3, device="cuda") if os.environ.get("FOURD_RANDBG")'
+    " else background), stage=stage,cam_type=scene.dataset_type)   # [fourd] random bg"
+)
 if "[fourd] random bg" not in s:
     assert old in s, "train.py render call changed"
     t.write_text(s.replace(old, new))

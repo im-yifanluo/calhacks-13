@@ -27,6 +27,7 @@ because memory.json uses URLs relative to it.
 World frame everywhere after S3: meters, +Y up, floor at y = 0.
 Camera matrices use OpenCV camera axes (x right, y down, z forward); merge converts for three.js.
 """
+
 from __future__ import annotations
 
 import struct
@@ -80,7 +81,9 @@ class Cameras(BaseModel):
 
 
 class WorldInfo(BaseModel):
-    T_vipe_to_world: Mat4 = Field(min_length=16, max_length=16)  # rotation + translation (+ scale) applied to ViPE output
+    T_vipe_to_world: Mat4 = Field(
+        min_length=16, max_length=16
+    )  # rotation + translation (+ scale) applied to ViPE output
     scale: float = 1.0  # 1.0 = trust ViPE's metric depth; set from eye height only if ViPE's scale looks wrong
     floorY: float = 0.0
     up: tuple[float, float, float] = (0.0, 1.0, 0.0)

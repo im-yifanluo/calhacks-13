@@ -8,6 +8,7 @@
 
 Pixel convention: integer pixel index, no +0.5: x = (u - cx) / fx * z.
 """
+
 from __future__ import annotations
 
 import os
@@ -15,7 +16,7 @@ import zipfile
 from functools import cached_property
 from pathlib import Path
 
-os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")   # must be set before OpenCV decodes its first EXR
+os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")  # must be set before OpenCV decodes its first EXR
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 
@@ -124,8 +125,9 @@ class Vipe:
     def sky_ids(self) -> list[int]:
         return self.ids_with({"sky"})
 
-    def static_mask(self, idx: int, depth: np.ndarray | None = None, margin_px: int = 0,
-                    extra_static: list[int] | None = None) -> np.ndarray | None:
+    def static_mask(
+        self, idx: int, depth: np.ndarray | None = None, margin_px: int = 0, extra_static: list[int] | None = None
+    ) -> np.ndarray | None:
         """Pixels that belong to the static scene: mask id 0, plus 'sky' pixels that are close by (ViPE's sky
         prompt also fires on bright, overexposed walls and lamps indoors; real sky is far away).
         margin_px widens the excluded people/objects. None when ViPE wrote no masks."""
@@ -134,7 +136,7 @@ class Vipe:
             return None
         static = m == 0
         if extra_static:
-            static |= np.isin(m, extra_static)                    # segmented, but kept as part of the room
+            static |= np.isin(m, extra_static)  # segmented, but kept as part of the room
         if self.sky_ids:
             d = self.depth(idx) if depth is None else depth
             static |= np.isin(m, self.sky_ids) & (d < 20.0)

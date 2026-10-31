@@ -2,18 +2,11 @@
 import assert from "node:assert/strict";
 import { DbConnection } from "../apps/web/src/module_bindings";
 const database = process.env.STDB_DATABASE || "memory-replay";
-const uri =
-  process.env.STDB_WS_URL || `ws://127.0.0.1:${process.env.STDB_PORT || 3055}`;
+const uri = process.env.STDB_WS_URL || `ws://127.0.0.1:${process.env.STDB_PORT || 3055}`;
 const clients: DbConnection[] = [];
 async function connect() {
   return new Promise<DbConnection>((resolve, reject) => {
-    const timeout = setTimeout(
-      () =>
-        reject(
-          new Error("Connect timed out: publish the current module first"),
-        ),
-      10000,
-    );
+    const timeout = setTimeout(() => reject(new Error("Connect timed out: publish the current module first")), 10000);
     const conn = DbConnection.builder()
       .withUri(uri)
       .withDatabaseName(database)
@@ -73,10 +66,7 @@ try {
     device: "phone",
   });
   await until(
-    () =>
-      [...leader.db.player.iter()].filter(
-        (p) => p.roomId === roomId && p.online,
-      ).length === 2,
+    () => [...leader.db.player.iter()].filter((p) => p.roomId === roomId && p.online).length === 2,
     "Presence did not converge",
   );
   const clock = (c: DbConnection) => c.db.timeline.roomId.find(roomId)!;
@@ -88,10 +78,7 @@ try {
   await leader.reducers.seek({ mediaUs: 2_000_000n });
   await leader.reducers.setPlaybackSpeed({ speed: 0.5 });
   await until(
-    () =>
-      clock(guest).paused &&
-      clock(guest).anchorMediaUs === 2_000_000n &&
-      clock(guest).speed === 0.5,
+    () => clock(guest).paused && clock(guest).anchorMediaUs === 2_000_000n && clock(guest).speed === 0.5,
     "Shared clock did not converge",
   );
   const late = await connect();
@@ -101,9 +88,7 @@ try {
     device: "quest",
   });
   assert.equal(clock(late).anchorMediaUs, 2_000_000n);
-  console.log(
-    "PASS: invite code, presence, late join, synchronized seek/pause/speed; guest writes rejected",
-  );
+  console.log("PASS: invite code, presence, late join, synchronized seek/pause/speed; guest writes rejected");
   await leader.reducers.createMemory({
     requestId: `${requestId}-video`,
     title: "Pending video test",
@@ -113,16 +98,10 @@ try {
     durationUs: 6_000_000n,
   });
   const video = leader.db.memory.requestId.find(`${requestId}-video`)!;
-  await assert.rejects(
-    guest.reducers.attachPartyMemory({ memoryId: video.id }),
-    /leader/,
-  );
+  await assert.rejects(guest.reducers.attachPartyMemory({ memoryId: video.id }), /leader/);
   await leader.reducers.attachPartyMemory({ memoryId: video.id });
   assert.equal(leader.db.room.id.find(roomId)!.memoryId, memory.id);
-  await until(
-    () => guest.db.party.roomId.find(roomId)?.pendingMemoryId === video.id,
-    "Pending scene did not arrive",
-  );
+  await until(() => guest.db.party.roomId.find(roomId)?.pendingMemoryId === video.id, "Pending scene did not arrive");
   const update = {
     memoryId: video.id,
     status: "processing",
@@ -130,10 +109,7 @@ try {
     manifestUrl: "",
     error: "",
   };
-  await assert.rejects(
-    guest.reducers.setMemoryStatus(update),
-    /assigned pipeline/,
-  );
+  await assert.rejects(guest.reducers.setMemoryStatus(update), /assigned pipeline/);
   await worker.reducers.setMemoryStatus(update);
   await worker.reducers.setMemoryStatus({
     ...update,
@@ -145,8 +121,7 @@ try {
     () =>
       [leader, guest, late].every(
         (c) =>
-          c.db.room.id.find(roomId)?.memoryId === video.id &&
-          c.db.party.roomId.find(roomId)?.pendingMemoryId === 0n,
+          c.db.room.id.find(roomId)?.memoryId === video.id && c.db.party.roomId.find(roomId)?.pendingMemoryId === 0n,
       ),
     "Ready scene did not converge",
   );
@@ -158,10 +133,7 @@ try {
   await leader.reducers.transferLeadership({ identity: guest.identity! });
   await assert.rejects(leader.reducers.seek({ mediaUs: 1_000_000n }), /leader/);
   await guest.reducers.seek({ mediaUs: 3_000_000n });
-  await until(
-    () => clock(late).anchorMediaUs === 3_000_000n,
-    "New leader seek did not arrive",
-  );
+  await until(() => clock(late).anchorMediaUs === 3_000_000n, "New leader seek did not arrive");
   guest.disconnect();
   await until(
     () => !leader.db.room.id.find(roomId)!.host.isEqual(guest.identity!),
@@ -170,16 +142,9 @@ try {
   const next = leader.db.room.id.find(roomId)!.host;
   const nextClient = next.isEqual(leader.identity!) ? leader : late;
   await nextClient.reducers.setPaused({ paused: false });
-  await until(
-    () => !clock(leader).paused && !clock(late).paused,
-    "Replacement leader cannot resume",
-  );
-  console.log(
-    "PASS: explicit leader transfer, revocation, disconnect election, replacement leader playback",
-  );
-  console.log(
-    `Party integration passed against ${database}. Test metadata retained under ${requestId}.`,
-  );
+  await until(() => !clock(leader).paused && !clock(late).paused, "Replacement leader cannot resume");
+  console.log("PASS: explicit leader transfer, revocation, disconnect election, replacement leader playback");
+  console.log(`Party integration passed against ${database}. Test metadata retained under ${requestId}.`);
 } finally {
   for (const conn of clients) conn.disconnect();
 }

@@ -15,13 +15,18 @@ describe("memory library handoff", () => {
     expect(link.pathname).toBe("/");
     expect(link.searchParams.get("memory")).toBe(manifestUrl);
   });
-  test.each(["", "javascript:alert(1)", "data:text/html,test", "https://user:password@example.test/file"])("rejects missing or unsafe scene URL %s", manifestUrl => {
-    const memory = { ...row, status: "ready", manifestUrl };
-    expect(viewerLink(memory, origin)).toBeUndefined();
-    expect(memoryPresentation(memory, false, origin).tone).toBe("failed");
-  });
+  test.each(["", "javascript:alert(1)", "data:text/html,test", "https://user:password@example.test/file"])(
+    "rejects missing or unsafe scene URL %s",
+    (manifestUrl) => {
+      const memory = { ...row, status: "ready", manifestUrl };
+      expect(viewerLink(memory, origin)).toBeUndefined();
+      expect(memoryPresentation(memory, false, origin).tone).toBe("failed");
+    },
+  );
   test("backend failure remains visible and progress is bounded", () => {
-    expect(memoryPresentation({ ...row, status: "failed", error: "Tracking lost" }, false, origin).detail).toBe("Tracking lost");
+    expect(memoryPresentation({ ...row, status: "failed", error: "Tracking lost" }, false, origin).detail).toBe(
+      "Tracking lost",
+    );
     expect(memoryPresentation({ ...row, status: "processing", progress: 2 }, false, origin).progress).toBe(100);
     expect(memoryPresentation({ ...row, status: "processing", progress: NaN }, false, origin).progress).toBe(0);
   });

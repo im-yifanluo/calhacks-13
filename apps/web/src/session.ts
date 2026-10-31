@@ -28,10 +28,10 @@ export const NOTICE_MS = 6000;
 
 /** LAN HTTP pages have getRandomValues, but not the secure-context-only randomUUID API. */
 export function memoryRequestId(): string {
-  return crypto.randomUUID?.() ?? Array.from(
-    crypto.getRandomValues(new Uint8Array(16)),
-    (byte) => byte.toString(16).padStart(2, "0"),
-  ).join("");
+  return (
+    crypto.randomUUID?.() ??
+    Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("")
+  );
 }
 
 export interface NoticeOptions {
@@ -98,13 +98,11 @@ export class Notice {
 }
 
 /** The status line's resting text while this page is in a room. */
-const roomHint = (code: string) =>
-  `In party ${code}. The leader controls time; everyone sees the same take.`;
+const roomHint = (code: string) => `In party ${code}. The leader controls time; everyone sees the same take.`;
 
 export type Device = "quest" | "phone" | "desktop";
 
-export const normalizeCode = (code: string | null | undefined) =>
-  (code ?? "").trim().toUpperCase();
+export const normalizeCode = (code: string | null | undefined) => (code ?? "").trim().toUpperCase();
 
 /** /CODE is canonical. Old ?room= invitations still work; a path code takes precedence. */
 export function roomCode(href: string): string {
@@ -147,10 +145,7 @@ export function sameManifest(a: string, b: string, base: string): boolean {
 /**
  * One server origin: /CODE joins a party, / starts solo. Scene URLs stay in the database.
  */
-export function roomUrl(
-  href: string,
-  code: string | null,
-): string {
+export function roomUrl(href: string, code: string | null): string {
   const url = new URL(href);
   url.pathname = code ? `/${normalizeCode(code)}` : "/";
   url.search = "";
@@ -159,20 +154,13 @@ export function roomUrl(
 }
 
 /** One automatic reload per target URL per tab, so a manifest that never matches cannot loop. */
-export function claimReload(
-  storage: Pick<Storage, "getItem" | "setItem">,
-  target: string,
-): boolean {
+export function claimReload(storage: Pick<Storage, "getItem" | "setItem">, target: string): boolean {
   if (storage.getItem(RELOAD_GUARD_KEY) === target) return false;
   storage.setItem(RELOAD_GUARD_KEY, target);
   return true;
 }
 
-export function deviceKind(
-  presenting: boolean,
-  userAgent: string,
-  touch: boolean,
-): Device {
+export function deviceKind(presenting: boolean, userAgent: string, touch: boolean): Device {
   if (presenting || /OculusBrowser|Quest/i.test(userAgent)) return "quest";
   return touch ? "phone" : "desktop";
 }
@@ -185,11 +173,7 @@ export function playerColor(value: number): THREE.Color {
 }
 
 /** Hands are shown only for headset players whose hand rows differ from the head (others send the head). */
-export function handVisible(
-  device: string,
-  head: THREE.Vector3,
-  hand: THREE.Vector3,
-): boolean {
+export function handVisible(device: string, head: THREE.Vector3, hand: THREE.Vector3): boolean {
   const d = hand.distanceTo(head);
   return device === "quest" && d > 0.05 && d < 1.5;
 }
@@ -286,9 +270,7 @@ export class Avatars {
     head.add(visor);
     const left = new THREE.Mesh(this.handGeometry, material);
     const right = new THREE.Mesh(this.handGeometry, material);
-    const label = new THREE.Sprite(
-      new THREE.SpriteMaterial({ transparent: true, depthWrite: false }),
-    );
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
     label.scale.set(0.6, 0.15, 1);
     root.add(head, left, right, label);
     this.group.add(root);
@@ -306,12 +288,7 @@ export class Avatars {
     return avatar;
   }
 
-  private drawLabel(
-    sprite: THREE.Sprite,
-    name: string,
-    device: string,
-    color: THREE.Color,
-  ) {
+  private drawLabel(sprite: THREE.Sprite, name: string, device: string, color: THREE.Color) {
     const canvas = document.createElement("canvas");
     canvas.width = 512;
     canvas.height = 128;
@@ -374,8 +351,7 @@ export interface SessionHost {
   showStatus(message: string): void;
 }
 
-const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
-  document.getElementById(id) as T;
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const setText = (element: Element | null, text: string) => {
   if (element && element.textContent !== text) element.textContent = text;
 };
@@ -494,7 +470,7 @@ export class Session {
       if (event.key === "Escape") {
         event.stopPropagation();
         // A fresh visit shows the party-code field; invite links open the scene directly (stdb/jerry-p4).
-    this.expand(!host.localImport && (!this.urlRoom || innerWidth > 650));
+        this.expand(!host.localImport && (!this.urlRoom || innerWidth > 650));
         ui.toggle.focus();
       }
     });
@@ -503,9 +479,15 @@ export class Session {
     this.expand(!host.localImport && (!this.urlRoom || innerWidth > 650));
     ui.create.onclick = () => void this.create();
     ui.attach.onclick = () => void this.attachScene();
-    ui.cancel.onclick = () => void this.act("scene", "Could not cancel", () => this.net.connection!.reducers.attachPartyMemory({ memoryId: 0n }));
+    ui.cancel.onclick = () =>
+      void this.act("scene", "Could not cancel", () =>
+        this.net.connection!.reducers.attachPartyMemory({ memoryId: 0n }),
+      );
     ui.reconnect.onclick = () => this.net.reconnect();
-    ui.speed.onchange = () => void this.act("clock", "Could not change speed", () => this.net.connection!.reducers.setPlaybackSpeed({ speed: Number(ui.speed.value) }));
+    ui.speed.onchange = () =>
+      void this.act("clock", "Could not change speed", () =>
+        this.net.connection!.reducers.setPlaybackSpeed({ speed: Number(ui.speed.value) }),
+      );
     ui.invite.onclick = () => ui.invite.select();
     ui.joinForm.onsubmit = (event) => {
       event.preventDefault();
@@ -527,25 +509,14 @@ export class Session {
     ui.uploadToggle.onclick = () => this.showUpload(ui.upload.hidden);
     if (location.pathname === "/upload") this.showUpload(true);
     // Players are labelled by device: re-send it when entering or leaving VR.
-    host.renderer.xr.addEventListener(
-      "sessionstart",
-      () => (this.profileDirty = true),
-    );
-    host.renderer.xr.addEventListener(
-      "sessionend",
-      () => (this.profileDirty = true),
-    );
+    host.renderer.xr.addEventListener("sessionstart", () => (this.profileDirty = true));
+    host.renderer.xr.addEventListener("sessionend", () => (this.profileDirty = true));
     for (const index of [0, 1]) {
       const controller = host.renderer.xr.getController(index);
       controller.addEventListener("connected", (event) => {
-        this.handedness[index] = (
-          event as unknown as { data?: XRInputSource }
-        ).data?.handedness;
+        this.handedness[index] = (event as unknown as { data?: XRInputSource }).data?.handedness;
       });
-      controller.addEventListener(
-        "disconnected",
-        () => (this.handedness[index] = undefined),
-      );
+      controller.addEventListener("disconnected", () => (this.handedness[index] = undefined));
     }
     this.net.addEventListener("change", () => this.onChange());
     this.net.connect();
@@ -592,8 +563,7 @@ export class Session {
       if (this.urlRoom) void this.join(this.urlRoom, true);
       // The server put this identity back in its old room on connect, but this page has no
       // room address, so it is a solo session: leave, or the others see a ghost.
-      else if (net.room)
-        void net.attempt(() => net.connection!.reducers.leaveRoom({}), null);
+      else if (net.room) void net.attempt(() => net.connection!.reducers.leaveRoom({}), null);
       return;
     }
     if (this.room && !this.busy) {
@@ -601,10 +571,19 @@ export class Session {
         // Back online but no longer in the room (the server dropped us): rejoin once per connection.
         this.rejoinCycle = this.readyCycle;
         void this.rejoin();
-      } else if (net.room && net.memory && this.sceneRevision !== undefined && net.party?.sceneRevision !== this.sceneRevision) {
+      } else if (
+        net.room &&
+        net.memory &&
+        this.sceneRevision !== undefined &&
+        net.party?.sceneRevision !== this.sceneRevision
+      ) {
         rememberRoomManifest(sessionStorage, this.room, net.memory.manifestUrl);
         this.navigate(roomUrl(location.href, this.room), `Opening “${net.memory.title}” for everyone…`);
-      } else if (net.room && net.memory && !sameManifest(net.memory.manifestUrl, this.host.manifestUrl, location.href)) {
+      } else if (
+        net.room &&
+        net.memory &&
+        !sameManifest(net.memory.manifestUrl, this.host.manifestUrl, location.href)
+      ) {
         this.entered(true);
       } else if (net.room && !this.adapter) this.startAdapter();
     }
@@ -613,11 +592,7 @@ export class Session {
   private who(): { name: string; device: Device } {
     return {
       name: this.saveName(),
-      device: deviceKind(
-        this.host.renderer.xr.isPresenting,
-        navigator.userAgent,
-        isTouchDevice(),
-      ),
+      device: deviceKind(this.host.renderer.xr.isPresenting, navigator.userAgent, isTouchDevice()),
     };
   }
 
@@ -652,32 +627,52 @@ export class Session {
     const manifestUrl = new URL(DEFAULT_MANIFEST, location.href).href;
     const response = await fetch(manifestUrl);
     if (!response.ok) throw new Error(`Demo manifest returned ${response.status}`);
-    const manifest = await response.json() as MemoryManifest;
+    const manifest = (await response.json()) as MemoryManifest;
     validateManifest(manifest);
-    const existing = this.net.memories.find(m => sameManifest(m.manifestUrl, manifestUrl, location.href) && m.status === "ready" && m.title === manifest.title);
+    const existing = this.net.memories.find(
+      (m) =>
+        sameManifest(m.manifestUrl, manifestUrl, location.href) && m.status === "ready" && m.title === manifest.title,
+    );
     if (existing) return existing.id;
     const requestId = memoryRequestId();
-    await this.net.callConnected(() => this.net.connection!.reducers.createMemory({ requestId, title: manifest.title,
-      sourceUrl: "", manifestUrl, pipelineIdentity: this.net.identity!,
-      durationUs: BigInt(Math.round(manifest.timeline.durationSec * 1e6)) }));
-    const row = this.net.memories.find(m => m.requestId === requestId);
+    await this.net.callConnected(() =>
+      this.net.connection!.reducers.createMemory({
+        requestId,
+        title: manifest.title,
+        sourceUrl: "",
+        manifestUrl,
+        pipelineIdentity: this.net.identity!,
+        durationUs: BigInt(Math.round(manifest.timeline.durationSec * 1e6)),
+      }),
+    );
+    const row = this.net.memories.find((m) => m.requestId === requestId);
     if (!row) throw new Error("Demo registration did not arrive; try again");
     return row.id;
   }
 
   private async create(): Promise<void> {
-    if (this.host.localImport) return this.panel.show("This imported scene is stored only in this browser. Host its files and register the HTTPS memory.json link before creating a party.");
+    if (this.host.localImport)
+      return this.panel.show(
+        "This imported scene is stored only in this browser. Host its files and register the HTTPS memory.json link before creating a party.",
+      );
     if (this.busy) return;
     const selection = this.ui.memories.value;
     this.busy = true;
     this.render();
-    const ok = await this.act("room", "Could not create a party", async () => {
-      const selected = this.net.memories.find(m => String(m.id) === selection);
-      const memoryId = selected?.status === "ready" ? selected.id : await this.demoMemory();
-      await this.net.callConnected(() => this.net.connection!.reducers.createParty({ memoryId, ...this.who() }));
-      if (selected && selected.status !== "ready")
-        await this.net.callConnected(() => this.net.connection!.reducers.attachPartyMemory({ memoryId: selected.id }));
-    }, true);
+    const ok = await this.act(
+      "room",
+      "Could not create a party",
+      async () => {
+        const selected = this.net.memories.find((m) => String(m.id) === selection);
+        const memoryId = selected?.status === "ready" ? selected.id : await this.demoMemory();
+        await this.net.callConnected(() => this.net.connection!.reducers.createParty({ memoryId, ...this.who() }));
+        if (selected && selected.status !== "ready")
+          await this.net.callConnected(() =>
+            this.net.connection!.reducers.attachPartyMemory({ memoryId: selected.id }),
+          );
+      },
+      true,
+    );
     this.busy = false;
     if (ok) this.entered(false);
     this.render();
@@ -693,7 +688,10 @@ export class Session {
       await this.net.connection!.reducers.attachPartyMemory({ memoryId });
     });
     this.busy = false;
-    if (ok) { this.panel.show("Scene selected. Everyone follows when it is ready."); this.onChange(); }
+    if (ok) {
+      this.panel.show("Scene selected. Everyone follows when it is ready.");
+      this.onChange();
+    }
     this.render();
   }
 
@@ -729,10 +727,13 @@ export class Session {
       // previous room on the server; abandonJoin leaves that too, or the others keep seeing a frozen avatar.
       this.abandonJoin(`Could not join room ${joinCode} (${error}). You're exploring on your own.`);
     else
-      this.panel.show(`Could not join party ${joinCode}: ${error}. Check the code and use the same app address as the host.`, {
-        kind: "room",
-        error: true,
-      });
+      this.panel.show(
+        `Could not join party ${joinCode}: ${error}. Check the code and use the same app address as the host.`,
+        {
+          kind: "room",
+          error: true,
+        },
+      );
     this.render();
   }
 
@@ -761,16 +762,12 @@ export class Session {
     const room = this.net.room,
       memory = this.net.memory;
     if (!room || !memory) {
-      this.abandonJoin(
-        "Joined, but the room's memory is missing from the library. You're exploring on your own.",
-      );
+      this.abandonJoin("Joined, but the room's memory is missing from the library. You're exploring on your own.");
       return;
     }
     const code = room.joinCode;
     rememberRoomManifest(sessionStorage, code, memory.manifestUrl);
-    if (
-      !sameManifest(memory.manifestUrl, this.host.manifestUrl, location.href)
-    ) {
+    if (!sameManifest(memory.manifestUrl, this.host.manifestUrl, location.href)) {
       // Nikko's viewer loads one manifest at boot: reload into the room's memory.
       const target = roomUrl(location.href, code);
       if (fromUrl && !claimReload(sessionStorage, target)) {
@@ -812,16 +809,9 @@ export class Session {
     const viewer = this.viewer;
     if (!viewer || this.adapter || !this.room || this.navigating) return;
     if (!this.net.ready || !this.net.room) return; // onChange retries once connected
-    if (
-      viewer.timeline.branches.length > 1 ||
-      viewer.busy ||
-      viewer.recording
-    ) {
+    if (viewer.timeline.branches.length > 1 || viewer.busy || viewer.recording) {
       // Local takes must not mix with the room's: start over from a fresh viewer.
-      this.navigate(
-        roomUrl(location.href, this.room),
-        `Joining room ${this.room}; local takes are cleared…`,
-      );
+      this.navigate(roomUrl(location.href, this.room), `Joining room ${this.room}; local takes are cleared…`);
       return;
     }
     const adapter = new NetAdapter(
@@ -841,9 +831,7 @@ export class Session {
     if (this.net.ready && this.net.room) {
       this.busy = true;
       this.render();
-      const ok = await this.act("room", "Could not leave the room", () =>
-        this.net.connection!.reducers.leaveRoom({}),
-      );
+      const ok = await this.act("room", "Could not leave the room", () => this.net.connection!.reducers.leaveRoom({}));
       this.busy = false;
       if (!ok) return this.render();
     }
@@ -886,7 +874,9 @@ export class Session {
     this.seeding = true;
     this.render();
     try {
-      const result = await seedLocalMemories(this.net, (done, total) => setText(this.ui.seed, `Loading ${done} of ${total}…`));
+      const result = await seedLocalMemories(this.net, (done, total) =>
+        setText(this.ui.seed, `Loading ${done} of ${total}…`),
+      );
       this.memoryKey = "";
       this.cardsKey = "";
       this.panel.show(seedSummary(result));
@@ -902,10 +892,7 @@ export class Session {
     this.adding = true;
     this.render();
     try {
-      const manifestUrl = resolveManifestUrl(
-        this.ui.libraryUrl.value.trim() || DEFAULT_MANIFEST,
-        location.href,
-      );
+      const manifestUrl = resolveManifestUrl(this.ui.libraryUrl.value.trim() || DEFAULT_MANIFEST, location.href);
       const existing = this.net.memories.find(
         (m) => sameManifest(m.manifestUrl, manifestUrl, location.href) && m.status === "ready",
       );
@@ -936,10 +923,10 @@ export class Session {
       this.memoryKey = "";
       this.panel.show(`Added “${manifest.title}” to the library.`);
     } catch (error) {
-      this.panel.show(
-        `Could not add it to the library: ${error instanceof Error ? error.message : String(error)}`,
-        { kind: "library", error: true },
-      );
+      this.panel.show(`Could not add it to the library: ${error instanceof Error ? error.message : String(error)}`, {
+        kind: "library",
+        error: true,
+      });
     } finally {
       this.adding = false;
       this.render();
@@ -983,9 +970,7 @@ export class Session {
     };
     const values = Object.values(pose);
     if (!values.every(Number.isFinite)) return;
-    const changed = values.some(
-      (v, i) => !(Math.abs(v - (this.lastPose[i] ?? NaN)) <= 0.001),
-    );
+    const changed = values.some((v, i) => !(Math.abs(v - (this.lastPose[i] ?? NaN)) <= 0.001));
     if (!changed && now - this.poseSentAt < POSE_REFRESH_MS) return;
     this.poseSentAt = now;
     this.lastPose = values;
@@ -998,13 +983,7 @@ export class Session {
     if (!this.room || !net.ready || !net.room || this.busy) return;
     if (this.viewer && (this.viewer.busy || this.viewer.recording)) return;
     const me = net.identity;
-    if (
-      me &&
-      [...net.connection!.db.objectState.iter()].some((o) =>
-        o.simOwner?.isEqual(me),
-      )
-    )
-      return;
+    if (me && [...net.connection!.db.objectState.iter()].some((o) => o.simOwner?.isEqual(me))) return;
     this.profileDirty = false;
     void this.act("profile", "Could not update your name", () =>
       net.connection!.reducers.joinRoom({
@@ -1035,8 +1014,7 @@ export class Session {
     if (failure === this.failureSeen) return;
     const previous = this.failureSeen;
     this.failureSeen = failure;
-    if (failure)
-      this.panel.show(failure.message, { kind: failure.kind, error: true });
+    if (failure) this.panel.show(failure.message, { kind: failure.kind, error: true });
     else if (previous) this.panel.resolve(previous.kind);
   }
 
@@ -1059,27 +1037,15 @@ export class Session {
         ? `Joining room ${this.urlRoom}…`
         : "Explore solo or join a party";
     setText(ui.label, label);
-    setText(
-      ui.summary,
-      this.room
-        ? `${this.room} · ${people}`
-        : this.urlRoom
-          ? "Joining…"
-          : "Solo",
-    );
+    setText(ui.summary, this.room ? `${this.room} · ${people}` : this.urlRoom ? "Joining…" : "Solo");
     if (ui.hudLabel) {
-      setText(
-        ui.hudLabel,
-        this.room ? `Party ${this.room} · ${people}` : "Solo session",
-      );
+      setText(ui.hudLabel, this.room ? `Party ${this.room} · ${people}` : "Solo session");
       ui.hudLabel.classList.toggle("shared", !!this.room);
     }
     const me = net.identity;
-    const peopleKey = `${room?.host.toHexString()}|${net.isLeader}|` + players
-      .map(
-        (p) => `${p.identity.toHexString()}:${p.name}:${p.device}:${p.color}`,
-      )
-      .join("|");
+    const peopleKey =
+      `${room?.host.toHexString()}|${net.isLeader}|` +
+      players.map((p) => `${p.identity.toHexString()}:${p.name}:${p.device}:${p.color}`).join("|");
     if (peopleKey !== this.peopleKey) {
       this.peopleKey = peopleKey;
       ui.people.replaceChildren(
@@ -1088,16 +1054,16 @@ export class Session {
           const dot = document.createElement("span");
           dot.className = "dot";
           dot.style.background = `#${playerColor(p.color).getHexString()}`;
-          item.append(
-            dot,
-            `${p.name} (${p.device})${me && p.identity.isEqual(me) ? " · you" : ""}`,
-          );
+          item.append(dot, `${p.name} (${p.device})${me && p.identity.isEqual(me) ? " · you" : ""}`);
           if (net.party && p.identity.isEqual(room!.host)) item.append(" · leader");
           else if (net.party && net.isLeader) {
             const transfer = document.createElement("button");
             transfer.textContent = "Make leader";
             transfer.setAttribute("aria-label", `Make ${p.name} leader`);
-            transfer.onclick = () => void this.act("leader", "Could not transfer leadership", () => net.connection!.reducers.transferLeadership({ identity: p.identity }));
+            transfer.onclick = () =>
+              void this.act("leader", "Could not transfer leadership", () =>
+                net.connection!.reducers.transferLeadership({ identity: p.identity }),
+              );
             item.append(transfer);
           }
           const profile = net.connection?.db.profile.identity.find(p.identity);
@@ -1108,7 +1074,13 @@ export class Session {
     }
     const idle = net.ready && !this.busy && !this.navigating;
     ui.create.disabled = this.busy || this.navigating || !!this.host.localImport;
-    ui.create.textContent = this.busy ? net.ready ? "Working…" : "Connecting…" : this.host.localImport ? "Local import · host files to share" : "Create party";
+    ui.create.textContent = this.busy
+      ? net.ready
+        ? "Working…"
+        : "Connecting…"
+      : this.host.localImport
+        ? "Local import · host files to share"
+        : "Create party";
     ui.sceneActions.hidden = !net.party || !net.isLeader;
     ui.attach.disabled = !idle;
     ui.cancel.hidden = !net.pendingMemory;
@@ -1120,15 +1092,28 @@ export class Session {
     ui.invite.value = this.room ? roomUrl(location.href, this.room) : "";
     ui.codeShare.hidden = !this.room;
     setText(ui.currentCode, this.room);
-    const leader = players.find(p => p.identity.isEqual(room!.host));
-    setText(ui.role, net.party ? net.isLeader ? "You are the leader · control playback below." : `${leader?.name || "The leader"} controls time. Look around and grab objects while paused.` : "");
+    const leader = players.find((p) => p.identity.isEqual(room!.host));
+    setText(
+      ui.role,
+      net.party
+        ? net.isLeader
+          ? "You are the leader · control playback below."
+          : `${leader?.name || "The leader"} controls time. Look around and grab objects while paused.`
+        : "",
+    );
     const pending = net.pendingMemory;
     ui.progress.hidden = !pending;
     ui.progress.value = pending?.progress ?? 0;
-    setText(ui.sceneStatus, pending
-      ? `${pending.title} · ${pending.status} ${Math.round(pending.progress * 100)}%. ${pending.status === "uploaded" ? "Waiting for a worker. " : ""}${pending.error || "The current scene stays until it is ready."}`
-      : net.party ? `Viewing ${net.memory?.title}. ${net.memory?.manifestUrl.includes("/demo/memory.json") ? "A synthetic demo." : ""}`
-      : this.host.localImport ? "This import lives in this browser only. Host its files to share it." : "Create a party to watch together, or join one with a code.");
+    setText(
+      ui.sceneStatus,
+      pending
+        ? `${pending.title} · ${pending.status} ${Math.round(pending.progress * 100)}%. ${pending.status === "uploaded" ? "Waiting for a worker. " : ""}${pending.error || "The current scene stays until it is ready."}`
+        : net.party
+          ? `Viewing ${net.memory?.title}. ${net.memory?.manifestUrl.includes("/demo/memory.json") ? "A synthetic demo." : ""}`
+          : this.host.localImport
+            ? "This import lives in this browser only. Host its files to share it."
+            : "Create a party to watch together, or join one with a code.",
+    );
     ui.join.disabled = this.busy || this.navigating;
     ui.join.textContent = this.busy && !net.ready ? "Connecting…" : "Join party";
     ui.solo.hidden = !!this.room || !!this.urlRoom;
@@ -1139,7 +1124,9 @@ export class Session {
     if (this.seedPending && net.ready && this.localCount) {
       this.seedPending = false;
       // Once is enough: a reload should not run it again.
-      const url = new URL(location.href); url.searchParams.delete("seed"); history.replaceState(history.state, "", url);
+      const url = new URL(location.href);
+      url.searchParams.delete("seed");
+      history.replaceState(history.state, "", url);
       void this.seedLocal();
     }
     ui.libraryAdd.textContent = this.adding ? "Adding…" : "Add to library";
@@ -1158,18 +1145,16 @@ export class Session {
     const select = this.ui.memories;
     const memories = this.net.memories;
     // Prefixed so an empty library still renders once (its hint).
-    const key = `library:${memories
-      .map((m) => `${m.id}:${m.title}:${m.status}:${m.progress}`)
-      .join("|")}`;
-    if (key === this.memoryKey) { this.renderCards(); return; }
+    const key = `library:${memories.map((m) => `${m.id}:${m.title}:${m.status}:${m.progress}`).join("|")}`;
+    if (key === this.memoryKey) {
+      this.renderCards();
+      return;
+    }
     this.memoryKey = key;
     const previous = select.value;
     select.replaceChildren(new Option("Synthetic demo · ready to play", "demo"));
     for (const m of memories) {
-      const option = new Option(
-        `#${m.id} ${m.title} · ${m.status} ${Math.round(m.progress * 100)}%`,
-        m.id.toString(),
-      );
+      const option = new Option(`#${m.id} ${m.title} · ${m.status} ${Math.round(m.progress * 100)}%`, m.id.toString());
       option.title = m.manifestUrl || m.sourceUrl;
       option.disabled = false;
       select.add(option);
@@ -1179,7 +1164,9 @@ export class Session {
     if (requested) this.selectRequest = "";
     const keep = ready.find((m) => m.id.toString() === previous);
     // With nothing picked yet, a party starts with the memory you are looking at.
-    const current = this.demoPicked ? undefined : ready.find((m) => sameManifest(m.manifestUrl, this.host.manifestUrl, location.href));
+    const current = this.demoPicked
+      ? undefined
+      : ready.find((m) => sameManifest(m.manifestUrl, this.host.manifestUrl, location.href));
     const choice = requested ?? keep ?? current;
     select.value = choice ? choice.id.toString() : "demo";
     this.renderCards();
@@ -1190,20 +1177,35 @@ export class Session {
    * still processing (or any, while you are in a party, where leaving would drop you out) is chosen as the party's scene.
    */
   private renderCards(): void {
-    const memories = this.net.memories, selected = this.ui.memories.value;
-    const key = JSON.stringify([selected, this.room, this.net.ready, this.net.isLeader, this.host.manifestUrl, this.localCount, this.seeding, String(this.net.memory?.id ?? ""),
-      memories.map((m) => [String(m.id), m.title, m.status, m.progress, m.manifestUrl, String(m.durationUs)])]);
+    const memories = this.net.memories,
+      selected = this.ui.memories.value;
+    const key = JSON.stringify([
+      selected,
+      this.room,
+      this.net.ready,
+      this.net.isLeader,
+      this.host.manifestUrl,
+      this.localCount,
+      this.seeding,
+      String(this.net.memory?.id ?? ""),
+      memories.map((m) => [String(m.id), m.title, m.status, m.progress, m.manifestUrl, String(m.durationUs)]),
+    ]);
     if (key === this.cardsKey) return;
     this.cardsKey = key;
     const picked = memories.find((m) => m.id.toString() === selected);
     const party = this.room ? this.net.memory : undefined;
-    setText(this.ui.sceneChoice, party
-      ? `Party scene: “${party.title}”${picked && picked.id !== party.id ? ` · selected: “${picked.title}”` : ""}`
-      : `Party scene: ${picked ? `“${picked.title}”` : "the synthetic demo"}`);
+    setText(
+      this.ui.sceneChoice,
+      party
+        ? `Party scene: “${party.title}”${picked && picked.id !== party.id ? ` · selected: “${picked.title}”` : ""}`
+        : `Party scene: ${picked ? `“${picked.title}”` : "the synthetic demo"}`,
+    );
     if (!memories.length) {
       const empty = document.createElement("li");
       empty.className = "memory-empty";
-      empty.textContent = this.net.ready ? "No memories yet. Upload a video or import a scene." : "Connecting to your memories…";
+      empty.textContent = this.net.ready
+        ? "No memories yet. Upload a video or import a scene."
+        : "Connecting to your memories…";
       if (this.localCount && this.net.ready) {
         // Dev: one tap fills the library with the scenes on this machine.
         const load = document.createElement("button");
@@ -1220,7 +1222,10 @@ export class Session {
     // Rebuilding the list must not drop keyboard focus: put it back on the same card.
     const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>(".memory-tile")?.dataset.id;
     this.ui.memoryCards.replaceChildren(...memories.map((m) => this.memoryCard(m, selected)));
-    if (focused) this.ui.memoryCards.querySelector<HTMLElement>(`.memory-tile[data-id="${focused}"]`)?.focus({ preventScroll: true });
+    if (focused)
+      this.ui.memoryCards
+        .querySelector<HTMLElement>(`.memory-tile[data-id="${focused}"]`)
+        ?.focus({ preventScroll: true });
   }
 
   private memoryCard(m: Multiplayer["memories"][number], selected: string): HTMLLIElement {
@@ -1231,8 +1236,17 @@ export class Session {
     const seconds = Math.max(0, Math.floor(Number(m.durationUs) / 1e6));
     const length = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
     const progress = Math.max(0, Math.min(100, Math.round((Number.isFinite(m.progress) ? m.progress : 0) * 100)));
-    const state = current ? "Now viewing" : link ? "Ready" : m.status === "failed" ? "Needs attention"
-      : m.status === "ready" ? "Scene unavailable" : m.status === "processing" ? `Processing ${progress}%` : "Uploaded";
+    const state = current
+      ? "Now viewing"
+      : link
+        ? "Ready"
+        : m.status === "failed"
+          ? "Needs attention"
+          : m.status === "ready"
+            ? "Scene unavailable"
+            : m.status === "processing"
+              ? `Processing ${progress}%`
+              : "Uploaded";
     let tile: HTMLAnchorElement | HTMLButtonElement;
     let action: string;
     if (link && !current && !inParty) {
@@ -1257,8 +1271,13 @@ export class Session {
           this.ui.memories.value = again ? "demo" : m.id.toString();
           this.demoPicked = again;
           this.renderCards();
-          this.panel.show(again ? `“${m.title}” deselected.` : inParty ? `“${m.title}” selected. Tap “Use the selected memory” to switch the party to it.`
-            : `“${m.title}” will be used when you create a party.`);
+          this.panel.show(
+            again
+              ? `“${m.title}” deselected.`
+              : inParty
+                ? `“${m.title}” selected. Tap “Use the selected memory” to switch the party to it.`
+                : `“${m.title}” will be used when you create a party.`,
+          );
         };
       }
     }
@@ -1281,7 +1300,10 @@ export class Session {
       shot.alt = "";
       shot.loading = "lazy";
       shot.decoding = "async";
-      shot.onerror = () => { previewMissing(preview); shot.remove(); };
+      shot.onerror = () => {
+        previewMissing(preview);
+        shot.remove();
+      };
       shot.src = preview;
       art.prepend(shot);
     }

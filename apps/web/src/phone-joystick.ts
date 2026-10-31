@@ -6,8 +6,7 @@ export const WALK_SPEED = 1.5;
 const UP = new THREE.Vector3(0, 1, 0);
 
 /** Phones and tablets (the pad is shown only there, via body.touch). */
-export const isTouchDevice = () =>
-  matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+export const isTouchDevice = () => matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
 
 /**
  * The phone WALK pad (from jerry's input-touch.ts). Dragging inside the pad moves the orbit camera

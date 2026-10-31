@@ -12,11 +12,16 @@ const worker = {
     const url = new URL(request.url);
     if (["GET", "HEAD"].includes(request.method)) {
       // Serving index.html via ASSETS can redirect to / and strip a party code.
-      const html = url.pathname === "/" || url.pathname === "/index.html" || /^\/[A-Z0-9]{7}\/?$/.test(url.pathname)
-        ? viewerHtml : ["/library", "/library/", "/library.html"].includes(url.pathname) ? libraryHtml : null;
-      if (html !== null) return new Response(request.method === "HEAD" ? null : html, {
-        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" },
-      });
+      const html =
+        url.pathname === "/" || url.pathname === "/index.html" || /^\/[A-Z0-9]{7}\/?$/.test(url.pathname)
+          ? viewerHtml
+          : ["/library", "/library/", "/library.html"].includes(url.pathname)
+            ? libraryHtml
+            : null;
+      if (html !== null)
+        return new Response(request.method === "HEAD" ? null : html, {
+          headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" },
+        });
       return env.ASSETS.fetch(request);
     }
     let binding = ctx.props?.CONNECTORS;

@@ -1,16 +1,16 @@
 """S5 objects: every prompted prop ViPE segmented -> a grabbable primitive with a 10 Hz track and velocity.
 
-  observe()  one pass over the keyframes: per mask id, its pixels, 3D position and extent (objects/observations.json)
-  group()    join ids that are re-detections of one object (same label, no time overlap, plausible distance)
-  track()    10 Hz positions: outlier rejection, gap filling (ballistic for throws), smoothing, velocity, rest
-  run()      + Claude (or a fallback table) for shape, size, density, colour -> objects/objects.json
+observe()  one pass over the keyframes: per mask id, its pixels, 3D position and extent (objects/observations.json)
+group()    join ids that are re-detections of one object (same label, no time overlap, plausible distance)
+track()    10 Hz positions: outlier rejection, gap filling (ballistic for throws), smoothing, velocity, rest
+run()      + Claude (or a fallback table) for shape, size, density, colour -> objects/objects.json
 """
-from __future__ import annotations
 
-import os
+from __future__ import annotations
 
 import json
 import math
+import os
 from pathlib import Path
 
 import cv2
@@ -19,16 +19,25 @@ from scipy.signal import savgol_filter
 
 from .handoff import FramesInfo, ObjectsFragment, ObjectSpec, object_slug
 from .manifest import DynamicObject, Keyframe
-from .vipe_io import (HAND_PHRASES, IGNORED_PHRASES, PEOPLE_PHRASES, Frames, Vipe, backproject, depth_edges, erode,
-                      transform)
+from .vipe_io import (
+    HAND_PHRASES,
+    IGNORED_PHRASES,
+    PEOPLE_PHRASES,
+    Frames,
+    Vipe,
+    backproject,
+    depth_edges,
+    erode,
+    transform,
+)
 from .world import WorldPoses
 
 G = np.array([0.0, -9.81, 0.0])
-MIN_OBS = 3                 # keyframes an object must be seen in
-PROP_MOTION = os.environ.get("MEMREPLAY_PROP_MOTION", "1") == "1"   # 0 parks every prop (the demo footage); see run()
-MAX_PROPS = int(os.environ.get("MEMREPLAY_MAX_PROPS", "12"))         # most-seen props kept; a hall of cups is not a prop set
-MAX_EXTENT = 1.2            # m; bigger "objects" are furniture or bad masks
-REST_SPEED = 0.25           # m/s
+MIN_OBS = 3  # keyframes an object must be seen in
+PROP_MOTION = os.environ.get("MEMREPLAY_PROP_MOTION", "1") == "1"  # 0 parks every prop (the demo footage); see run()
+MAX_PROPS = int(os.environ.get("MEMREPLAY_MAX_PROPS", "12"))  # most-seen props kept; a hall of cups is not a prop set
+MAX_EXTENT = 1.2  # m; bigger "objects" are furniture or bad masks
+REST_SPEED = 0.25  # m/s
 
 
 # --- observe -----------------------------------------------------------------------------------------
@@ -71,15 +80,29 @@ def observe(work: Path, v: Vipe | None = None) -> dict:
                 ys, xs = np.nonzero(full)
                 zmed = float(np.median(pts[:, 2]))
                 K = v.K(idx)
-                sc = float(np.linalg.norm(Tc[:3, 0]))              # world scale (S3)
+                sc = float(np.linalg.norm(Tc[:3, 0]))  # world scale (S3)
                 sil = [(xs.max() - xs.min() + 1) * zmed * sc / K[0, 0], (ys.max() - ys.min() + 1) * zmed * sc / K[1, 1]]
                 if gray is None:
                     gray = cv2.cvtColor(reader.get(idx), cv2.COLOR_RGB2GRAY)
                 x0, y0, x1, y1 = int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
-                sharp = float(cv2.Laplacian(gray[y0:y1, x0:x1], cv2.CV_64F).var()) if (x1 - x0) > 3 and (y1 - y0) > 3 else 0.0
-                obs[i].append({"idx": idx, "area": area, "bbox": [x0, y0, x1, y1], "pos": np.median(pw, 0).tolist(),
-                               "ext": (hi - lo).tolist(), "sil": sil, "cam": Tc[:3, 3].tolist(), "sharp": sharp,
-                               "touches_border": bool(x0 <= 1 or y0 <= 1 or x1 >= m.shape[1] - 1 or y1 >= m.shape[0] - 1)})
+                sharp = (
+                    float(cv2.Laplacian(gray[y0:y1, x0:x1], cv2.CV_64F).var())
+                    if (x1 - x0) > 3 and (y1 - y0) > 3
+                    else 0.0
+                )
+                obs[i].append(
+                    {
+                        "idx": idx,
+                        "area": area,
+                        "bbox": [x0, y0, x1, y1],
+                        "pos": np.median(pw, 0).tolist(),
+                        "ext": (hi - lo).tolist(),
+                        "sil": sil,
+                        "cam": Tc[:3, 3].tolist(),
+                        "sharp": sharp,
+                        "touches_border": bool(x0 <= 1 or y0 <= 1 or x1 >= m.shape[1] - 1 or y1 >= m.shape[0] - 1),
+                    }
+                )
     out = {"phrases": {str(i): v.phrases[i] for i in cand}, "obs": {str(i): o for i, o in obs.items() if o}}
     (work / "objects").mkdir(exist_ok=True)
     (work / "objects" / "observations.json").write_text(json.dumps(out))
@@ -137,7 +160,7 @@ def group(observations: dict, fps: float) -> list[dict]:
             d = float(np.linalg.norm(_centre(o["obs"]) - c))
             shared = frames_it & {x["idx"] for x in o["obs"]}
             if shared and not set(it["ids"]) <= set(o["ids"]) and d > 0.15:
-                continue                                         # seen side by side: two objects
+                continue  # seen side by side: two objects
             ok = d < 0.5
             last, first = o["obs"][-1], it["obs"][0]
             if not ok and last["idx"] < first["idx"]:
@@ -150,7 +173,7 @@ def group(observations: dict, fps: float) -> list[dict]:
         else:
             best["ids"] = sorted(set(best["ids"]) | set(it["ids"]))
             merged = {o["idx"]: o for o in best["obs"]}
-            for o in it["obs"]:                                 # one sighting per frame: keep the bigger view
+            for o in it["obs"]:  # one sighting per frame: keep the bigger view
                 if o["idx"] not in merged or o["area"] > merged[o["idx"]]["area"]:
                     merged[o["idx"]] = o
             best["obs"] = [merged[k] for k in sorted(merged)]
@@ -171,7 +194,9 @@ def _hampel(P: np.ndarray, win: int = 3, k: float = 3.0, floor: float = 0.08) ->
     return ok
 
 
-def track(samples: list[tuple[int, np.ndarray]], key_stride: int, fps: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def track(
+    samples: list[tuple[int, np.ndarray]], key_stride: int, fps: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """samples: (frame idx, world position) for one object. Returns keyframe times, positions, velocities on the
     10 Hz grid between the first and last sighting."""
     dt = key_stride / fps
@@ -201,16 +226,19 @@ def track(samples: list[tuple[int, np.ndarray]], key_stride: int, fps: float) ->
         moved = np.linalg.norm(p1 - p0)
         v0 = (p1 - p0 - 0.5 * G * T * T) / T
         apex = p0[1] + max(0.0, v0[1]) ** 2 / (2 * 9.81)
-        j = a[max(0, len(a) - 3)]                                 # was it already moving that way before the gap?
+        j = a[max(0, len(a) - 3)]  # was it already moving that way before the gap?
         v_before = (pos[i0] - pos[j]) / ((i0 - j) * dt) if i0 > j else None
-        throw = (v_before is not None and np.linalg.norm(v_before) > REST_SPEED
-                 and np.linalg.norm(v_before - v0) < max(1.5, 0.5 * np.linalg.norm(v0)))
-        if moved > 0.4 and T <= 1.2 and apex < 3.0 and throw:     # flew through the gap: projectile arc
-            pos[i0 + 1:i1] = p0 + np.outer(ts, v0) + 0.5 * np.outer(ts ** 2, G)
-            vel[i0 + 1:i1] = v0 + np.outer(ts, G)
-            ballistic[i0 + 1:i1] = True
+        throw = (
+            v_before is not None
+            and np.linalg.norm(v_before) > REST_SPEED
+            and np.linalg.norm(v_before - v0) < max(1.5, 0.5 * np.linalg.norm(v0))
+        )
+        if moved > 0.4 and T <= 1.2 and apex < 3.0 and throw:  # flew through the gap: projectile arc
+            pos[i0 + 1 : i1] = p0 + np.outer(ts, v0) + 0.5 * np.outer(ts**2, G)
+            vel[i0 + 1 : i1] = v0 + np.outer(ts, G)
+            ballistic[i0 + 1 : i1] = True
         else:
-            pos[i0 + 1:i1] = p0 + np.outer(ts / T, p1 - p0)
+            pos[i0 + 1 : i1] = p0 + np.outer(ts / T, p1 - p0)
     # velocity: central differences on the filled track (one-sided at the ends)
     if len(K) >= 2:
         g = np.gradient(pos, dt, axis=0)
@@ -219,11 +247,11 @@ def track(samples: list[tuple[int, np.ndarray]], key_stride: int, fps: float) ->
         vel[:] = 0
     # at rest: freeze jitter so a paused object doesn't drift
     speed = np.linalg.norm(vel, axis=1)
-    still = (speed < REST_SPEED) & known                       # gap-filled frames are guesses, not rests
+    still = (speed < REST_SPEED) & known  # gap-filled frames are guesses, not rests
     i = 0
     while i < len(K):
         if still[i]:
-            j = i + 1                                          # grow the rest only while it stays in place
+            j = i + 1  # grow the rest only while it stays in place
             while j < len(K) and still[j] and np.linalg.norm(pos[j] - np.median(pos[i:j], 0)) < 0.10:
                 j += 1
             if (j - i) * dt >= 0.5:
@@ -324,13 +352,37 @@ class Support:
 
 
 # --- the stage -----------------------------------------------------------------------------------------
-MAX_PROP = 1.0      # m; bigger things stay part of the room
+MAX_PROP = 1.0  # m; bigger things stay part of the room
 
 
 # Labels that are clothing or carried by a person: they belong to the moving person (the ghost), and as "props"
 # they would slide around the room on their own.
-WORN = ("lanyard", "badge", "shoe", "sneaker", "boot", "hat", "cap", "glasses", "headphone", "earbud", "watch",
-        "phone", "backpack", "bag", "purse", "jacket", "hoodie", "shirt", "mask", "cable", "wire", "cord", "hand", "camera")
+WORN = (
+    "lanyard",
+    "badge",
+    "shoe",
+    "sneaker",
+    "boot",
+    "hat",
+    "cap",
+    "glasses",
+    "headphone",
+    "earbud",
+    "watch",
+    "phone",
+    "backpack",
+    "bag",
+    "purse",
+    "jacket",
+    "hoodie",
+    "shirt",
+    "mask",
+    "cable",
+    "wire",
+    "cord",
+    "hand",
+    "camera",
+)
 
 
 def select(work: Path, use_claude: bool | None = None) -> list[dict]:
@@ -358,21 +410,27 @@ def select(work: Path, use_claude: bool | None = None) -> list[dict]:
         if max(seen) > MAX_EXTENT:
             out.append({**entry, "keep": False, "reason": f"too big ({max(seen):.1f} m)"})
             continue
-        if any(w in g["label"].lower() for w in WORN):          # things on people move with the person, not as props
+        if any(w in g["label"].lower() for w in WORN):  # things on people move with the person, not as props
             out.append({**entry, "keep": False, "reason": "worn or held"})
             continue
         crop, color = best_crop(work, g, work / "objects" / "crops" / f"{oid}.jpg")
         bottom = float(np.median([o["pos"][1] - o["ext"][1] / 2 for o in g["obs"]]))
         entry["bottom_above_floor_m"] = bottom
         source, spec = "fallback", claude.fallback_spec(g["label"], seen, color)
-        if bottom > 2.0:                                    # nothing rests 2 m up: mounted
+        if bottom > 2.0:  # nothing rests 2 m up: mounted
             spec.movable = False
         # objects/manual_specs.json: {label or id: {shape, size_m, density_kg_m3, grabbable, movable}} written by a
         # person (or Claude in chat) when the API is unavailable; wins over the API
         man = manual.get(oid) or manual.get(g["label"])
         if man:
-            spec, source = spec.model_copy(update={k: (tuple(v) if k == "size_m" else v) for k, v in man.items()
-                                                   if k in ObjectSpec.model_fields}), "manual"
+            spec, source = (
+                spec.model_copy(
+                    update={
+                        k: (tuple(v) if k == "size_m" else v) for k, v in man.items() if k in ObjectSpec.model_fields
+                    }
+                ),
+                "manual",
+            )
         elif use_claude:
             try:
                 spec, source = claude.describe(crop, g["label"], seen, bottom), "claude"
@@ -380,13 +438,21 @@ def select(work: Path, use_claude: bool | None = None) -> list[dict]:
                 print(f"[objects] Claude failed for {oid} ({e}); using the fallback table")
         spec = clamp_spec(spec, seen)
         keep = spec.grabbable and spec.movable and max(spec.size_m) <= MAX_PROP
-        reason = ("" if keep else "mounted/fixed" if not spec.movable else "not grabbable" if not spec.grabbable
-                  else f"too big ({max(spec.size_m):.1f} m)")
-        out.append({**entry, "keep": bool(keep), "reason": reason,
-                    "spec": spec.model_dump(), "spec_source": source})
+        reason = (
+            ""
+            if keep
+            else "mounted/fixed"
+            if not spec.movable
+            else "not grabbable"
+            if not spec.grabbable
+            else f"too big ({max(spec.size_m):.1f} m)"
+        )
+        out.append({**entry, "keep": bool(keep), "reason": reason, "spec": spec.model_dump(), "spec_source": source})
     (work / "objects" / "selection.json").write_text(json.dumps(out))
-    print(f"[objects] kept {sum(e['keep'] for e in out)} of {len(out)}: "
-          + ", ".join(f"{e['id']}{'' if e['keep'] else ' (' + e['reason'] + ')'}" for e in out))
+    print(
+        f"[objects] kept {sum(e['keep'] for e in out)} of {len(out)}: "
+        + ", ".join(f"{e['id']}{'' if e['keep'] else ' (' + e['reason'] + ')'}" for e in out)
+    )
     return out
 
 
@@ -409,38 +475,49 @@ def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
     result, report = [], []
     for e in selection:
         if not e["keep"]:
-            report.append({"id": e["id"], "label": e["label"], "kept": False, "reason": e["reason"], "mask_ids": e["ids"]})
+            report.append(
+                {"id": e["id"], "label": e["label"], "kept": False, "reason": e["reason"], "mask_ids": e["ids"]}
+            )
             continue
         g, oid, seen, source = e, e["id"], tuple(e["observed_size_m"]), e["spec_source"]
         spec = ObjectSpec.model_validate(e["spec"])
         half_h = spec.size_m[1] / 2
-        depth_bias = 0.35 * min(spec.size_m)                   # the median of the visible surface sits in front
+        depth_bias = 0.35 * min(spec.size_m)  # the median of the visible surface sits in front
         samples = []
         for o in sorted(g["obs"], key=lambda o: o["idx"]):
             p, c = np.array(o["pos"]), np.array(o["cam"])
             ray = p - c
             samples.append((o["idx"], p + depth_bias * ray / max(np.linalg.norm(ray), 1e-6), not o["touches_border"]))
-        whole = [s for s in samples if s[2]]                    # views cut by the image edge bias a static centre
+        whole = [s for s in samples if s[2]]  # views cut by the image edge bias a static centre
         S = np.array([s[1] for s in (whole if len(whole) >= 3 else samples)])
         centre = np.median(S, 0)
         dist = np.linalg.norm(S - centre, axis=1)
         spread = float(np.percentile(dist, 80))
         # a sustained excursion (3 of 5 sightings in a row) is real motion even if it is a small share of the clip
         from scipy.ndimage import median_filter as _mf
+
         excursion = float(_mf(dist, size=5, mode="nearest").max()) if len(dist) >= 5 else spread
         thr = max(0.2, 0.75 * max(spec.size_m))
         static = spread < thr and excursion < thr
         if static:
             # never moved: the scatter is depth noise and changing viewpoints, not motion
-            t, P, V = np.array([samples[0][0], samples[-1][0]]) / frames.fps, np.array([centre, centre]), np.zeros((2, 3))
+            t, P, V = (
+                np.array([samples[0][0], samples[-1][0]]) / frames.fps,
+                np.array([centre, centre]),
+                np.zeros((2, 3)),
+            )
         else:
             t, P, V = track([(i, q) for i, q, _ in samples], frames.key_stride, frames.fps)
         # resting at the ends: the object exists for the whole memory (hold its first/last place). Moving or in the
         # air at an end (thrown in or out of view): only show it while it was seen, rather than leave it floating.
         dur = frames.duration_sec
+
         def airborne(k):
-            return (not static and (np.linalg.norm(V[k]) > REST_SPEED or
-                    (support.H is not None and P[k, 1] - half_h - support(P[k, 0], P[k, 2]) > 0.12)))
+            return not static and (
+                np.linalg.norm(V[k]) > REST_SPEED
+                or (support.H is not None and P[k, 1] - half_h - support(P[k, 0], P[k, 2]) > 0.12)
+            )
+
         vis0 = float(t[0]) if airborne(0) else 0.0
         vis1 = float(t[-1]) if airborne(-1) else float(dur)
         if t[0] > 0 and vis0 == 0.0:
@@ -454,7 +531,7 @@ def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
             sp = np.linalg.norm(V, axis=1)
             flying = sp > 1.5
             runs = np.diff(np.flatnonzero(np.diff(np.r_[False, flying, False])))[::2] if flying.any() else np.array([0])
-            sustained_flight = bool(runs.max() >= 3)              # >= 0.3 s above 1.5 m/s: a real throw or carry
+            sustained_flight = bool(runs.max() >= 3)  # >= 0.3 s above 1.5 m/s: a real throw or carry
             med = np.median(P, axis=0)
             spread90 = float(np.percentile(np.linalg.norm(P - med, axis=1), 90))
             # PROP_MOTION off (MEMREPLAY_PROP_MOTION=0, used for the demo footage): every prop is parked, because the tracker's identity
@@ -472,26 +549,49 @@ def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
             floor = support(P[k, 0], P[k, 2])
             gap = P[k, 1] - half_h - floor
             resting = not V[k].any()
-            if gap < 0 or (resting and gap < 0.12):           # inside the support, or hovering just above it at rest
+            if gap < 0 or (resting and gap < 0.12):  # inside the support, or hovering just above it at rest
                 P[k, 1] = floor + half_h
                 if V[k, 1] < 0 and np.linalg.norm(V[k]) < 1.0:
                     V[k, 1] = 0.0
         # density x box volume runs away on things whose box is mostly air (a cable across a stage came out at
         # 125 kg, a lanyard at 16 kg): nothing a hand picks up weighs more than ~15 kg, nothing less than 10 g
         mass = float(np.clip(spec.density_kg_m3 * volume(spec), 0.01, 15.0))
-        result.append(DynamicObject(
-            id=oid, label=spec.label or g["label"],
-            visual={"kind": "primitive", "shape": spec.shape, "size": spec.size_m, "color": spec.color},
-            collider=collider(spec), mass=round(mass, 4), grabbable=spec.grabbable,
-            visibleFrom=vis0, visibleTo=vis1,
-            track=[Keyframe(t=round(float(tt), 4), p=tuple(np.round(p, 4)), q=(0, 0, 0, 1), v=tuple(np.round(vv, 4)))
-                   for tt, p, vv in zip(t, P, V)]))
+        result.append(
+            DynamicObject(
+                id=oid,
+                label=spec.label or g["label"],
+                visual={"kind": "primitive", "shape": spec.shape, "size": spec.size_m, "color": spec.color},
+                collider=collider(spec),
+                mass=round(mass, 4),
+                grabbable=spec.grabbable,
+                visibleFrom=vis0,
+                visibleTo=vis1,
+                track=[
+                    Keyframe(t=round(float(tt), 4), p=tuple(np.round(p, 4)), q=(0, 0, 0, 1), v=tuple(np.round(vv, 4)))
+                    for tt, p, vv in zip(t, P, V)
+                ],
+            )
+        )
         speeds = np.linalg.norm(V, axis=1)
-        report.append({"id": oid, "label": spec.label, "kept": True, "mask_ids": g["ids"], "sightings": len(g["obs"]), "spec_source": source,
-                       "static": bool(static), "sighting_spread_m": round(spread, 3),
-                       "shape": spec.shape, "size_m": spec.size_m, "observed_size_m": seen, "mass_kg": round(mass, 3),
-                       "visible": [float(t[0]), float(t[-1])], "max_speed_m_s": float(speeds.max()),
-                       "path_length_m": float(np.sum(np.linalg.norm(np.diff(P, axis=0), axis=1))) if len(P) > 1 else 0.0})
+        report.append(
+            {
+                "id": oid,
+                "label": spec.label,
+                "kept": True,
+                "mask_ids": g["ids"],
+                "sightings": len(g["obs"]),
+                "spec_source": source,
+                "static": bool(static),
+                "sighting_spread_m": round(spread, 3),
+                "shape": spec.shape,
+                "size_m": spec.size_m,
+                "observed_size_m": seen,
+                "mass_kg": round(mass, 3),
+                "visible": [float(t[0]), float(t[-1])],
+                "max_speed_m_s": float(speeds.max()),
+                "path_length_m": float(np.sum(np.linalg.norm(np.diff(P, axis=0), axis=1))) if len(P) > 1 else 0.0,
+            }
+        )
     if len(result) > MAX_PROPS:
         sight = {r["id"]: r.get("sightings", 0) for r in report}  # report also lists dropped objects: match by id
         keep_ids = {o.id for o in sorted(result, key=lambda o: -sight.get(o.id, 0))[:MAX_PROPS]}
@@ -500,6 +600,10 @@ def run(work: Path, use_claude: bool | None = None) -> list[DynamicObject]:
         report = [r for r in report if r["id"] in keep_ids or not r.get("kept")]
     (work / "objects" / "objects.json").write_text(ObjectsFragment(objects=result).model_dump_json(indent=2))
     (work / "objects" / "report.json").write_text(json.dumps(report, indent=2))
-    print(f"[objects] {len(result)} objects: " + ", ".join(f"{r['id']} ({r['shape']}, {r['mass_kg']} kg, "
-                                                          f"{r['sightings']} sightings)" for r in report if r["kept"]))
+    print(
+        f"[objects] {len(result)} objects: "
+        + ", ".join(
+            f"{r['id']} ({r['shape']}, {r['mass_kg']} kg, {r['sightings']} sightings)" for r in report if r["kept"]
+        )
+    )
     return result

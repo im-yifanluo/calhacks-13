@@ -8,6 +8,7 @@ Worker env (same names as server/upload/.env.example): STDB_HTTP_URL, STDB_DATAB
 PIPELINE_IDENTITY, and for publishing S3_ENDPOINT, S3_REGION, S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
 ASSET_BASE_URL (public base URL of the bucket). MEMREPLAY_WORK (default $WORK or ./work) holds the work dirs.
 """
+
 from __future__ import annotations
 
 import json
@@ -20,8 +21,18 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-PROGRESS = {"normalize": 0.15, "nouns": 0.2, "vipe": 0.55, "world": 0.6, "l0": 0.7, "objects": 0.8, "background": 0.92, "refine": 0.94, "bake": 0.95,
-            "layers": 0.97}
+PROGRESS = {
+    "normalize": 0.15,
+    "nouns": 0.2,
+    "vipe": 0.55,
+    "world": 0.6,
+    "l0": 0.7,
+    "objects": 0.8,
+    "background": 0.92,
+    "refine": 0.94,
+    "bake": 0.95,
+    "layers": 0.97,
+}
 
 
 def viewer_files(work: Path) -> list[Path]:
@@ -33,6 +44,7 @@ def viewer_files(work: Path) -> list[Path]:
             continue
         m = json.loads((work / name).read_text())
         files.append(name)
+
         def refs(value):
             if isinstance(value, dict):
                 if value.get("kind") == "splat-sequence":
@@ -47,8 +59,13 @@ def viewer_files(work: Path) -> list[Path]:
                 for child in value:
                     if isinstance(child, (dict, list)):
                         yield from refs(child)
+
         for ref in refs(m):
-            if not isinstance(ref, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./-]*", ref) or any(p in ("", ".", "..") for p in ref.split("/")):
+            if (
+                not isinstance(ref, str)
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./-]*", ref)
+                or any(p in ("", ".", "..") for p in ref.split("/"))
+            ):
                 raise ValueError("Scene assets must use safe relative paths")
             file = work / ref
             if not file.is_file() or not file.stat().st_size or work.resolve() not in file.resolve().parents:
@@ -68,8 +85,14 @@ def publish_dir(work: Path, dest: Path) -> list[Path]:
     return out
 
 
-CONTENT_TYPES = {".json": "application/json", ".m4a": "audio/mp4", ".spz": "application/octet-stream",
-                 ".ply": "application/octet-stream", ".glb": "model/gltf-binary", ".bin": "application/octet-stream"}
+CONTENT_TYPES = {
+    ".json": "application/json",
+    ".m4a": "audio/mp4",
+    ".spz": "application/octet-stream",
+    ".ply": "application/octet-stream",
+    ".glb": "model/gltf-binary",
+    ".bin": "application/octet-stream",
+}
 
 
 def publish_s3(work: Path, prefix: str) -> str:
@@ -80,8 +103,15 @@ def publish_s3(work: Path, prefix: str) -> str:
     bucket = os.environ["S3_BUCKET"]
     for f in sorted(viewer_files(work), key=lambda p: p.name == "memory.json"):
         key = f"{prefix.rstrip('/')}/{f.relative_to(work).as_posix()}"
-        s3.upload_file(str(f), bucket, key, ExtraArgs={"ContentType": CONTENT_TYPES.get(f.suffix, "application/octet-stream"),
-                                                       "CacheControl": "public, max-age=3600"})
+        s3.upload_file(
+            str(f),
+            bucket,
+            key,
+            ExtraArgs={
+                "ContentType": CONTENT_TYPES.get(f.suffix, "application/octet-stream"),
+                "CacheControl": "public, max-age=3600",
+            },
+        )
     return f"{os.environ['ASSET_BASE_URL'].rstrip('/')}/{prefix.rstrip('/')}/memory.json"
 
 
@@ -89,10 +119,16 @@ def publish_s3(work: Path, prefix: str) -> str:
 def _stdb(path: str, body) -> bytes:
     base = os.environ["STDB_HTTP_URL"].rstrip("/")
     data = body.encode() if isinstance(body, str) else json.dumps(body).encode()
-    req = urllib.request.Request(f"{base}/v1/database/{os.environ['STDB_DATABASE']}/{path}", data=data, method="POST",
-                                 headers={"Authorization": "Bearer " + os.environ["PIPELINE_TOKEN"],
-                                          "User-Agent": "memos-pipeline/1.0",
-                                          "Content-Type": "text/plain" if isinstance(body, str) else "application/json"})
+    req = urllib.request.Request(
+        f"{base}/v1/database/{os.environ['STDB_DATABASE']}/{path}",
+        data=data,
+        method="POST",
+        headers={
+            "Authorization": "Bearer " + os.environ["PIPELINE_TOKEN"],
+            "User-Agent": "memos-pipeline/1.0",
+            "Content-Type": "text/plain" if isinstance(body, str) else "application/json",
+        },
+    )
     opener = urllib.request.build_opener(_NoRedirect)
     for attempt in range(3):
         try:
@@ -104,7 +140,7 @@ def _stdb(path: str, body) -> bytes:
         except (urllib.error.URLError, TimeoutError):
             if attempt == 2:
                 raise
-        time.sleep(2 ** attempt)
+        time.sleep(2**attempt)
 
 
 def set_status(memory_id: int, status: str, progress: float, manifest_url: str = "", error: str = "") -> None:
@@ -166,8 +202,9 @@ def pending_jobs(memory_id: int | None = None) -> list[dict]:
     raw = json.loads(_stdb("sql", query))
     jobs = []
     for stmt in raw:
-        cols = [e["name"]["some"] if isinstance(e.get("name"), dict) else e.get("name")
-                for e in stmt["schema"]["elements"]]
+        cols = [
+            e["name"]["some"] if isinstance(e.get("name"), dict) else e.get("name") for e in stmt["schema"]["elements"]
+        ]
         for row in stmt["rows"]:
             r = dict(zip(cols, row))
             pid = _identity_hex(r.get("pipelineIdentity", r.get("pipeline_identity")))
@@ -183,7 +220,7 @@ def process(job: dict, root: Path) -> str:
 
     mid = int(job["id"])
     rid = re.sub(r"[^A-Za-z0-9_-]", "", str(job.get("requestId") or job.get("request_id") or ""))[:36]
-    key = f"{mid}-{rid}" if rid else str(mid)                   # ids restart after a database reset
+    key = f"{mid}-{rid}" if rid else str(mid)  # ids restart after a database reset
     work = root / f"memory-{key}"
     work.mkdir(parents=True, exist_ok=True)
     progress = 0.1
@@ -194,17 +231,18 @@ def process(job: dict, root: Path) -> str:
     if not sc.allowed_source(src, base, owner=_identity_hex(job.get("owner")) or None):
         raise RuntimeError("sourceUrl is not an upload issued by the upload service")
     seen = (work / "source.txt").read_text().strip() if (work / "source.txt").exists() else None
-    if seen != src or not (work / "clip.mov").exists():          # new clip (or a different one under this key)
+    if seen != src or not (work / "clip.mov").exists():  # new clip (or a different one under this key)
         download(src, work / "clip.mov", sc.MAX_SOURCE_BYTES)
         (work / "source.txt").write_text(src)
     for name in STAGES:
         run_stage(name, work)
-        progress = max(progress, PROGRESS.get(name, progress))   # stages added later (refine, bake) keep the last value
+        progress = max(progress, PROGRESS.get(name, progress))  # stages added later (refine, bake) keep the last value
         set_status(mid, "processing", progress)
     merge(work, job.get("title") or f"Memory {mid}", str(mid), "uploaded-clip")
     merge(work, job.get("title") or f"Memory {mid}", str(mid), "uploaded-clip", static=True)
     if os.environ.get("MEMREPLAY_UPLOAD_API"):
         from .hosted_publish import publish_hosted
+
         url = publish_hosted(work, mid)
     elif os.environ.get("S3_BUCKET"):
         url = publish_s3(work, f"memories/{key}")
@@ -221,13 +259,14 @@ def loop(once: bool = False, poll_s: float = 15.0, memory_id: int | None = None)
     print(f"[worker] polling {os.environ['STDB_HTTP_URL']} / {os.environ['STDB_DATABASE']} every {poll_s:.0f} s")
     if os.environ.get("MEMREPLAY_UPLOAD_API"):
         from .hosted_publish import preflight
+
         preflight()  # Refuse expensive reconstruction if auth/storage configuration disagrees.
     elif os.environ.get("S3_BUCKET"):
         import boto3  # noqa: F401  fail now, not after a full GPU run
     while True:
         try:
             jobs = pending_jobs(memory_id)
-        except Exception as e:                                   # SpacetimeDB briefly unreachable: try again
+        except Exception as e:  # SpacetimeDB briefly unreachable: try again
             print(f"[worker] poll failed: {e}")
             if once:
                 raise
@@ -238,7 +277,7 @@ def loop(once: bool = False, poll_s: float = 15.0, memory_id: int | None = None)
             print(f"[worker] memory {mid}: {job.get('title')}")
             try:
                 print(f"[worker] memory {mid} ready: {process(job, root)}")
-            except (Exception, SystemExit) as e:               # stages exit with SystemExit on bad input
+            except (Exception, SystemExit) as e:  # stages exit with SystemExit on bad input
                 failures.append(mid)
                 traceback.print_exc()
                 try:

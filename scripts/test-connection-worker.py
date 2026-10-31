@@ -1,10 +1,11 @@
 """Test adapter for the real worker's I4/I5 functions. Never runs reconstruction."""
+
 import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 repo = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("connection_worker", repo / "pipeline/memreplay/worker.py")
@@ -17,7 +18,9 @@ elif action == "publish":
     memory_id = int(sys.argv[2])
     job = next(row for row in worker.pending_jobs() if int(row["id"]) == memory_id)
     source = job.get("source_url") or job.get("sourceUrl")
-    assert worker._source_check().allowed_source(source, os.environ["ASSET_BASE_URL"], worker._identity_hex(job["owner"]))
+    assert worker._source_check().allowed_source(
+        source, os.environ["ASSET_BASE_URL"], worker._identity_hex(job["owner"])
+    )
     work = Path(sys.argv[3])
     work.mkdir()
     worker.download(source, work / "clip.mov", 1024)
@@ -32,9 +35,16 @@ elif action == "publish":
     (work / "memory.json").write_text(json.dumps(manifest))
     key = f"{memory_id}-{job.get('request_id') or job.get('requestId')}"
     exported = worker.publish_dir(work, Path(os.environ["MEMREPLAY_PUBLISH_DIR"]) / key)
-    print(json.dumps({"manifestUrl": os.environ["MEMREPLAY_PUBLIC_BASE_URL"] + "/" + key + "/memory.json",
-                      "sha256": hashlib.sha256((work / "clip.mov").read_bytes()).hexdigest(),
-                      "assetSha256": hashlib.sha256(points).hexdigest(), "files": len(exported)}))
+    print(
+        json.dumps(
+            {
+                "manifestUrl": os.environ["MEMREPLAY_PUBLIC_BASE_URL"] + "/" + key + "/memory.json",
+                "sha256": hashlib.sha256((work / "clip.mov").read_bytes()).hexdigest(),
+                "assetSha256": hashlib.sha256(points).hexdigest(),
+                "files": len(exported),
+            }
+        )
+    )
 elif action == "ready":
     worker.set_status(int(sys.argv[2]), "ready", 1, sys.argv[3])
     print("ready")

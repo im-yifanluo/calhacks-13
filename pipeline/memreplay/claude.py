@@ -1,8 +1,9 @@
 """The two Claude calls in the pipeline. Both have a no-network fallback so the pipeline never blocks on them.
 
-  propose_nouns(sheet.jpg)        S1: which small movable things to ask ViPE to segment (single words)
-  describe(crop.jpg, label, ...)  S5: simple physics shape, size, density, colour for one object
+propose_nouns(sheet.jpg)        S1: which small movable things to ask ViPE to segment (single words)
+describe(crop.jpg, label, ...)  S5: simple physics shape, size, density, colour for one object
 """
+
 from __future__ import annotations
 
 import base64
@@ -13,10 +14,43 @@ from pathlib import Path
 from .handoff import ObjectSpec
 
 MODEL = "claude-opus-5-5"
-ALWAYS = ["person", "hand"]          # ViPE replaces its default list with ours, so keep these
-NOT_PROPS = {"person", "people", "man", "woman", "hand", "hands", "arm", "face", "wall", "floor", "ceiling", "window",
-             "door", "table", "desk", "couch", "sofa", "bed", "chair", "tv", "television", "screen", "monitor", "lamp",
-             "carpet", "rug", "curtain", "cabinet", "shelf", "counter", "sky", "background", "room", "building"}
+ALWAYS = ["person", "hand"]  # ViPE replaces its default list with ours, so keep these
+NOT_PROPS = {
+    "person",
+    "people",
+    "man",
+    "woman",
+    "hand",
+    "hands",
+    "arm",
+    "face",
+    "wall",
+    "floor",
+    "ceiling",
+    "window",
+    "door",
+    "table",
+    "desk",
+    "couch",
+    "sofa",
+    "bed",
+    "chair",
+    "tv",
+    "television",
+    "screen",
+    "monitor",
+    "lamp",
+    "carpet",
+    "rug",
+    "curtain",
+    "cabinet",
+    "shelf",
+    "counter",
+    "sky",
+    "background",
+    "room",
+    "building",
+}
 
 
 def available() -> bool:
@@ -32,7 +66,8 @@ def _ask_json(content: list[dict], schema: dict, max_tokens: int = 4000) -> dict
     import anthropic
 
     resp = anthropic.Anthropic().messages.create(
-        model=MODEL, max_tokens=max_tokens,
+        model=MODEL,
+        max_tokens=max_tokens,
         output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}},
         messages=[{"role": "user", "content": content}],
     )
@@ -43,8 +78,12 @@ def _ask_json(content: list[dict], schema: dict, max_tokens: int = 4000) -> dict
 
 def propose_nouns(sheet: Path, max_props: int = 6) -> list[str]:
     """Single-word prompts for the props in the clip, plus person and hand."""
-    schema = {"type": "object", "additionalProperties": False, "required": ["props"],
-              "properties": {"props": {"type": "array", "items": {"type": "string"}}}}
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["props"],
+        "properties": {"props": {"type": "array", "items": {"type": "string"}}},
+    }
     prompt = (
         "These frames come from one first-person video, left to right in time. List the small, movable, everyday "
         "objects in them that a person could pick up, hold or throw (for example ball, bottle, cup, can, pillow, "
@@ -62,23 +101,30 @@ def propose_nouns(sheet: Path, max_props: int = 6) -> list[str]:
 
 
 SPEC_SCHEMA = {
-    "type": "object", "additionalProperties": False,
+    "type": "object",
+    "additionalProperties": False,
     "required": ["label", "shape", "size_m", "density_kg_m3", "color", "grabbable", "movable"],
-    "properties": {"label": {"type": "string"},
-                   "shape": {"type": "string", "enum": ["sphere", "box", "cylinder"]},
-                   "size_m": {"type": "array", "items": {"type": "number"}},
-                   "density_kg_m3": {"type": "number"},
-                   "color": {"type": "string"},
-                   "grabbable": {"type": "boolean"},
-                   "movable": {"type": "boolean"}},
+    "properties": {
+        "label": {"type": "string"},
+        "shape": {"type": "string", "enum": ["sphere", "box", "cylinder"]},
+        "size_m": {"type": "array", "items": {"type": "number"}},
+        "density_kg_m3": {"type": "number"},
+        "color": {"type": "string"},
+        "grabbable": {"type": "boolean"},
+        "movable": {"type": "boolean"},
+    },
 }
 
 
-def describe(crop: Path, label: str, observed_size_m: tuple[float, float, float],
-             bottom_above_floor_m: float | None = None) -> ObjectSpec:
+def describe(
+    crop: Path, label: str, observed_size_m: tuple[float, float, float], bottom_above_floor_m: float | None = None
+) -> ObjectSpec:
     ox, oy, oz = observed_size_m
-    where = (f" Its lowest point is about {bottom_above_floor_m:.2f} m above the floor."
-             if bottom_above_floor_m is not None else "")
+    where = (
+        f" Its lowest point is about {bottom_above_floor_m:.2f} m above the floor."
+        if bottom_above_floor_m is not None
+        else ""
+    )
     prompt = (
         f"This crop shows a '{label}' from a first-person video. Our depth measurement says its visible extent is "
         f"roughly {ox:.2f} x {oy:.2f} x {oz:.2f} m (x, y up, z), which can be off by 30% or more.{where} Choose the simple "
@@ -98,21 +144,38 @@ def describe(crop: Path, label: str, observed_size_m: tuple[float, float, float]
 
 
 # --- offline fallback ---------------------------------------------------------------------------------
-_TYPICAL = {   # label -> (shape, density kg/m3)
-    "ball": ("sphere", 120), "balloon": ("sphere", 2), "orange": ("sphere", 900), "apple": ("sphere", 800),
-    "bottle": ("cylinder", 300), "can": ("cylinder", 400), "cup": ("cylinder", 250), "mug": ("cylinder", 500),
-    "glass": ("cylinder", 400), "candle": ("cylinder", 900), "box": ("box", 150), "book": ("box", 700),
-    "pillow": ("box", 60), "cushion": ("box", 60), "phone": ("box", 1200), "remote": ("box", 600),
-    "shoe": ("box", 300), "bag": ("box", 150), "paper": ("box", 700), "towel": ("box", 200), "toy": ("box", 300),
+_TYPICAL = {  # label -> (shape, density kg/m3)
+    "ball": ("sphere", 120),
+    "balloon": ("sphere", 2),
+    "orange": ("sphere", 900),
+    "apple": ("sphere", 800),
+    "bottle": ("cylinder", 300),
+    "can": ("cylinder", 400),
+    "cup": ("cylinder", 250),
+    "mug": ("cylinder", 500),
+    "glass": ("cylinder", 400),
+    "candle": ("cylinder", 900),
+    "box": ("box", 150),
+    "book": ("box", 700),
+    "pillow": ("box", 60),
+    "cushion": ("box", 60),
+    "phone": ("box", 1200),
+    "remote": ("box", 600),
+    "shoe": ("box", 300),
+    "bag": ("box", 150),
+    "paper": ("box", 700),
+    "towel": ("box", 200),
+    "toy": ("box", 300),
 }
 
 
 def fallback_spec(label: str, observed_size_m: tuple[float, float, float], color: str) -> ObjectSpec:
-    shape, density = _TYPICAL.get(label, ("box", 120))      # unknown things: light; their box is mostly air
+    shape, density = _TYPICAL.get(label, ("box", 120))  # unknown things: light; their box is mostly air
     x, y, z = (max(0.03, s) for s in observed_size_m)
     if shape == "sphere":
         x = y = z = max(x, y, z)
     elif shape == "cylinder":
         x = z = max(x, z)
-    return ObjectSpec(label=label, shape=shape, size_m=(x, y, z), density_kg_m3=density, color=color,
-                      grabbable=max(x, y, z) < 1.0)
+    return ObjectSpec(
+        label=label, shape=shape, size_m=(x, y, z), density_kg_m3=density, color=color, grabbable=max(x, y, z) < 1.0
+    )

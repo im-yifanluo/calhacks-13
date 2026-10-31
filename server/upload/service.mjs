@@ -1,15 +1,11 @@
 import { createServer } from "node:http";
 import { pathToFileURL } from "node:url";
-import {
-  S3Client,
-  PutObjectCommand,
-  HeadObjectCommand,
-} from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { connectionConfig } from "./connections.mjs";
 import { makeHandler, databaseConfig } from "./core.mjs";
-import { passwordVault } from './passwords.mjs';
-import { s3PasswordStore } from './passwords-s3.mjs';
+import { passwordVault } from "./passwords.mjs";
+import { s3PasswordStore } from "./passwords-s3.mjs";
 export { ticket, readTicket, metadata, makeHandler, databaseConfig } from "./core.mjs";
 
 export function productionConfig(env = process.env) {
@@ -22,8 +18,7 @@ export function productionConfig(env = process.env) {
     "STDB_DATABASE",
   ])
     if (!env[name]) throw new Error(`${name} is required`);
-  if (env.UPLOAD_SIGNING_SECRET.length < 32)
-    throw new Error("UPLOAD_SIGNING_SECRET needs 32+ characters");
+  if (env.UPLOAD_SIGNING_SECRET.length < 32) throw new Error("UPLOAD_SIGNING_SECRET needs 32+ characters");
   if (!/^[a-f0-9]{64}$/i.test(env.PIPELINE_IDENTITY))
     throw new Error("PIPELINE_IDENTITY must be a 64-character hex identity");
   for (const name of ["ASSET_BASE_URL", "S3_ENDPOINT"]) {
@@ -52,15 +47,21 @@ export function productionConfig(env = process.env) {
     secret: env.UPLOAD_SIGNING_SECRET,
     assetBase: env.ASSET_BASE_URL,
     pipelineIdentity: env.PIPELINE_IDENTITY,
-    allowedOrigins: (
-      env.UPLOAD_ALLOWED_ORIGINS || "https://localhost:5173"
-    ).split(",").map(value => value.trim()).filter(Boolean),
+    allowedOrigins: (env.UPLOAD_ALLOWED_ORIGINS || "https://localhost:5173")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
     ...database,
-    passwords: passwordVault({ store: s3PasswordStore(s3, env.ACCOUNT_PASSWORD_BUCKET || env.S3_BUCKET),
-      secret: env.UPLOAD_SIGNING_SECRET, settings: database.accountConfig }),
+    passwords: passwordVault({
+      store: s3PasswordStore(s3, env.ACCOUNT_PASSWORD_BUCKET || env.S3_BUCKET),
+      secret: env.UPLOAD_SIGNING_SECRET,
+      settings: database.accountConfig,
+    }),
     connections: connectionConfig(env, {
-      backend: "s3", assetBaseUrl: env.ASSET_BASE_URL,
-      scenePrefix: "memories/<memoryId>-<requestId>/", writeScene: "memreplay publish <work-dir> --to s3",
+      backend: "s3",
+      assetBaseUrl: env.ASSET_BASE_URL,
+      scenePrefix: "memories/<memoryId>-<requestId>/",
+      writeScene: "memreplay publish <work-dir> --to s3",
     }),
     sign: async (d) =>
       getSignedUrl(
@@ -77,29 +78,20 @@ export function productionConfig(env = process.env) {
       ),
     head: async (key) => {
       try {
-        const result = await s3.send(
-          new HeadObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
-        );
+        const result = await s3.send(new HeadObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
         return { size: result.ContentLength, type: result.ContentType };
       } catch (error) {
-        if (error?.$metadata?.httpStatusCode === 404)
-          throw new Error("Upload not found; PUT the video first");
+        if (error?.$metadata?.httpStatusCode === 404) throw new Error("Upload not found; PUT the video first");
         throw error;
       }
     },
   };
 }
 
-
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
-) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const server = createServer(makeHandler(productionConfig()));
   server.requestTimeout = 30000;
-  server.listen(
-    Number(process.env.UPLOAD_PORT || 8788),
-    process.env.UPLOAD_HOST || "127.0.0.1",
-    () => console.log("Upload signing service ready"),
+  server.listen(Number(process.env.UPLOAD_PORT || 8788), process.env.UPLOAD_HOST || "127.0.0.1", () =>
+    console.log("Upload signing service ready"),
   );
 }

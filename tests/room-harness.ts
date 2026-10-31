@@ -25,37 +25,73 @@ const TABLES: Record<string, { key: string; indexes: string[] }> = {
 };
 
 export const canon = (value: unknown) => JSON.stringify(value, (_key, x) => (typeof x === "bigint" ? `${x}n` : x));
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class CacheTable {
   readonly rows = new Map<string, Row>();
   readonly listeners = { insert: new Set<Callback>(), update: new Set<Callback>(), delete: new Set<Callback>() };
   [index: string]: unknown;
 
-  constructor(readonly name: string, private readonly primaryKey: string, indexes: string[], private readonly reversed: boolean) {
+  constructor(
+    readonly name: string,
+    private readonly primaryKey: string,
+    indexes: string[],
+    private readonly reversed: boolean,
+  ) {
     for (const column of indexes) {
-      this[column] = { find: (value: unknown) => {
-        const wanted = canon(value);
-        for (const row of this.rows.values()) if (canon(row[column]) === wanted) return row;
-        return null;
-      } };
+      this[column] = {
+        find: (value: unknown) => {
+          const wanted = canon(value);
+          for (const row of this.rows.values()) if (canon(row[column]) === wanted) return row;
+          return null;
+        },
+      };
     }
   }
   /** Reversed clients iterate newest rows first, to prove the adapter does not depend on cache order. */
-  iter(): IterableIterator<Row> { const rows = [...this.rows.values()]; return (this.reversed ? rows.reverse() : rows)[Symbol.iterator](); }
-  count(): number { return this.rows.size; }
-  onInsert = (cb: Callback) => { this.listeners.insert.add(cb); };
-  onUpdate = (cb: Callback) => { this.listeners.update.add(cb); };
-  onDelete = (cb: Callback) => { this.listeners.delete.add(cb); };
-  removeOnInsert = (cb: Callback) => { this.listeners.insert.delete(cb); };
-  removeOnUpdate = (cb: Callback) => { this.listeners.update.delete(cb); };
-  removeOnDelete = (cb: Callback) => { this.listeners.delete.delete(cb); };
-  get listenerCount(): number { return this.listeners.insert.size + this.listeners.update.size + this.listeners.delete.size; }
-  put(row: Row): void { this.rows.set(canon(row[this.primaryKey]), row); }
-  remove(row: Row): void { this.rows.delete(canon(row[this.primaryKey])); }
+  iter(): IterableIterator<Row> {
+    const rows = [...this.rows.values()];
+    return (this.reversed ? rows.reverse() : rows)[Symbol.iterator]();
+  }
+  count(): number {
+    return this.rows.size;
+  }
+  onInsert = (cb: Callback) => {
+    this.listeners.insert.add(cb);
+  };
+  onUpdate = (cb: Callback) => {
+    this.listeners.update.add(cb);
+  };
+  onDelete = (cb: Callback) => {
+    this.listeners.delete.add(cb);
+  };
+  removeOnInsert = (cb: Callback) => {
+    this.listeners.insert.delete(cb);
+  };
+  removeOnUpdate = (cb: Callback) => {
+    this.listeners.update.delete(cb);
+  };
+  removeOnDelete = (cb: Callback) => {
+    this.listeners.delete.delete(cb);
+  };
+  get listenerCount(): number {
+    return this.listeners.insert.size + this.listeners.update.size + this.listeners.delete.size;
+  }
+  put(row: Row): void {
+    this.rows.set(canon(row[this.primaryKey]), row);
+  }
+  remove(row: Row): void {
+    this.rows.delete(canon(row[this.primaryKey]));
+  }
 }
 
-export interface CallRecord { client: string; reducer: string; args: Row; phase: "start" | "done"; error?: string }
+export interface CallRecord {
+  client: string;
+  reducer: string;
+  args: Row;
+  phase: "start" | "done";
+  error?: string;
+}
 
 export class FakeClient {
   readonly net = new Multiplayer();
@@ -65,24 +101,42 @@ export class FakeClient {
   private inbox: Promise<void> = Promise.resolve();
   connected = true;
 
-  constructor(readonly room: RoomServer, readonly name: string, readonly auth: TestAuth, reversed = false) {
-    for (const [table, { key, indexes }] of Object.entries(TABLES)) this.tables[table] = new CacheTable(table, key, indexes, reversed);
-    const reducers = new Proxy({}, { get: (_target, reducer: string) => (args?: Row) => room.call(this, reducer, args ?? {}) });
+  constructor(
+    readonly room: RoomServer,
+    readonly name: string,
+    readonly auth: TestAuth,
+    reversed = false,
+  ) {
+    for (const [table, { key, indexes }] of Object.entries(TABLES))
+      this.tables[table] = new CacheTable(table, key, indexes, reversed);
+    const reducers = new Proxy(
+      {},
+      { get: (_target, reducer: string) => (args?: Row) => room.call(this, reducer, args ?? {}) },
+    );
     this.net.connection = { db: this.tables, reducers, disconnect() {} } as never;
     this.net.identity = room.identity(auth) as never;
     this.net.ready = true;
     for (const [table, rows] of room.snapshot()) for (const row of rows.values()) this.tables[table].put(row);
   }
 
-  get reducers(): Record<string, (args?: Row) => Promise<void>> { return (this.net.connection as never as { reducers: never }).reducers; }
+  get reducers(): Record<string, (args?: Row) => Promise<void>> {
+    return (this.net.connection as never as { reducers: never }).reducers;
+  }
 
   receive(ops: Op[]): Promise<void> {
-    this.inbox = this.inbox.then(() => sleep(this.latency)).then(() => { if (this.connected) this.apply(ops); });
+    this.inbox = this.inbox
+      .then(() => sleep(this.latency))
+      .then(() => {
+        if (this.connected) this.apply(ops);
+      });
     return this.inbox;
   }
 
   private apply(ops: Op[]): void {
-    for (const op of ops) { if (op.kind === "delete") this.tables[op.table].remove(op.row); else this.tables[op.table].put(op.row); }
+    for (const op of ops) {
+      if (op.kind === "delete") this.tables[op.table].remove(op.row);
+      else this.tables[op.table].put(op.row);
+    }
     for (const op of ops) {
       const listeners = [...this.tables[op.table].listeners[op.kind]];
       for (const cb of listeners) op.kind === "update" ? cb({}, op.old, op.row) : cb({}, op.row);
@@ -97,9 +151,14 @@ export class RoomServer {
   private nextConnection = 1n;
 
   auth(name: string): TestAuth {
-    return TestAuth.fromJwtPayload(JSON.stringify({ sub: name, iss: "https://tests.example", aud: "spacetimedb" }), new ConnectionId(this.nextConnection++));
+    return TestAuth.fromJwtPayload(
+      JSON.stringify({ sub: name, iss: "https://tests.example", aud: "spacetimedb" }),
+      new ConnectionId(this.nextConnection++),
+    );
   }
-  identity(auth: TestAuth) { return this.h.withReducerTx(auth, ctx => ctx.sender); }
+  identity(auth: TestAuth) {
+    return this.h.withReducerTx(auth, (ctx) => ctx.sender);
+  }
 
   client(name: string, options: { latency?: number; reversed?: boolean } = {}): FakeClient {
     const client = new FakeClient(this, name, this.auth(name), options.reversed);
@@ -112,7 +171,8 @@ export class RoomServer {
     const tables = new Map<string, Map<string, Row>>();
     for (const [table, { key }] of Object.entries(TABLES)) {
       const rows = new Map<string, Row>();
-      for (const row of (this.h.db as never as Record<string, { iter(): Iterable<Row> }>)[table].iter()) rows.set(canon(row[key]), { ...row });
+      for (const row of (this.h.db as never as Record<string, { iter(): Iterable<Row> }>)[table].iter())
+        rows.set(canon(row[key]), { ...row });
       tables.set(table, rows);
     }
     return tables;
@@ -123,7 +183,8 @@ export class RoomServer {
     this.h.clock.set(new Timestamp(BigInt(Date.now()) * 1000n));
     const before = this.snapshot();
     this.h.withReducerTx(auth, body as never);
-    const after = this.snapshot(), ops: Op[] = [];
+    const after = this.snapshot(),
+      ops: Op[] = [];
     for (const [table, rows] of after) {
       const old = before.get(table)!;
       for (const [key, row] of rows) {
@@ -141,16 +202,29 @@ export class RoomServer {
     this.log.push({ client: client.name, reducer, args, phase: "start" });
     let error: unknown;
     let ops: Op[] = [];
-    try { ops = this.mutate(client.auth, ctx => (mod as never as Record<string, (ctx: unknown, args: Row) => void>)[reducer](ctx, args), client); }
-    catch (e) { error = e; }
+    try {
+      ops = this.mutate(
+        client.auth,
+        (ctx) => (mod as never as Record<string, (ctx: unknown, args: Row) => void>)[reducer](ctx, args),
+        client,
+      );
+    } catch (e) {
+      error = e;
+    }
     return client.receive(ops).then(() => {
-      this.log.push({ client: client.name, reducer, args, phase: "done", error: error ? String((error as Error).message ?? error) : undefined });
+      this.log.push({
+        client: client.name,
+        reducer,
+        args,
+        phase: "done",
+        error: error ? String((error as Error).message ?? error) : undefined,
+      });
       if (error) throw new Error((error as Error).message ?? String(error));
     });
   }
 
   /** Reducer calls that finished, for one client, in order. */
   calls(client: FakeClient, phase: "start" | "done" = "done"): CallRecord[] {
-    return this.log.filter(c => c.client === client.name && c.phase === phase);
+    return this.log.filter((c) => c.client === client.name && c.phase === phase);
   }
 }

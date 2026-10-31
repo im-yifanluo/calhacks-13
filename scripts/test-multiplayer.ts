@@ -6,42 +6,33 @@ import { DbConnection } from "../apps/web/src/module_bindings";
 const database = process.env.STDB_DATABASE || "memory-replay";
 const uri = process.env.STDB_WS_URL || `ws://127.0.0.1:${process.env.STDB_PORT || 3055}`;
 const clients: DbConnection[] = [];
-async function connect(
-  token?: string,
-  endpoint = uri,
-  reconnected?: () => void,
-) {
-  return new Promise<{ conn: DbConnection; token: string }>(
-    (resolve, reject) => {
-      const timeout = setTimeout(
-        () => reject(new Error("Connection/subscription timed out")),
-        10000,
-      );
-      const conn = DbConnection.builder()
-        .withUri(endpoint)
-        .withDatabaseName(database)
-        .withToken(token)
-        .withAutomaticReconnect()
-        .onAutomaticReconnect(() => reconnected?.())
-        .withCompression("none")
-        .onConnect((conn, _id, token) => {
-          conn
-            .subscriptionBuilder()
-            .onApplied(() => {
-              clearTimeout(timeout);
-              resolve({ conn, token });
-            })
-            .onError((ctx) => reject(ctx.event))
-            .subscribeToAllTables();
-        })
-        .onConnectError((_ctx, error) => {
-          clearTimeout(timeout);
-          reject(error);
-        })
-        .build();
-      clients.push(conn);
-    },
-  );
+async function connect(token?: string, endpoint = uri, reconnected?: () => void) {
+  return new Promise<{ conn: DbConnection; token: string }>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("Connection/subscription timed out")), 10000);
+    const conn = DbConnection.builder()
+      .withUri(endpoint)
+      .withDatabaseName(database)
+      .withToken(token)
+      .withAutomaticReconnect()
+      .onAutomaticReconnect(() => reconnected?.())
+      .withCompression("none")
+      .onConnect((conn, _id, token) => {
+        conn
+          .subscriptionBuilder()
+          .onApplied(() => {
+            clearTimeout(timeout);
+            resolve({ conn, token });
+          })
+          .onError((ctx) => reject(ctx.event))
+          .subscribeToAllTables();
+      })
+      .onConnectError((_ctx, error) => {
+        clearTimeout(timeout);
+        reject(error);
+      })
+      .build();
+    clients.push(conn);
+  });
 }
 async function until(predicate: () => unknown) {
   for (let i = 0; i < 100; i++) {
@@ -88,11 +79,7 @@ try {
     name: "Bob",
     device: "quest",
   });
-  await until(
-    () =>
-      [...a.conn.db.player.iter()].filter((p) => p.roomId === r.id && p.online)
-        .length === 2,
-  );
+  await until(() => [...a.conn.db.player.iter()].filter((p) => p.roomId === r.id && p.online).length === 2);
   await a.conn.reducers.setPose({
     hx: 2,
     hy: 1.6,
@@ -115,14 +102,10 @@ try {
   await a.conn.reducers.grab({ objectId: "ball-1", ...pose });
   const branchId = a.conn.db.timeline.roomId.find(r.id)!.branchId;
   assert.notEqual(branchId, 0n);
-  await assert.rejects(() =>
-    b.conn.reducers.grab({ objectId: "ball-1", ...pose }),
-  );
+  await assert.rejects(() => b.conn.reducers.grab({ objectId: "ball-1", ...pose }));
   await a.conn.reducers.release({ objectId: "ball-1", rest: false, ...pose });
   await a.conn.reducers.moveObject({ objectId: "ball-1", ...pose, px: 2 });
-  await until(
-    () => b.conn.db.objectState.key.find(`${branchId}:ball-1`)?.px === 2,
-  );
+  await until(() => b.conn.db.objectState.key.find(`${branchId}:ball-1`)?.px === 2);
   await a.conn.reducers.saveBranchKeyframes({
     branchId,
     objectId: "ball-1",
@@ -144,12 +127,7 @@ try {
     name: "Late",
     device: "phone",
   });
-  assert.equal(
-    [...late.conn.db.branchKeyframes.iter()].filter(
-      (c) => c.branchId === branchId,
-    ).length,
-    1,
-  );
+  assert.equal([...late.conn.db.branchKeyframes.iter()].filter((c) => c.branchId === branchId).length, 1);
   await b.conn.reducers.grab({ objectId: "ball-1", ...pose });
   const childBranch = b.conn.db.timeline.roomId.find(r.id)!.branchId;
   assert.notEqual(childBranch, branchId);
@@ -162,39 +140,25 @@ try {
       a.conn.db.timeline.roomId.find(r.id)?.branchId === childBranch,
   );
   b.conn.disconnect();
-  await until(
-    () => !a.conn.db.objectState.key.find(`${childBranch}:ball-1`)?.simOwner,
-  );
+  await until(() => !a.conn.db.objectState.key.find(`${childBranch}:ball-1`)?.simOwner);
   // Bob dropped before saving a chunk, so the room leaves the empty take his grab forked.
-  await until(
-    () => a.conn.db.timeline.roomId.find(r.id)?.branchId === branchId,
-  );
+  await until(() => a.conn.db.timeline.roomId.find(r.id)?.branchId === branchId);
   const back = a.conn.db.timeline.roomId.find(r.id)!;
   assert.equal(back.paused, true);
   assert.equal(back.anchorMediaUs, childFork);
   assert.ok(a.conn.db.branch.id.find(childBranch), "the empty take is kept");
   const resumed = await connect(b.token);
-  await until(
-    () => a.conn.db.player.identity.find(resumed.conn.identity!)?.online,
-  );
-  assert.equal(
-    resumed.conn.identity!.toHexString(),
-    b.conn.identity!.toHexString(),
-  );
+  await until(() => a.conn.db.player.identity.find(resumed.conn.identity!)?.online);
+  assert.equal(resumed.conn.identity!.toHexString(), b.conn.identity!.toHexString());
   // A player who left stays out of the room after reconnecting.
   await resumed.conn.reducers.leaveRoom({});
   resumed.conn.disconnect();
   const again = await connect(b.token);
-  assert.equal(
-    again.conn.identity!.toHexString(),
-    b.conn.identity!.toHexString(),
-  );
+  assert.equal(again.conn.identity!.toHexString(), b.conn.identity!.toHexString());
   const gone = again.conn.db.player.identity.find(again.conn.identity!)!;
   assert.equal(gone.online, false);
   assert.equal(gone.roomId, 0n);
-  await until(
-    () => !a.conn.db.player.identity.find(again.conn.identity!)?.online,
-  );
+  await until(() => !a.conn.db.player.identity.find(again.conn.identity!)?.online);
   // Exercise pipeline HTTP reducer permissions and the array payload consumed by the signing service.
   const http = uri.replace(/^ws/, "http");
   const uploadId = crypto.randomUUID();
@@ -271,12 +235,7 @@ try {
   }
   await until(() => a.conn.db.memory.requestId.find(uploadedRequest));
   const upload = a.conn.db.memory.requestId.find(uploadedRequest)!;
-  const callStatus = (
-    token: string,
-    status: string,
-    progress: number,
-    url = "",
-  ) =>
+  const callStatus = (token: string, status: string, progress: number, url = "") =>
     fetch(`${http}/v1/database/${database}/call/set_memory_status`, {
       method: "POST",
       headers: {
@@ -287,17 +246,7 @@ try {
     });
   assert.equal((await callStatus(b.token, "processing", 0.1)).ok, false);
   assert.equal((await callStatus(a.token, "processing", 0.1)).ok, true);
-  assert.equal(
-    (
-      await callStatus(
-        a.token,
-        "ready",
-        1,
-        "https://assets.example/memory.json",
-      )
-    ).ok,
-    true,
-  );
+  assert.equal((await callStatus(a.token, "ready", 1, "https://assets.example/memory.json")).ok, true);
   await until(() => late.conn.db.memory.id.find(upload.id)?.status === "ready");
   try {
     assert.equal((await api("complete", { receipt })).status, 200);
@@ -309,9 +258,7 @@ try {
     // The SDK exchanges its retained identity token over HTTP before reconnecting.
     const response = await fetch(`${http}${req.url}`, {
       method: req.method,
-      headers: req.headers.authorization
-        ? { Authorization: req.headers.authorization }
-        : undefined,
+      headers: req.headers.authorization ? { Authorization: req.headers.authorization } : undefined,
     });
     res.writeHead(response.status, { "Content-Type": "application/json" });
     res.end(await response.text());
@@ -322,20 +269,15 @@ try {
   proxy.on("connection", (client, request) => {
     const upstream = new WebSocket(
       `${uri}${request.url}`,
-      request.headers["sec-websocket-protocol"]
-        ?.split(",")
-        .map((s) => s.trim()),
+      request.headers["sec-websocket-protocol"]?.split(",").map((s) => s.trim()),
     );
     upstreams.add(upstream);
     client.on("message", (data, isBinary) => {
-      if (upstream.readyState === WebSocket.OPEN)
-        upstream.send(data, { binary: isBinary });
-      else
-        upstream.once("open", () => upstream.send(data, { binary: isBinary }));
+      if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary: isBinary });
+      else upstream.once("open", () => upstream.send(data, { binary: isBinary }));
     });
     upstream.on("message", (data, isBinary) => {
-      if (client.readyState === WebSocket.OPEN)
-        client.send(data, { binary: isBinary });
+      if (client.readyState === WebSocket.OPEN) client.send(data, { binary: isBinary });
     });
     upstream.on("close", () => {
       upstreams.delete(upstream);

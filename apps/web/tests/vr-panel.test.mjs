@@ -4,23 +4,48 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Group, Quaternion, Ray, Vector3 } from "three";
 import {
-  BODY, blocksRay, clampPlacement, COMPACT_REGIONS, FOLLOW, HELP_REGIONS, hitRegion, needsRecenter, PANEL, PANEL_METERS_HIGH,
-  panelTarget, PLACE, REGIONS, scrubTime, SUMMON, VRPanel,
+  BODY,
+  blocksRay,
+  clampPlacement,
+  COMPACT_REGIONS,
+  FOLLOW,
+  HELP_REGIONS,
+  hitRegion,
+  needsRecenter,
+  PANEL,
+  PANEL_METERS_HIGH,
+  panelTarget,
+  PLACE,
+  REGIONS,
+  scrubTime,
+  SUMMON,
+  VRPanel,
 } from "../.test-dist/vr-panel.js";
 
 const close = (a, b, tolerance = 1e-9) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
 /** uv of a canvas pixel (three's PlaneGeometry uv: origin bottom-left). */
 const uv = (x, y) => [x / PANEL.width, 1 - y / PANEL.height];
-const deg = radians => radians * 180 / Math.PI;
+const deg = (radians) => (radians * 180) / Math.PI;
 
 // The canvas is the only browser piece; drawing calls do nothing.
-const context = new Proxy({ measureText: value => ({ width: value.length * 15 }), createLinearGradient: () => ({ addColorStop() {} }) },
-  { get: (target, key) => key in target ? target[key] : () => {}, set: () => true });
+const context = new Proxy(
+  { measureText: (value) => ({ width: value.length * 15 }), createLinearGradient: () => ({ addColorStop() {} }) },
+  { get: (target, key) => (key in target ? target[key] : () => {}), set: () => true },
+);
 globalThis.document = { createElement: () => ({ getContext: () => context, width: 0, height: 0 }) };
 
 test("every region is hit at its centre in each mode, and the gaps between them hit nothing", () => {
-  for (const [mode, regions] of [["full", REGIONS], ["help", HELP_REGIONS], ["compact", COMPACT_REGIONS]])
-    for (const region of regions) assert.equal(hitRegion(...uv(region.x + region.w / 2, region.y + region.h / 2), mode), region.id, `${mode} ${region.id}`);
+  for (const [mode, regions] of [
+    ["full", REGIONS],
+    ["help", HELP_REGIONS],
+    ["compact", COMPACT_REGIONS],
+  ])
+    for (const region of regions)
+      assert.equal(
+        hitRegion(...uv(region.x + region.w / 2, region.y + region.h / 2), mode),
+        region.id,
+        `${mode} ${region.id}`,
+      );
   assert.equal(hitRegion(...uv(248, 184)), null); // between Play and −1 s
   assert.equal(hitRegion(...uv(800, 184)), null); // the time readout is not a button
   assert.equal(hitRegion(...uv(400, 456)), null); // the status line
@@ -32,13 +57,15 @@ test("every region is hit at its centre in each mode, and the gaps between them 
 test("targets follow the brief: Play 96 px, others 80 px or more, at least 16 px apart", () => {
   for (const regions of [REGIONS, HELP_REGIONS, COMPACT_REGIONS]) {
     for (const r of regions) assert.ok(Math.min(r.w, r.h) >= 80, `${r.id} is ${r.w}×${r.h}`);
-    for (const a of regions) for (const b of regions) {
-      if (a === b) continue;
-      const dx = Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w)), dy = Math.max(b.y - (a.y + a.h), a.y - (b.y + b.h));
-      assert.ok(Math.max(dx, dy) >= 16, `${a.id} and ${b.id} are ${Math.max(dx, dy)} px apart`);
-    }
+    for (const a of regions)
+      for (const b of regions) {
+        if (a === b) continue;
+        const dx = Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w)),
+          dy = Math.max(b.y - (a.y + a.h), a.y - (b.y + b.h));
+        assert.ok(Math.max(dx, dy) >= 16, `${a.id} and ${b.id} are ${Math.max(dx, dy)} px apart`);
+      }
   }
-  assert.equal(REGIONS.find(r => r.id === "play").h, 96);
+  assert.equal(REGIONS.find((r) => r.id === "play").h, 96);
 });
 
 test("the panel's header is at the top of the plane (uv v = 1 is the canvas top)", () => {
@@ -66,10 +93,14 @@ test("the scrubber maps its track ends to the clip ends and clamps beyond them",
 });
 
 test("the panel opens 1.1 m ahead and 0.5 m down: about 24° below the eyes, 34° wide, ~30 canvas px per degree", () => {
-  const head = new Vector3(1, 1.6, 2), spot = panelTarget(head, new Vector3(0, 0, -1));
-  close(spot.x, 1); close(spot.y, 1.6 - FOLLOW.drop); close(spot.z, 2 - FOLLOW.distance);
+  const head = new Vector3(1, 1.6, 2),
+    spot = panelTarget(head, new Vector3(0, 0, -1));
+  close(spot.x, 1);
+  close(spot.y, 1.6 - FOLLOW.drop);
+  close(spot.z, 2 - FOLLOW.distance);
   const sight = Math.hypot(FOLLOW.distance, FOLLOW.drop);
-  const below = deg(Math.atan2(FOLLOW.drop, FOLLOW.distance)), wide = deg(2 * Math.atan(PANEL.metersWide / 2 / sight));
+  const below = deg(Math.atan2(FOLLOW.drop, FOLLOW.distance)),
+    wide = deg(2 * Math.atan(PANEL.metersWide / 2 / sight));
   assert.ok(below > 18 && below < 30, `${below}° below eye level`);
   assert.ok(wide > 30 && wide < 36, `${wide}° wide`);
   assert.ok(sight > 0.8, "outside the 0.5–0.8 m middle distance");
@@ -80,9 +111,11 @@ test("the panel opens 1.1 m ahead and 0.5 m down: about 24° below the eyes, 34�
 });
 
 test("lazy follow: small turns and steps keep the panel put; turning past 30° or walking 0.5 m re-centres it", () => {
-  const head = new Vector3(0, 1.6, 0), forward = new Vector3(0, 0, -1);
+  const head = new Vector3(0, 1.6, 0),
+    forward = new Vector3(0, 0, -1);
   const panel = panelTarget(head, forward);
-  const turned = degrees => new Vector3(-Math.sin(degrees * Math.PI / 180), 0, -Math.cos(degrees * Math.PI / 180));
+  const turned = (degrees) =>
+    new Vector3(-Math.sin((degrees * Math.PI) / 180), 0, -Math.cos((degrees * Math.PI) / 180));
   assert.equal(needsRecenter(panel, head, forward, head), false);
   assert.equal(needsRecenter(panel, head, turned(25), head), false);
   assert.equal(needsRecenter(panel, head, turned(35), head), true);
@@ -95,18 +128,28 @@ test("lazy follow: small turns and steps keep the panel put; turning past 30° o
 
 /** A panel under a rig that has been moved and turned, as after spawning at the wearer's first pose. */
 function rigged() {
-  const scene = new Group(), rig = new Group(); scene.add(rig);
-  rig.position.set(2, 0, -1); rig.rotation.y = Math.PI / 3; scene.updateMatrixWorld(true);
+  const scene = new Group(),
+    rig = new Group();
+  scene.add(rig);
+  rig.position.set(2, 0, -1);
+  rig.rotation.y = Math.PI / 3;
+  scene.updateMatrixWorld(true);
   const panel = new VRPanel(rig);
-  const head = new Vector3(0, 1.6, 0), forward = new Vector3(0, 0, -1);
+  const head = new Vector3(0, 1.6, 0),
+    forward = new Vector3(0, 0, -1);
   panel.follow(head, forward, 1 / 90);
   return { rig, panel, head, forward, eye: rig.localToWorld(head.clone()) };
 }
-const worldOf = (panel, x, y) => panel.mesh.localToWorld(new Vector3((x / PANEL.width - 0.5) * PANEL.metersWide, (0.5 - y / PANEL.height) * PANEL_METERS_HIGH, 0));
+const worldOf = (panel, x, y) =>
+  panel.mesh.localToWorld(
+    new Vector3((x / PANEL.width - 0.5) * PANEL.metersWide, (0.5 - y / PANEL.height) * PANEL_METERS_HIGH, 0),
+  );
 
 test("the panel is placed in the rig's frame and faces the eyes", () => {
   const { panel, head } = rigged();
-  close(panel.mesh.position.x, 0, 1e-9); close(panel.mesh.position.z, -FOLLOW.distance, 1e-9); close(panel.mesh.position.y, head.y - FOLLOW.drop, 1e-9);
+  close(panel.mesh.position.x, 0, 1e-9);
+  close(panel.mesh.position.z, -FOLLOW.distance, 1e-9);
+  close(panel.mesh.position.y, head.y - FOLLOW.drop, 1e-9);
   // Its normal (+z) points back at the eye.
   const normal = new Vector3(0, 0, 1).applyQuaternion(panel.mesh.quaternion);
   const toEye = head.clone().sub(panel.mesh.position).normalize();
@@ -131,7 +174,7 @@ test("dragging by the bar keeps the grabbed spot under the ray, the stick pushes
   panel.beginDrag(ray, grabbed);
   assert.equal(panel.isDragging, true);
   // Swing the ray 25° to the right and pull the stick back (push < 0) for half a second.
-  const swung = ray.direction.clone().applyAxisAngle(new Vector3(0, 1, 0), -25 * Math.PI / 180);
+  const swung = ray.direction.clone().applyAxisAngle(new Vector3(0, 1, 0), (-25 * Math.PI) / 180);
   const moved = new Ray(hand, swung);
   const distance = hand.distanceTo(grabbed);
   for (let i = 0; i < 45; i++) panel.dragTo(moved, eye, -1, 1 / 90);
@@ -148,14 +191,16 @@ test("dragging by the bar keeps the grabbed spot under the ray, the stick pushes
   for (let i = 0; i < 100; i++) panel.follow(new Vector3(1, 1.6, 1), new Vector3(1, 0, 0), 1 / 90);
   close(panel.mesh.position.distanceTo(dropped), 0, 1e-12);
   // Recenter brings it back in front and following again.
-  panel.recenter(); panel.follow(head, forward, 1 / 90);
+  panel.recenter();
+  panel.follow(head, forward, 1 / 90);
   assert.equal(panel.pinned, false);
   close(panel.mesh.position.z, -FOLLOW.distance, 1e-9);
 });
 
 test("the stick cannot push the panel nearer than 0.6 m or farther than 3 m", () => {
   const { panel, eye } = rigged();
-  const grabbed = worldOf(panel, 512, 500), ray = new Ray(eye.clone(), grabbed.clone().sub(eye).normalize());
+  const grabbed = worldOf(panel, 512, 500),
+    ray = new Ray(eye.clone(), grabbed.clone().sub(eye).normalize());
   const centre = () => panel.mesh.getWorldPosition(new Vector3()).distanceTo(eye);
   panel.beginDrag(ray, grabbed);
   for (let i = 0; i < 400; i++) panel.dragTo(ray, eye, 1, 1 / 90);
@@ -168,7 +213,7 @@ test("the stick cannot push the panel nearer than 0.6 m or farther than 3 m", ()
 
 test("a dragged panel stays between 55° below and 20° above eye level, 0.6–3 m away", () => {
   const eye = new Vector3(1, 1.6, 2);
-  const pitchOf = p => deg(Math.atan2(p.y - eye.y, Math.hypot(p.x - eye.x, p.z - eye.z)));
+  const pitchOf = (p) => deg(Math.atan2(p.y - eye.y, Math.hypot(p.x - eye.x, p.z - eye.z)));
   const overhead = clampPlacement(new Vector3(1.2, 3.5, 1.5), eye);
   close(pitchOf(overhead), PLACE.maxPitchDeg, 1e-9);
   const floor = clampPlacement(new Vector3(1, 0, 1.5), eye);
@@ -184,7 +229,8 @@ test("a dragged panel stays between 55° below and 20° above eye level, 0.6–3
 
 test("dragging the ray straight up stops the panel 20° above eye level", () => {
   const { panel, eye } = rigged();
-  const grabbed = worldOf(panel, 512, 500), ray = new Ray(eye.clone(), grabbed.clone().sub(eye).normalize());
+  const grabbed = worldOf(panel, 512, 500),
+    ray = new Ray(eye.clone(), grabbed.clone().sub(eye).normalize());
   panel.beginDrag(ray, grabbed);
   for (let i = 0; i < 10; i++) panel.dragTo(new Ray(eye.clone(), new Vector3(0, 1, -0.05).normalize()), eye, 0, 1 / 90);
   const centre = panel.mesh.getWorldPosition(new Vector3());
@@ -194,13 +240,15 @@ test("dragging the ray straight up stops the panel 20° above eye level", () => 
 test("a pinned panel out of view for 2.5 s offers Bring controls here in front; recenter puts it away", () => {
   const { panel, head, forward } = rigged();
   // Pin it 90° to the left.
-  panel.pinned = true; panel.mesh.position.set(-1.2, 1.3, 0);
+  panel.pinned = true;
+  panel.mesh.position.set(-1.2, 1.3, 0);
   const gazeAhead = new Vector3(0, 0, -1);
   panel.updateSummon(head, forward, gazeAhead, 2.0);
   assert.equal(panel.summon.visible, false, "not yet");
   panel.updateSummon(head, forward, gazeAhead, 0.6);
   assert.equal(panel.summon.visible, true);
-  close(panel.summon.position.z, head.z - SUMMON.distance, 1e-9); close(panel.summon.position.y, head.y - SUMMON.drop, 1e-9);
+  close(panel.summon.position.z, head.z - SUMMON.distance, 1e-9);
+  close(panel.summon.position.y, head.y - SUMMON.drop, 1e-9);
   // Looking at the panel again hides the pill.
   panel.updateSummon(head, forward, new Vector3(-1, -0.2, 0).normalize(), 1 / 90);
   assert.equal(panel.summon.visible, false);

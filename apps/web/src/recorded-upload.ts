@@ -36,21 +36,13 @@ export class RecordedUpload {
         Authorization: `Bearer ${this.token}`,
         "Content-Type": "application/json",
       },
-      body:
-        body === undefined
-          ? undefined
-          : JSON.stringify({ identity: this.identity, ...(body as object) }),
+      body: body === undefined ? undefined : JSON.stringify({ identity: this.identity, ...(body as object) }),
       signal: AbortSignal.timeout(30_000),
     });
     const data = await response.json().catch(() => {
-      throw new Error(
-        "Upload service unavailable. Start npm run upload:local.",
-      );
+      throw new Error("Upload service unavailable. Start npm run upload:local.");
     });
-    if (!response.ok)
-      throw new Error(
-        data.error || `Upload service returned ${response.status}`,
-      );
+    if (!response.ok) throw new Error(data.error || `Upload service returned ${response.status}`);
     return data;
   }
 
@@ -67,9 +59,7 @@ export class RecordedUpload {
       });
       // An upload service without the flag would queue this test clip for the worker.
       if (!this.pipeline && prepared.pipeline !== false)
-        throw new Error(
-          "The upload service does not support test uploads. Restart it from this build.",
-        );
+        throw new Error("The upload service does not support test uploads. Restart it from this build.");
       this.prepared = prepared;
       this.uploaded = false;
     }
@@ -83,8 +73,7 @@ export class RecordedUpload {
           body: this.file,
           signal: AbortSignal.timeout(120_000),
         });
-        if (!response.ok)
-          throw new Error(`Video storage returned ${response.status}`);
+        if (!response.ok) throw new Error(`Video storage returned ${response.status}`);
         this.uploaded = true;
       } catch (error) {
         this.prepared = undefined; // Obtain a new signed PUT after transfer failure.
@@ -96,43 +85,27 @@ export class RecordedUpload {
       receipt: prepared.receipt,
     });
     const { memories } = await this.api(`memories?identity=${this.identity}`);
-    const row = memories.find(
-      (m: { requestId: string }) => m.requestId === prepared.requestId,
-    );
+    const row = memories.find((m: { requestId: string }) => m.requestId === prepared.requestId);
     if (!row?.id || row.id !== completed.memory?.id)
-      throw new Error(
-        "Database lookup did not confirm this recording. Retry verification.",
-      );
-    if (
-      !this.pipeline &&
-      row.pipelineIdentity?.toLowerCase() !== this.identity.toLowerCase()
-    )
+      throw new Error("Database lookup did not confirm this recording. Retry verification.");
+    if (!this.pipeline && row.pipelineIdentity?.toLowerCase() !== this.identity.toLowerCase())
       throw new Error(
         `Database row #${row.id} is assigned to the pipeline worker, so this test clip may be processed.`,
       );
-    progress(
-      `Database row #${row.id} found. Downloading the stored video to compare bytes…`,
-    );
+    progress(`Database row #${row.id} found. Downloading the stored video to compare bytes…`);
     const response = await fetch(row.sourceUrl, {
       cache: "no-store",
       signal: AbortSignal.timeout(120_000),
     });
-    if (!response.ok)
-      throw new Error(`Stored video returned ${response.status}`);
+    if (!response.ok) throw new Error(`Stored video returned ${response.status}`);
     const downloaded = await response.arrayBuffer();
     const digest = async (bytes: ArrayBuffer) =>
-      Array.from(
-        new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
-        (n) => n.toString(16).padStart(2, "0"),
+      Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (n) =>
+        n.toString(16).padStart(2, "0"),
       ).join("");
     const originalHash = await digest(await this.file.arrayBuffer());
-    if (
-      downloaded.byteLength !== this.file.size ||
-      (await digest(downloaded)) !== originalHash
-    )
-      throw new Error(
-        "Stored video does not match the recording. Verification failed.",
-      );
+    if (downloaded.byteLength !== this.file.size || (await digest(downloaded)) !== originalHash)
+      throw new Error("Stored video does not match the recording. Verification failed.");
     return {
       id: row.id,
       requestId: row.requestId,

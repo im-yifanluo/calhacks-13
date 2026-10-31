@@ -2,6 +2,7 @@
 """How much does the 4DGaussians deformation move each Gaussian over the clip, and is the motion on the people?
 Same args as post.py (-m, --configs, --data, --work). Prints/returns percentiles of max displacement from the mean
 position over 10 Hz samples, split by whether the Gaussian projects into a ViPE 'person' mask at mid-clip."""
+
 import json
 import sys
 from pathlib import Path
@@ -17,7 +18,9 @@ from post import GaussianModel, ModelHiddenParams, ModelParams, PipelineParams, 
 
 def main():
     from argparse import ArgumentParser
+
     import mmengine
+
     parser = ArgumentParser()
     model, _pipe, hyper = ModelParams(parser, sentinel=True), PipelineParams(parser), ModelHiddenParams(parser)
     for k in ["--configs", "--data", "--work", "--out"]:
@@ -28,6 +31,7 @@ def main():
     meta = json.loads((Path(args.data) / "cams.json").read_text())
     cams, max_idx, fps = meta["cams"], meta["max_idx"], meta["fps"]
     from memreplay.vipe_io import PEOPLE_PHRASES, Vipe
+
     v = Vipe(Path(args.work) / "vipe")
     pid = v.ids_with(PEOPLE_PHRASES)
     with torch.no_grad():
@@ -65,13 +69,23 @@ def main():
 
         def stats(sel):
             d = disp[sel]
-            return {"n": int(sel.sum()), "p50_cm": float(np.percentile(d, 50) * 100),
-                    "p90_cm": float(np.percentile(d, 90) * 100), "p99_cm": float(np.percentile(d, 99) * 100),
-                    "frac_gt_5cm": float((d > 0.05).mean()), "frac_gt_10cm": float((d > 0.10).mean()),
-                    "frac_gt_20cm": float((d > 0.20).mean())}
-        res = {"all_visible": stats(vis), "on_person_mid_clip": stats(vis & person),
-               "not_person": stats(vis & ~person), "model": args.model_path,
-               "note": "max distance from the time-mean position over 10 Hz samples (training frame units)"}
+            return {
+                "n": int(sel.sum()),
+                "p50_cm": float(np.percentile(d, 50) * 100),
+                "p90_cm": float(np.percentile(d, 90) * 100),
+                "p99_cm": float(np.percentile(d, 99) * 100),
+                "frac_gt_5cm": float((d > 0.05).mean()),
+                "frac_gt_10cm": float((d > 0.10).mean()),
+                "frac_gt_20cm": float((d > 0.20).mean()),
+            }
+
+        res = {
+            "all_visible": stats(vis),
+            "on_person_mid_clip": stats(vis & person),
+            "not_person": stats(vis & ~person),
+            "model": args.model_path,
+            "note": "max distance from the time-mean position over 10 Hz samples (training frame units)",
+        }
         print(json.dumps(res, indent=1))
         if args.out:
             Path(args.out).write_text(json.dumps(res, indent=1))

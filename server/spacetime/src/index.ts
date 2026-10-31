@@ -1,10 +1,4 @@
-import {
-  schema,
-  table,
-  t,
-  SenderError,
-  type ReducerCtx,
-} from "spacetimedb/server";
+import { schema, table, t, SenderError, type ReducerCtx } from "spacetimedb/server";
 
 const pose = {
   px: t.f32(),
@@ -175,23 +169,12 @@ function clip(value: string, max: number) {
 /** Media seconds to microseconds, rounded the same way everywhere. */
 const micros = (seconds: number) => BigInt(Math.round(seconds * 1e6));
 function url(value: string) {
-  if (!/^https?:\/\/[^\s]+$/.test(value) || value.length > 2048)
-    fail("Expected an HTTP(S) asset URL");
+  if (!/^https?:\/\/[^\s]+$/.test(value) || value.length > 2048) fail("Expected an HTTP(S) asset URL");
 }
 function finite(values: Record<string, number>) {
-  if (
-    Object.values(values).some(
-      (v) => !Number.isFinite(v) || Math.abs(v) > 100000,
-    )
-  )
-    fail("Invalid pose");
+  if (Object.values(values).some((v) => !Number.isFinite(v) || Math.abs(v) > 100000)) fail("Invalid pose");
 }
-function validPose(
-  p: { qx: number; qy: number; qz: number; qw: number } & Record<
-    string,
-    number
-  >,
-) {
+function validPose(p: { qx: number; qy: number; qz: number; qw: number } & Record<string, number>) {
   finite(p);
   const norm = Math.hypot(p.qx, p.qy, p.qz, p.qw);
   if (Math.abs(norm - 1) > 0.05) fail("Quaternion must be normalized");
@@ -207,11 +190,12 @@ function updateProfile(ctx: Ctx) {
   authenticate(ctx);
   // Reconnects must preserve a registered name. Keys stay with the client; the
   // host verifies their signed identity before any reducer can run.
-  if (!ctx.db.profile.identity.find(ctx.sender)) ctx.db.profile.insert({
-    identity: ctx.sender,
-    provider: "guest",
-    displayName: "",
-  });
+  if (!ctx.db.profile.identity.find(ctx.sender))
+    ctx.db.profile.insert({
+      identity: ctx.sender,
+      provider: "guest",
+      displayName: "",
+    });
 }
 /** A display name labels the signed-in sender; it never selects another account, and a name registered to a
  *  password (register_account) stays fixed. */
@@ -251,17 +235,10 @@ function media(ctx: Ctx, tl: Timeline) {
     : BigInt(
         Math.max(
           0,
-          Math.round(
-            Number(
-              ctx.timestamp.microsSinceUnixEpoch -
-                tl.anchorServerTs.microsSinceUnixEpoch,
-            ) * tl.speed,
-          ),
+          Math.round(Number(ctx.timestamp.microsSinceUnixEpoch - tl.anchorServerTs.microsSinceUnixEpoch) * tl.speed),
         ),
       );
-  return tl.anchorMediaUs + delta > m.durationUs
-    ? m.durationUs
-    : tl.anchorMediaUs + delta;
+  return tl.anchorMediaUs + delta > m.durationUs ? m.durationUs : tl.anchorMediaUs + delta;
 }
 /** Puts an object to rest at its last reported pose, with no holder or simulation owner. */
 function settle(ctx: Ctx, o: ObjectRow) {
@@ -287,8 +264,7 @@ function abandoned(ctx: Ctx, o: ObjectRow) {
   return (
     !!o.simOwner &&
     o.mode === "physics" &&
-    ctx.timestamp.microsSinceUnixEpoch - o.updatedAt.microsSinceUnixEpoch >
-      ABANDONED_AFTER_US
+    ctx.timestamp.microsSinceUnixEpoch - o.updatedAt.microsSinceUnixEpoch > ABANDONED_AFTER_US
   );
 }
 /** True when any row passes `test` (every row by default). */
@@ -303,8 +279,7 @@ function some<T>(rows: Iterable<T>, test: (row: T) => boolean = () => true) {
  */
 function clearOwnership(ctx: Ctx) {
   const cleared: ObjectRow[] = [];
-  for (const o of [...ctx.db.objectState.iter()])
-    if (o.simOwner?.isEqual(ctx.sender)) cleared.push(settle(ctx, o));
+  for (const o of [...ctx.db.objectState.iter()]) if (o.simOwner?.isEqual(ctx.sender)) cleared.push(settle(ctx, o));
   for (const o of cleared) revertEmptyTake(ctx, o);
 }
 /**
@@ -323,8 +298,7 @@ function revertEmptyTake(ctx: Ctx, o: ObjectRow) {
   // Only takes a grab forked by itself ("First edit", "Edit <id>"); a take made with forkBranch stays.
   if (b.name !== "First edit" && !b.name.startsWith("Edit ")) return;
   if (some(ctx.db.branchKeyframes.branchId.filter(b.id))) return;
-  if (some(ctx.db.objectState.branchId.filter(b.id), (row) => !!row.simOwner))
-    return;
+  if (some(ctx.db.objectState.branchId.filter(b.id), (row) => !!row.simOwner)) return;
   ctx.db.timeline.roomId.update({
     ...tl,
     branchId: b.parentId,
@@ -376,38 +350,26 @@ function enter(ctx: Ctx, roomId: bigint, name: string, device: string) {
 function ownsBranch(ctx: Ctx, branchId: bigint) {
   const p = player(ctx);
   const b = ctx.db.branch.id.find(branchId);
-  if (
-    !b ||
-    b.roomId !== p.roomId ||
-    b.memoryId !== ctx.db.room.id.find(p.roomId)?.memoryId
-  )
+  if (!b || b.roomId !== p.roomId || b.memoryId !== ctx.db.room.id.find(p.roomId)?.memoryId)
     return fail("Branch is outside your room");
   return b;
 }
 function noActiveSimulation(ctx: Ctx, branchId: bigint) {
   for (const o of [...ctx.db.objectState.branchId.filter(branchId)])
     if (abandoned(ctx, o)) settle(ctx, o);
-    else if (o.simOwner)
-      fail("Wait for objects to settle or release them first");
+    else if (o.simOwner) fail("Wait for objects to settle or release them first");
 }
 /**
  * The owner of a still-open take re-grabbed this object at `fromMediaUs`, so it records over
  * its own trajectory from there on: drop every frame at or after that time. Chunks that start
  * there or later are deleted; a chunk that straddles it keeps only its earlier frames.
  */
-function truncateChunks(
-  ctx: Ctx,
-  branchId: bigint,
-  objectId: string,
-  fromMediaUs: bigint,
-) {
+function truncateChunks(ctx: Ctx, branchId: bigint, objectId: string, fromMediaUs: bigint) {
   for (const chunk of [...ctx.db.branchKeyframes.branchId.filter(branchId)]) {
     if (chunk.objectId !== objectId || chunk.endMediaUs < fromMediaUs) continue;
     const kept =
       chunk.startMediaUs < fromMediaUs
-        ? (JSON.parse(chunk.keyframesJson) as { t: number }[]).filter(
-            (f) => micros(f.t) < fromMediaUs,
-          )
+        ? (JSON.parse(chunk.keyframesJson) as { t: number }[]).filter((f) => micros(f.t) < fromMediaUs)
         : [];
     if (kept.length)
       ctx.db.branchKeyframes.key.update({
@@ -458,10 +420,8 @@ export const createMemory = db.reducer(
     text(args.title, 120);
     if (args.sourceUrl) url(args.sourceUrl);
     if (args.manifestUrl) url(args.manifestUrl);
-    if (!args.sourceUrl && !args.manifestUrl)
-      fail("Source or manifest required");
-    if (args.durationUs === 0n || args.durationUs > 3_600_000_000n)
-      fail("Duration must be 0–3600 seconds");
+    if (!args.sourceUrl && !args.manifestUrl) fail("Source or manifest required");
+    if (args.durationUs === 0n || args.durationUs > 3_600_000_000n) fail("Duration must be 0–3600 seconds");
     const existing = ctx.db.memory.requestId.find(args.requestId);
     if (existing) {
       if (
@@ -498,28 +458,17 @@ export const setMemoryStatus = db.reducer(
   (ctx, args) => {
     authenticate(ctx);
     const m = ctx.db.memory.id.find(args.memoryId) ?? fail("No such memory");
-    if (!m.pipelineIdentity.isEqual(ctx.sender))
-      fail("Only the assigned pipeline identity may update status");
+    if (!m.pipelineIdentity.isEqual(ctx.sender)) fail("Only the assigned pipeline identity may update status");
     const allowed: Record<string, string[]> = {
       uploaded: ["processing", "failed"],
       processing: ["processing", "ready", "failed"],
       failed: ["processing"],
       ready: ["ready"],
     };
-    if (!allowed[m.status]?.includes(args.status))
-      fail("Invalid status transition");
-    if (
-      !Number.isFinite(args.progress) ||
-      args.progress < 0 ||
-      args.progress > 1 ||
-      args.error.length > 2000
-    )
+    if (!allowed[m.status]?.includes(args.status)) fail("Invalid status transition");
+    if (!Number.isFinite(args.progress) || args.progress < 0 || args.progress > 1 || args.error.length > 2000)
       fail("Invalid progress/error");
-    if (
-      m.status === "processing" &&
-      args.status === "processing" &&
-      args.progress < m.progress
-    )
+    if (m.status === "processing" && args.status === "processing" && args.progress < m.progress)
       fail("Progress cannot go backwards");
     if (args.manifestUrl) url(args.manifestUrl);
     if (args.status === "ready" && (!args.manifestUrl || args.progress !== 1))
@@ -530,17 +479,12 @@ export const setMemoryStatus = db.reducer(
       manifestUrl: args.manifestUrl || m.manifestUrl,
     });
     if (args.status === "ready") {
-      for (const p of [...ctx.db.party.iter()])
-        if (p.pendingMemoryId === m.id) activateMemory(ctx, p.roomId, m.id);
+      for (const p of [...ctx.db.party.iter()]) if (p.pendingMemoryId === m.id) activateMemory(ctx, p.roomId, m.id);
     }
   },
 );
 const roomArgs = { memoryId: t.u64(), name: t.string(), device: t.string() };
-function makeRoom(
-  ctx: Ctx,
-  args: { memoryId: bigint; name: string; device: string },
-  party: boolean,
-) {
+function makeRoom(ctx: Ctx, args: { memoryId: bigint; name: string; device: string }, party: boolean) {
   authenticate(ctx);
   const m = ctx.db.memory.id.find(args.memoryId) ?? fail("No such memory");
   if (m.status !== "ready") fail("Memory is not ready");
@@ -549,10 +493,7 @@ function makeRoom(
   ctx.random.uint32();
   let code = "";
   for (let tries = 0; tries < 20; tries++) {
-    code = (ctx.random.uint32() >>> 0)
-      .toString(36)
-      .toUpperCase()
-      .padStart(7, "0");
+    code = (ctx.random.uint32() >>> 0).toString(36).toUpperCase().padStart(7, "0");
     if (!ctx.db.room.joinCode.find(code)) break;
     code = "";
   }
@@ -579,19 +520,12 @@ function makeRoom(
     });
   enter(ctx, room.id, args.name, args.device);
 }
-export const createRoom = db.reducer(roomArgs, (ctx, args) =>
-  makeRoom(ctx, args, false),
-);
-export const createParty = db.reducer(roomArgs, (ctx, args) =>
-  makeRoom(ctx, args, true),
-);
+export const createRoom = db.reducer(roomArgs, (ctx, args) => makeRoom(ctx, args, false));
+export const createParty = db.reducer(roomArgs, (ctx, args) => makeRoom(ctx, args, true));
 
 /** Only parties use leader-controlled time. Legacy collaborative rooms remain compatible. */
 function requireLeader(ctx: Ctx, roomId: bigint) {
-  if (
-    ctx.db.party.roomId.find(roomId) &&
-    !ctx.db.room.id.find(roomId)?.host.isEqual(ctx.sender)
-  )
+  if (ctx.db.party.roomId.find(roomId) && !ctx.db.room.id.find(roomId)?.host.isEqual(ctx.sender))
     fail("Only the party leader can control time or change the scene");
 }
 function electLeader(ctx: Ctx, roomId: bigint) {
@@ -599,12 +533,9 @@ function electLeader(ctx: Ctx, roomId: bigint) {
   const room = ctx.db.room.id.find(roomId)!;
   const members = [...ctx.db.player.roomId.filter(roomId)]
     .filter((p) => p.online)
-    .sort((a, b) =>
-      a.identity.__identity__ < b.identity.__identity__ ? -1 : 1,
-    );
+    .sort((a, b) => (a.identity.__identity__ < b.identity.__identity__ ? -1 : 1));
   if (members.some((p) => p.identity.isEqual(room.host))) return;
-  if (members.length)
-    ctx.db.room.id.update({ ...room, host: members[0].identity });
+  if (members.length) ctx.db.room.id.update({ ...room, host: members[0].identity });
   else {
     const tl = ctx.db.timeline.roomId.find(roomId)!;
     ctx.db.timeline.roomId.update({
@@ -615,25 +546,20 @@ function electLeader(ctx: Ctx, roomId: bigint) {
     });
   }
 }
-export const transferLeadership = db.reducer(
-  { identity: t.identity() },
-  (ctx, { identity }) => {
-    const p = player(ctx);
-    if (!ctx.db.party.roomId.find(p.roomId)) fail("Join a party first");
-    requireLeader(ctx, p.roomId);
-    const next = ctx.db.player.identity.find(identity);
-    if (!next?.online || next.roomId !== p.roomId)
-      fail("Choose a connected party member");
-    const room = ctx.db.room.id.find(p.roomId)!;
-    ctx.db.room.id.update({ ...room, host: identity });
-  },
-);
+export const transferLeadership = db.reducer({ identity: t.identity() }, (ctx, { identity }) => {
+  const p = player(ctx);
+  if (!ctx.db.party.roomId.find(p.roomId)) fail("Join a party first");
+  requireLeader(ctx, p.roomId);
+  const next = ctx.db.player.identity.find(identity);
+  if (!next?.online || next.roomId !== p.roomId) fail("Choose a connected party member");
+  const room = ctx.db.room.id.find(p.roomId)!;
+  ctx.db.room.id.update({ ...room, host: identity });
+});
 function activateMemory(ctx: Ctx, roomId: bigint, memoryId: bigint) {
   const room = ctx.db.room.id.find(roomId)!;
   const party = ctx.db.party.roomId.find(roomId)!;
   for (const b of ctx.db.branch.roomId.filter(roomId))
-    for (const o of [...ctx.db.objectState.branchId.filter(b.id)])
-      if (o.simOwner) settle(ctx, o);
+    for (const o of [...ctx.db.objectState.branchId.filter(b.id)]) if (o.simOwner) settle(ctx, o);
   ctx.db.room.id.update({ ...room, memoryId });
   ctx.db.party.roomId.update({
     ...party,
@@ -649,53 +575,39 @@ function activateMemory(ctx: Ctx, roomId: bigint, memoryId: bigint) {
     anchorServerTs: ctx.timestamp,
   });
 }
-export const attachPartyMemory = db.reducer(
-  { memoryId: t.u64() },
-  (ctx, { memoryId }) => {
-    const p = player(ctx);
-    const party =
-      ctx.db.party.roomId.find(p.roomId) ?? fail("Join a party first");
-    requireLeader(ctx, p.roomId);
-    if (memoryId === 0n) {
-      ctx.db.party.roomId.update({ ...party, pendingMemoryId: 0n });
-      return;
-    }
-    const memory = ctx.db.memory.id.find(memoryId) ?? fail("No such memory");
-    if (memory.status === "ready") activateMemory(ctx, p.roomId, memoryId);
-    else ctx.db.party.roomId.update({ ...party, pendingMemoryId: memoryId });
-  },
-);
-export const setPlaybackSpeed = db.reducer(
-  { speed: t.f32() },
-  (ctx, { speed }) => {
-    const tl = timeline(ctx);
-    requireLeader(ctx, tl.roomId);
-    if (!Number.isFinite(speed) || speed < 0.25 || speed > 2)
-      fail("Speed must be between 0.25 and 2");
-    ctx.db.timeline.roomId.update({
-      ...tl,
-      speed,
-      anchorMediaUs: media(ctx, tl),
-      anchorServerTs: ctx.timestamp,
-    });
-  },
-);
-export const joinRoom = db.reducer(
-  { joinCode: t.string(), name: t.string(), device: t.string() },
-  (ctx, args) => {
-    const room =
-      ctx.db.room.joinCode.find(args.joinCode.trim().toUpperCase()) ??
-      fail("Room not found");
-    enter(ctx, room.id, args.name, args.device);
-  },
-);
+export const attachPartyMemory = db.reducer({ memoryId: t.u64() }, (ctx, { memoryId }) => {
+  const p = player(ctx);
+  const party = ctx.db.party.roomId.find(p.roomId) ?? fail("Join a party first");
+  requireLeader(ctx, p.roomId);
+  if (memoryId === 0n) {
+    ctx.db.party.roomId.update({ ...party, pendingMemoryId: 0n });
+    return;
+  }
+  const memory = ctx.db.memory.id.find(memoryId) ?? fail("No such memory");
+  if (memory.status === "ready") activateMemory(ctx, p.roomId, memoryId);
+  else ctx.db.party.roomId.update({ ...party, pendingMemoryId: memoryId });
+});
+export const setPlaybackSpeed = db.reducer({ speed: t.f32() }, (ctx, { speed }) => {
+  const tl = timeline(ctx);
+  requireLeader(ctx, tl.roomId);
+  if (!Number.isFinite(speed) || speed < 0.25 || speed > 2) fail("Speed must be between 0.25 and 2");
+  ctx.db.timeline.roomId.update({
+    ...tl,
+    speed,
+    anchorMediaUs: media(ctx, tl),
+    anchorServerTs: ctx.timestamp,
+  });
+});
+export const joinRoom = db.reducer({ joinCode: t.string(), name: t.string(), device: t.string() }, (ctx, args) => {
+  const room = ctx.db.room.joinCode.find(args.joinCode.trim().toUpperCase()) ?? fail("Room not found");
+  enter(ctx, room.id, args.name, args.device);
+});
 export const leaveRoom = db.reducer((ctx) => {
   authenticate(ctx);
   clearOwnership(ctx);
   const p = ctx.db.player.identity.find(ctx.sender);
   // NO_ROOM, not just offline: a later reconnect must not put the player back in this room.
-  if (p)
-    ctx.db.player.identity.update({ ...p, roomId: NO_ROOM, online: false });
+  if (p) ctx.db.player.identity.update({ ...p, roomId: NO_ROOM, online: false });
   if (p) electLeader(ctx, p.roomId);
 });
 export const setPose = db.reducer(head, (ctx, pose) => {
@@ -732,80 +644,69 @@ export const forkBranch = db.reducer({ name: t.string() }, (ctx, { name }) => {
   if (!tl.paused) fail("Pause before forking");
   fork(ctx, tl, name);
 });
-export const setBranch = db.reducer(
-  { branchId: t.u64() },
-  (ctx, { branchId }) => {
-    const tl = timeline(ctx);
-    requireLeader(ctx, tl.roomId);
-    noActiveSimulation(ctx, tl.branchId);
-    const b = branchId === 0n ? null : ownsBranch(ctx, branchId);
-    ctx.db.timeline.roomId.update({
-      ...tl,
-      branchId,
-      paused: true,
-      anchorMediaUs: b?.forkMediaUs ?? 0n,
-      anchorServerTs: ctx.timestamp,
-    });
-  },
-);
-export const grab = db.reducer(
-  { objectId: t.string(), ...pose },
-  (ctx, { objectId, ...p }) => {
-    text(objectId, 100);
-    validPose(p);
-    let tl = timeline(ctx);
-    if (!tl.paused) fail("Pause before grabbing");
-    if (tl.branchId === 0n) tl = fork(ctx, tl, "First edit");
-    let key = `${tl.branchId}:${objectId}`,
-      old = ctx.db.objectState.key.find(key);
-    // An abandoned throw rests where it was last reported; from here on it is a resting object.
-    if (old && abandoned(ctx, old)) old = settle(ctx, old);
-    // Catching an object another player holds or is still simulating is rejected.
-    if (old?.simOwner && !old.simOwner.isEqual(ctx.sender))
-      fail("Object is owned by another player");
-    // Recordings are immutable once an object rests, so child takes never lose inherited data.
-    // Grabbing an object that already rests on this branch (row, no simOwner) forks a new take
-    // "Edit <id>"; grabbing on Original forked "First edit" above. Never edit a resting row in place.
-    if (old && !old.simOwner) {
-      tl = fork(ctx, tl, clip(`Edit ${objectId}`, 100));
-      key = `${tl.branchId}:${objectId}`;
-      old = null;
-    }
-    const fromMediaUs = media(ctx, tl);
-    // Re-grabbing your own held or still-simulating object keeps the take open: the next throw
-    // records over this one from fromMediaUs, so drop those frames now or its chunks would be
-    // rejected as already recorded or overlapping.
-    if (old) truncateChunks(ctx, tl.branchId, objectId, fromMediaUs);
-    const row = {
-      key,
-      branchId: tl.branchId,
-      objectId,
-      ...p,
-      heldBy: ctx.sender,
-      simOwner: ctx.sender,
-      mode: "held",
-      fromMediaUs,
-      updatedAt: ctx.timestamp,
-    };
-    if (old) ctx.db.objectState.key.update(row);
-    else ctx.db.objectState.insert(row);
-  },
-);
+export const setBranch = db.reducer({ branchId: t.u64() }, (ctx, { branchId }) => {
+  const tl = timeline(ctx);
+  requireLeader(ctx, tl.roomId);
+  noActiveSimulation(ctx, tl.branchId);
+  const b = branchId === 0n ? null : ownsBranch(ctx, branchId);
+  ctx.db.timeline.roomId.update({
+    ...tl,
+    branchId,
+    paused: true,
+    anchorMediaUs: b?.forkMediaUs ?? 0n,
+    anchorServerTs: ctx.timestamp,
+  });
+});
+export const grab = db.reducer({ objectId: t.string(), ...pose }, (ctx, { objectId, ...p }) => {
+  text(objectId, 100);
+  validPose(p);
+  let tl = timeline(ctx);
+  if (!tl.paused) fail("Pause before grabbing");
+  if (tl.branchId === 0n) tl = fork(ctx, tl, "First edit");
+  let key = `${tl.branchId}:${objectId}`,
+    old = ctx.db.objectState.key.find(key);
+  // An abandoned throw rests where it was last reported; from here on it is a resting object.
+  if (old && abandoned(ctx, old)) old = settle(ctx, old);
+  // Catching an object another player holds or is still simulating is rejected.
+  if (old?.simOwner && !old.simOwner.isEqual(ctx.sender)) fail("Object is owned by another player");
+  // Recordings are immutable once an object rests, so child takes never lose inherited data.
+  // Grabbing an object that already rests on this branch (row, no simOwner) forks a new take
+  // "Edit <id>"; grabbing on Original forked "First edit" above. Never edit a resting row in place.
+  if (old && !old.simOwner) {
+    tl = fork(ctx, tl, clip(`Edit ${objectId}`, 100));
+    key = `${tl.branchId}:${objectId}`;
+    old = null;
+  }
+  const fromMediaUs = media(ctx, tl);
+  // Re-grabbing your own held or still-simulating object keeps the take open: the next throw
+  // records over this one from fromMediaUs, so drop those frames now or its chunks would be
+  // rejected as already recorded or overlapping.
+  if (old) truncateChunks(ctx, tl.branchId, objectId, fromMediaUs);
+  const row = {
+    key,
+    branchId: tl.branchId,
+    objectId,
+    ...p,
+    heldBy: ctx.sender,
+    simOwner: ctx.sender,
+    mode: "held",
+    fromMediaUs,
+    updatedAt: ctx.timestamp,
+  };
+  if (old) ctx.db.objectState.key.update(row);
+  else ctx.db.objectState.insert(row);
+});
 function owned(ctx: Ctx, objectId: string) {
   const tl = timeline(ctx);
   const o = ctx.db.objectState.key.find(`${tl.branchId}:${objectId}`);
-  if (!o?.simOwner?.isEqual(ctx.sender))
-    return fail("Not the simulation owner");
+  if (!o?.simOwner?.isEqual(ctx.sender)) return fail("Not the simulation owner");
   return o;
 }
-export const moveObject = db.reducer(
-  { objectId: t.string(), ...pose },
-  (ctx, { objectId, ...p }) => {
-    validPose(p);
-    const o = owned(ctx, objectId);
-    ctx.db.objectState.key.update({ ...o, ...p, updatedAt: ctx.timestamp });
-  },
-);
+export const moveObject = db.reducer({ objectId: t.string(), ...pose }, (ctx, { objectId, ...p }) => {
+  validPose(p);
+  const o = owned(ctx, objectId);
+  ctx.db.objectState.key.update({ ...o, ...p, updatedAt: ctx.timestamp });
+});
 export const release = db.reducer(
   { objectId: t.string(), rest: t.bool(), ...pose },
   (ctx, { objectId, rest, ...p }) => {
@@ -830,11 +731,8 @@ export const saveBranchKeyframes = db.reducer(
   },
   (ctx, args) => {
     ownsBranch(ctx, args.branchId);
-    const o =
-      ctx.db.objectState.key.find(`${args.branchId}:${args.objectId}`) ??
-      fail("Unknown object");
-    if (!o?.simOwner?.isEqual(ctx.sender))
-      fail("Only the simulation owner can record a trajectory");
+    const o = ctx.db.objectState.key.find(`${args.branchId}:${args.objectId}`) ?? fail("Unknown object");
+    if (!o?.simOwner?.isEqual(ctx.sender)) fail("Only the simulation owner can record a trajectory");
     if (args.keyframesJson.length > 60000) fail("Chunk too large");
     let frames: any;
     try {
@@ -842,8 +740,7 @@ export const saveBranchKeyframes = db.reducer(
     } catch {
       fail("Malformed keyframes");
     }
-    if (!Array.isArray(frames) || frames.length < 1 || frames.length > 120)
-      fail("Expected 1–120 keyframes");
+    if (!Array.isArray(frames) || frames.length < 1 || frames.length > 120) fail("Expected 1–120 keyframes");
     let previous = -1;
     for (const f of frames) {
       if (
@@ -859,12 +756,7 @@ export const saveBranchKeyframes = db.reducer(
         f.p.length !== 3 ||
         !Array.isArray(f.q) ||
         f.q.length !== 4 ||
-        [...f.p, ...f.q].some(
-          (v) =>
-            typeof v !== "number" ||
-            !Number.isFinite(v) ||
-            Math.abs(v) > 100000,
-        ) ||
+        [...f.p, ...f.q].some((v) => typeof v !== "number" || !Number.isFinite(v) || Math.abs(v) > 100000) ||
         Math.abs(Math.hypot(...f.q) - 1) > 0.05
       )
         fail("Invalid keyframe");
@@ -872,27 +764,17 @@ export const saveBranchKeyframes = db.reducer(
     }
     const start = micros(frames[0].t);
     const end = micros(frames.at(-1).t);
-    if (start !== args.startMediaUs || start < o.fromMediaUs)
-      fail("Keyframe time mismatch");
+    if (start !== args.startMediaUs || start < o.fromMediaUs) fail("Keyframe time mismatch");
     const room = ctx.db.room.id.find(player(ctx).roomId)!;
-    if (end > ctx.db.memory.id.find(room.memoryId)!.durationUs)
-      fail("Keyframes exceed memory duration");
+    if (end > ctx.db.memory.id.find(room.memoryId)!.durationUs) fail("Keyframes exceed memory duration");
     const key = `${args.branchId}:${args.objectId}:${start}`;
     const old = ctx.db.branchKeyframes.key.find(key);
     if (old) {
       // Retrying the exact same chunk is a no-op.
-      if (
-        !old.author.isEqual(ctx.sender) ||
-        old.keyframesJson !== args.keyframesJson
-      )
-        fail("Chunk already recorded");
+      if (!old.author.isEqual(ctx.sender) || old.keyframesJson !== args.keyframesJson) fail("Chunk already recorded");
     } else {
       for (const chunk of ctx.db.branchKeyframes.branchId.filter(args.branchId))
-        if (
-          chunk.objectId === args.objectId &&
-          start < chunk.endMediaUs &&
-          end > chunk.startMediaUs
-        )
+        if (chunk.objectId === args.objectId && start < chunk.endMediaUs && end > chunk.startMediaUs)
           fail("Overlapping keyframe chunks");
       ctx.db.branchKeyframes.insert({
         key,
@@ -907,12 +789,10 @@ export const saveBranchKeyframes = db.reducer(
 );
 export const onConnect = db.clientConnected((ctx) => {
   updateProfile(ctx);
-  if (ctx.connectionId)
-    ctx.db.connection.insert({ id: ctx.connectionId, identity: ctx.sender });
+  if (ctx.connectionId) ctx.db.connection.insert({ id: ctx.connectionId, identity: ctx.sender });
   const p = ctx.db.player.identity.find(ctx.sender);
   // Resume the room after a dropped connection, but never after an explicit leaveRoom.
-  if (p && p.roomId !== NO_ROOM)
-    ctx.db.player.identity.update({ ...p, online: true });
+  if (p && p.roomId !== NO_ROOM) ctx.db.player.identity.update({ ...p, online: true });
   if (p) electLeader(ctx, p.roomId);
 });
 export const onDisconnect = db.clientDisconnected((ctx) => {
@@ -924,13 +804,9 @@ export const onDisconnect = db.clientDisconnected((ctx) => {
   if (p) electLeader(ctx, p.roomId);
 });
 
-export const sampleClock = db.reducer(
-  { clientSentUs: t.u64() },
-  (ctx, { clientSentUs }) => {
-    authenticate(ctx);
-    const row = { identity: ctx.sender, clientSentUs, serverTs: ctx.timestamp };
-    if (ctx.db.clockSample.identity.find(ctx.sender))
-      ctx.db.clockSample.identity.update(row);
-    else ctx.db.clockSample.insert(row);
-  },
-);
+export const sampleClock = db.reducer({ clientSentUs: t.u64() }, (ctx, { clientSentUs }) => {
+  authenticate(ctx);
+  const row = { identity: ctx.sender, clientSentUs, serverTs: ctx.timestamp };
+  if (ctx.db.clockSample.identity.find(ctx.sender)) ctx.db.clockSample.identity.update(row);
+  else ctx.db.clockSample.insert(row);
+});

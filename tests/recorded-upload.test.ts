@@ -15,10 +15,7 @@ test("automatic capture retries confirmation without another PUT and independent
       res.writeHead(code, { "Content-Type": "application/json" });
       res.end(JSON.stringify(value));
     };
-    if (
-      req.url?.startsWith("/api/") &&
-      req.headers.authorization !== "Bearer test-token"
-    )
+    if (req.url?.startsWith("/api/") && req.headers.authorization !== "Bearer test-token")
       return json(401, { error: "Invalid token" });
     if (req.url === "/api/uploads/presign")
       return json(200, {
@@ -39,8 +36,7 @@ test("automatic capture retries confirmation without another PUT and independent
     }
     if (req.url === "/api/uploads/complete") {
       completes++;
-      if (completes === 1)
-        return json(503, { error: "Temporary database outage" });
+      if (completes === 1) return json(503, { error: "Temporary database outage" });
       return json(200, { memory: row });
     }
     if (req.url?.startsWith("/api/memories?")) {
@@ -62,17 +58,8 @@ test("automatic capture retries confirmation without another PUT and independent
     const file = new File([new Uint8Array([1, 2, 3, 4])], "clip.webm", {
       type: "video/webm",
     });
-    const attempt = new RecordedUpload(
-      file,
-      2,
-      "[SIMULATION] Test",
-      "a".repeat(64),
-      "test-token",
-      base,
-    );
-    await expect(attempt.run(() => {})).rejects.toThrow(
-      "Temporary database outage",
-    );
+    const attempt = new RecordedUpload(file, 2, "[SIMULATION] Test", "a".repeat(64), "test-token", base);
+    await expect(attempt.run(() => {})).rejects.toThrow("Temporary database outage");
     const verified = await attempt.run(() => {});
     expect(verified.id).toBe("19");
     expect(verified.size).toBe(4);
@@ -149,16 +136,12 @@ test("a test recording asks for pipeline:false and checks its row is not the wor
     expect(puts).toBe(1);
     // An upload service that ignores the flag: stop before any bytes are sent.
     echo = undefined;
-    await expect(recording().run(() => {})).rejects.toThrow(
-      "does not support test uploads",
-    );
+    await expect(recording().run(() => {})).rejects.toThrow("does not support test uploads");
     expect(puts).toBe(1);
     // The database row is assigned to the worker: the verification fails.
     echo = false;
     assigned = worker;
-    await expect(recording().run(() => {})).rejects.toThrow(
-      "assigned to the pipeline worker",
-    );
+    await expect(recording().run(() => {})).rejects.toThrow("assigned to the pipeline worker");
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }

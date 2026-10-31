@@ -1,7 +1,9 @@
 """Python mirror of packages/shared/src/manifest.ts. Keep both in sync."""
+
 from __future__ import annotations
 
 from typing import Literal, Union
+
 from pydantic import BaseModel, ConfigDict, Field
 
 Vec3 = tuple[float, float, float]
@@ -16,7 +18,9 @@ class Keyframe(BaseModel):
     q: Quat
     s: float | None = None
     v: Vec3 | None = None  # linear velocity m/s (objects), handed to physics on pause
-    e: list[float] | None = None  # camera keyframes: exposure [gr, gg, gb, br, bg, bb] (sRGB gain and bias) that maps the room splat's colours onto this frame
+    e: list[float] | None = (
+        None  # camera keyframes: exposure [gr, gg, gb, br, bg, bb] (sRGB gain and bias) that maps the room splat's colours onto this frame
+    )
 
 
 class UrlRef(BaseModel):
@@ -85,7 +89,9 @@ class PrimitiveVisual(BaseModel):
 
 class PointsSequenceVisual(BaseModel):
     kind: Literal["points-sequence"] = "points-sequence"
-    url: str  # binary layout in handoff.py (POINTS_SEQUENCE_LAYOUT); points in world coords, frame k at t = k / sampleHz
+    url: (
+        str  # binary layout in handoff.py (POINTS_SEQUENCE_LAYOUT); points in world coords, frame k at t = k / sampleHz
+    )
     frameCount: int
     sampleHz: float
 
@@ -120,8 +126,12 @@ class ConvexCollider(BaseModel):
 class DynamicObject(BaseModel):
     id: str
     label: str
-    visual: Union[MeshVisual, SplatVisual, SplatSequenceVisual, PrimitiveVisual, PointsSequenceVisual] = Field(discriminator="kind")
-    collider: Union[BoxCollider, SphereCollider, CapsuleCollider, CylinderCollider, ConvexCollider] = Field(discriminator="kind")
+    visual: Union[MeshVisual, SplatVisual, SplatSequenceVisual, PrimitiveVisual, PointsSequenceVisual] = Field(
+        discriminator="kind"
+    )
+    collider: Union[BoxCollider, SphereCollider, CapsuleCollider, CylinderCollider, ConvexCollider] = Field(
+        discriminator="kind"
+    )
     mass: float
     grabbable: bool = True
     visibleFrom: float

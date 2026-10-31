@@ -3,6 +3,7 @@
 Render the main pipeline's static-room splat (3DGS PLY, world frame) at the 4DGS held-out cameras and score it
 with the same metrics as post.py (PSNR / SSIM / LPIPS, people vs static pixels). Apples-to-apples comparison.
 usage: python static_eval.py <static .ply> <dataset dir with cams.json> <work dir> <out json> [--renders dir]"""
+
 import argparse
 import json
 import math
@@ -64,8 +65,12 @@ def main():
     ap.add_argument("--renders", default="")
     ap.add_argument("--frames", default="", help="exported per-time PLYs (t_%%04d.ply @ --fps); ply arg ignored")
     ap.add_argument("--fps", type=float, default=10.0)
-    ap.add_argument("--gt-video", action="store_true", help="ground truth = current work/input/clip.mp4 (OpenCV decode)"
-                    " instead of the 4DGS training PNGs (the clip was re-normalized after 4DGS training)")
+    ap.add_argument(
+        "--gt-video",
+        action="store_true",
+        help="ground truth = current work/input/clip.mp4 (OpenCV decode)"
+        " instead of the 4DGS training PNGs (the clip was re-normalized after 4DGS training)",
+    )
     ap.add_argument("--bg", type=float, default=0.0, help="background grey level (4DGaussians trained on white = 1)")
     a = ap.parse_args()
     cache = {}
@@ -75,12 +80,14 @@ def main():
             cache.clear()
             cache[path] = splat(load_ply(path))
         return cache[path]
+
     meta = json.loads((Path(a.data) / "cams.json").read_text())
     vp = Vipe(Path(a.work) / "vipe")
     pid = vp.ids_with(PEOPLE_PHRASES)
     dev = "cuda"
     try:
         import lpips
+
         lp = lpips.LPIPS(net="alex", verbose=False).to(dev)
     except Exception:  # noqa: BLE001
         lp = None
@@ -98,20 +105,37 @@ def main():
         w2c = torch.tensor(np.linalg.inv(c2w), dtype=torch.float32, device=dev)
         K = torch.tensor(np.array(c["K"]).reshape(3, 3), dtype=torch.float32, device=dev)
         W, H = c["w"], c["h"]
-        img, _, _ = rasterization(means, quats, scales, opac, colors, w2c[None], K[None], W, H, sh_degree=deg,
-                                  near_plane=0.01, far_plane=1e3, render_mode="RGB",
-                                  backgrounds=torch.full((1, 3), a.bg, device=dev))
+        img, _, _ = rasterization(
+            means,
+            quats,
+            scales,
+            opac,
+            colors,
+            w2c[None],
+            K[None],
+            W,
+            H,
+            sh_degree=deg,
+            near_plane=0.01,
+            far_plane=1e3,
+            render_mode="RGB",
+            backgrounds=torch.full((1, 3), a.bg, device=dev),
+        )
         img = img[0].clamp(0, 1).permute(2, 0, 1)
         if a.gt_video:
             from memreplay.vipe_io import Frames
+
             reader = reader if "reader" in dir() else Frames(Path(a.work) / "input" / "clip.mp4")
             rgb = reader.get(c["idx"])
         else:
             rgb = cv2.cvtColor(cv2.imread(str(Path(a.data) / "rgb" / "2x" / f"{c['idx']:05d}.png")), cv2.COLOR_BGR2RGB)
         gt = torch.from_numpy(np.ascontiguousarray(rgb)).permute(2, 0, 1).float().to(dev) / 255
         se = ((img - gt) ** 2).mean(0)
-        row = {"idx": c["idx"], "psnr": -10 * math.log10(max(se.mean().item(), 1e-10)),
-               "ssim": ssim(img[None], gt[None]).item()}
+        row = {
+            "idx": c["idx"],
+            "psnr": -10 * math.log10(max(se.mean().item(), 1e-10)),
+            "ssim": ssim(img[None], gt[None]).item(),
+        }
         if lp is not None:
             row["lpips"] = lp(img[None] * 2 - 1, gt[None] * 2 - 1).item()
         m = vp.mask(c["idx"])
@@ -130,10 +154,19 @@ def main():
         if a.renders:
             o = (img.permute(1, 2, 0).cpu().numpy() * 255 + 0.5).astype(np.uint8)
             cv2.imwrite(str(Path(a.renders) / f"{c['idx']:05d}.jpg"), cv2.cvtColor(o, cv2.COLOR_RGB2BGR))
-    mean = {k: float(np.mean([r[k] for r in rows if k in r])) for k in
-            ["psnr", "ssim", "lpips", "psnr_people", "psnr_static", "psnr_colour_matched"] if any(k in r for r in rows)}
-    res = {"ply": a.frames or a.ply, "num_gaussians": ng, "sh_degree": deg, "num_test": len(rows), "mean": mean,
-           "per_frame": rows}
+    mean = {
+        k: float(np.mean([r[k] for r in rows if k in r]))
+        for k in ["psnr", "ssim", "lpips", "psnr_people", "psnr_static", "psnr_colour_matched"]
+        if any(k in r for r in rows)
+    }
+    res = {
+        "ply": a.frames or a.ply,
+        "num_gaussians": ng,
+        "sh_degree": deg,
+        "num_test": len(rows),
+        "mean": mean,
+        "per_frame": rows,
+    }
     Path(a.out).write_text(json.dumps(res, indent=1))
     print(json.dumps(mean))
 

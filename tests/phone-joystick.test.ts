@@ -14,8 +14,7 @@ describe("phone WALK pad", () => {
     const element = {
       clientWidth: 88,
       querySelector: () => null,
-      addEventListener: (name: string, fn: (event: unknown) => void) =>
-        handlers.set(name, fn),
+      addEventListener: (name: string, fn: (event: unknown) => void) => handlers.set(name, fn),
       removeEventListener: (name: string) => handlers.delete(name),
       setPointerCapture() {},
       getBoundingClientRect: () => ({ left: 0, top: 0, width: 88, height: 88 }),

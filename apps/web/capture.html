@@ -13,36 +13,34 @@
         ><span id="connection" role="status">Connecting…</span>
       </header>
       <h1>See what you recorded.</h1>
-      <p class="intro">Test <strong>On → Off → upload</strong> with a simulated camera. Storage and the database are real.</p>
+      <p class="intro">
+        Test <strong>On → Off → upload</strong> with a simulated camera. Storage and the database are real.
+      </p>
       <div class="columns">
         <section class="card" aria-labelledby="sim-heading">
           <div class="sim-heading">
             <h2 id="sim-heading">On / Off demo</h2>
             <span id="sim-state" role="status">OFF</span>
           </div>
-          <p class="sim-note">
-            Animated sample scene · No glasses or webcam connected
-          </p>
+          <p class="sim-note">Animated sample scene · No glasses or webcam connected</p>
           <canvas
             id="sim-canvas"
             width="640"
             height="360"
             aria-label="Simulated camera scene with a moving ball and recording timer"
           ></canvas>
-          <div class="sim-caption">
-            <span>SIMULATED CAMERA</span
-            ><span id="sim-timer">0.0 s / 30 s</span>
-          </div>
+          <div class="sim-caption"><span>SIMULATED CAMERA</span><span id="sim-timer">0.0 s / 30 s</span></div>
           <label for="sim-title">Test title</label>
           <input id="sim-title" maxlength="75" value="On-Off recording test" />
           <div class="sim-buttons">
             <button id="sim-on" disabled aria-keyshortcuts="O">On</button>
             <button id="sim-off" disabled aria-keyshortcuts="F">Off</button>
           </div>
-          <p class="sim-note">Click On, wait a few seconds, then Off (or press O / F). Off saves, uploads and verifies the clip. Test clips are never turned into 3D.</p>
-          <p id="sim-status" role="status">
-            Ready when the database is connected.
+          <p class="sim-note">
+            Click On, wait a few seconds, then Off (or press O / F). Off saves, uploads and verifies the clip. Test
+            clips are never turned into 3D.
           </p>
+          <p id="sim-status" role="status">Ready when the database is connected.</p>
           <p id="sim-proof"></p>
           <button id="sim-retry" hidden>Retry upload / verify</button>
           <button id="sim-reset" hidden>New test</button>
@@ -63,23 +61,18 @@
             <dt>Video URL</dt>
             <dd><a id="source-link" target="_blank" rel="noopener">—</a></dd>
           </dl>
-          <video
-            id="stored-video"
-            controls
-            playsinline
-            preload="metadata"
-            aria-label="Stored video playback"
-          ></video>
+          <video id="stored-video" controls playsinline preload="metadata" aria-label="Stored video playback"></video>
           <button id="check-storage" disabled>Verify stored file</button>
-          <p id="storage-proof" role="status">
-            Select a recording to check its file.
-          </p>
+          <p id="storage-proof" role="status">Select a recording to check its file.</p>
           <p id="playback-proof" role="status"></p>
         </section>
       </div>
       <details class="card import-card">
         <summary>Test a real glasses video</summary>
-        <p>Record on the glasses (1080p, 30 fps, stabilization off), export from Meta AI, and upload it here. Unlike the simulation, it goes to the 3D pipeline.</p>
+        <p>
+          Record on the glasses (1080p, 30 fps, stabilization off), export from Meta AI, and upload it here. Unlike the
+          simulation, it goes to the 3D pipeline.
+        </p>
         <section id="upload-panel"></section>
       </details>
       <p id="error" role="alert"></p>

@@ -31,14 +31,20 @@ export class AudioSync {
   private time = 0;
   private playing = false;
 
-  constructor(readonly media: MediaLike, private readonly onBlockedChange: (blocked: boolean) => void = () => {},
-    private readonly now: () => number = () => performance.now()) {}
+  constructor(
+    readonly media: MediaLike,
+    private readonly onBlockedChange: (blocked: boolean) => void = () => {},
+    private readonly now: () => number = () => performance.now(),
+  ) {}
 
-  get isUnlocked(): boolean { return this.unlocked; }
+  get isUnlocked(): boolean {
+    return this.unlocked;
+  }
 
   update(time: number, playing: boolean, speed = 1): void {
     const media = this.media;
-    this.time = time; this.playing = playing;
+    this.time = time;
+    this.playing = playing;
     if (this.failed) return;
     const end = Number.isFinite(media.duration) ? media.duration : Infinity;
     const rate = Math.max(0.0625, Math.min(16, speed));
@@ -66,32 +72,49 @@ export class AudioSync {
     const media = this.media;
     if (Math.abs(media.currentTime - this.time) > AudioSync.maxDrift) this.seek(this.time);
     const request = media.play();
-    if (!this.playing) media.pause(); // play() then pause() inside the gesture unlocks the element for later
+    if (!this.playing)
+      media.pause(); // play() then pause() inside the gesture unlocks the element for later
     else this.settleUntil = this.now() + AudioSync.settleMs;
-    void Promise.resolve(request).then(() => this.settle(true), (error: unknown) => {
-      // AbortError: our own pause() interrupted the unlocking play(), so the gesture was accepted.
-      if (errorName(error) === "AbortError") this.settle(true);
-      else if (errorName(error) === "NotAllowedError") this.settle(false);
-      else this.failed = true;
-    });
+    void Promise.resolve(request).then(
+      () => this.settle(true),
+      (error: unknown) => {
+        // AbortError: our own pause() interrupted the unlocking play(), so the gesture was accepted.
+        if (errorName(error) === "AbortError") this.settle(true);
+        else if (errorName(error) === "NotAllowedError") this.settle(false);
+        else this.failed = true;
+      },
+    );
   }
 
-  private seek(time: number): void { this.media.currentTime = time; this.settleUntil = this.now() + AudioSync.settleMs; }
+  private seek(time: number): void {
+    this.media.currentTime = time;
+    this.settleUntil = this.now() + AudioSync.settleMs;
+  }
 
   private start(): void {
-    this.starting = true; this.settleUntil = this.now() + AudioSync.settleMs;
-    void Promise.resolve(this.media.play()).then(() => { this.starting = false; this.settle(true); }, (error: unknown) => {
-      this.starting = false;
-      // AbortError: a pause() from a later update interrupted this start, which is fine.
-      if (errorName(error) === "NotAllowedError") this.settle(false);
-      else if (errorName(error) !== "AbortError") this.failed = true;
-    });
+    this.starting = true;
+    this.settleUntil = this.now() + AudioSync.settleMs;
+    void Promise.resolve(this.media.play()).then(
+      () => {
+        this.starting = false;
+        this.settle(true);
+      },
+      (error: unknown) => {
+        this.starting = false;
+        // AbortError: a pause() from a later update interrupted this start, which is fine.
+        if (errorName(error) === "NotAllowedError") this.settle(false);
+        else if (errorName(error) !== "AbortError") this.failed = true;
+      },
+    );
   }
 
   private settle(allowed: boolean): void {
     if (allowed) this.unlocked = true;
     const blocked = !this.unlocked;
-    if (blocked !== this.blocked) { this.blocked = blocked; this.onBlockedChange(blocked); }
+    if (blocked !== this.blocked) {
+      this.blocked = blocked;
+      this.onBlockedChange(blocked);
+    }
   }
 }
 
@@ -103,30 +126,56 @@ const GESTURES = ["pointerdown", "pointerup", "touchend", "click", "keydown"] as
  */
 export function mountAudio(url: string, toolbar: Element | null, warn: (message: string) => void) {
   const media = document.createElement("audio");
-  media.preload = "auto"; media.src = url;
+  media.preload = "auto";
+  media.src = url;
   document.body.append(media);
-  const toggle = document.createElement("label"), box = document.createElement("input"), text = document.createElement("span");
-  toggle.className = "toggle"; box.type = "checkbox"; box.checked = true; text.textContent = "Sound";
-  toggle.append(box, " ", text); toolbar?.append(toggle);
-  box.onchange = () => { media.muted = !box.checked; };
-  const sync = new AudioSync(media, blocked => { text.textContent = blocked ? "Sound (tap to start)" : "Sound"; });
+  const toggle = document.createElement("label"),
+    box = document.createElement("input"),
+    text = document.createElement("span");
+  toggle.className = "toggle";
+  box.type = "checkbox";
+  box.checked = true;
+  text.textContent = "Sound";
+  toggle.append(box, " ", text);
+  toolbar?.append(toggle);
+  box.onchange = () => {
+    media.muted = !box.checked;
+  };
+  const sync = new AudioSync(media, (blocked) => {
+    text.textContent = blocked ? "Sound (tap to start)" : "Sound";
+  });
   const gesture = () => {
     if (!sync.isUnlocked && !sync.failed) sync.unlock();
-    if (sync.isUnlocked || sync.failed) for (const type of GESTURES) removeEventListener(type, gesture, { capture: true });
+    if (sync.isUnlocked || sync.failed)
+      for (const type of GESTURES) removeEventListener(type, gesture, { capture: true });
   };
   for (const type of GESTURES) addEventListener(type, gesture, { capture: true });
-  media.addEventListener("error", () => {
-    sync.failed = true; toggle.remove();
-    warn(`The memory's audio could not be played (${media.error?.message || `error ${media.error?.code}`}): ${media.src}`);
-  }, { once: true });
+  media.addEventListener(
+    "error",
+    () => {
+      sync.failed = true;
+      toggle.remove();
+      warn(
+        `The memory's audio could not be played (${media.error?.message || `error ${media.error?.code}`}): ${media.src}`,
+      );
+    },
+    { once: true },
+  );
   // A hidden tab stops the animation loop, and with it the timeline, but not an <audio> element. update() restarts it.
-  const hidden = () => { if (document.hidden) media.pause(); };
+  const hidden = () => {
+    if (document.hidden) media.pause();
+  };
   document.addEventListener("visibilitychange", hidden);
   return {
-    sync, media,
+    sync,
+    media,
     update: (time: number, playing: boolean, speed: number) => sync.update(time, playing, speed),
     dispose: () => {
-      media.pause(); media.removeAttribute("src"); media.load(); media.remove(); toggle.remove();
+      media.pause();
+      media.removeAttribute("src");
+      media.load();
+      media.remove();
+      toggle.remove();
       document.removeEventListener("visibilitychange", hidden);
       for (const type of GESTURES) removeEventListener(type, gesture, { capture: true });
     },

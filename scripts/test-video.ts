@@ -6,9 +6,7 @@ const [file, seconds] = process.argv.slice(2);
 const durationSec = Number(seconds),
   base = (process.env.APP_ORIGIN || "http://127.0.0.1:5173").replace(/\/$/, "");
 if (!file || !Number.isFinite(durationSec) || durationSec <= 0)
-  throw new Error(
-    "Usage: npm run test:video -- /path/to/video.mp4 DURATION_SECONDS",
-  );
+  throw new Error("Usage: npm run test:video -- /path/to/video.mp4 DURATION_SECONDS");
 const bytes = await readFile(file),
   hash = createHash("sha256").update(bytes).digest("hex");
 const authResponse = await fetch(`${base}/api/identity`, { method: "POST" });
@@ -43,11 +41,7 @@ const prepared = await api("/api/uploads/presign", {
   // A verification run, not a memory: keep its row off the GPU worker's queue.
   pipeline: false,
 });
-assert.equal(
-  prepared.pipeline,
-  false,
-  "The upload service ignored pipeline:false; restart it from this build",
-);
+assert.equal(prepared.pipeline, false, "The upload service ignored pipeline:false; restart it from this build");
 assert.ok(
   (
     await fetch(prepared.putUrl, {
@@ -71,11 +65,7 @@ const rows = (await list.json()).memories;
 const row = rows.find((m: any) => m.requestId === prepared.requestId);
 assert.equal(row?.id, completed.memory.id);
 assert.equal(row?.status, "uploaded");
-assert.equal(
-  row?.pipelineIdentity,
-  identity,
-  "The test row is assigned to the pipeline worker",
-);
+assert.equal(row?.pipelineIdentity, identity, "The test row is assigned to the pipeline worker");
 console.log(
   `PASS 2/4: independent database query found memory #${row.id}, status=${row.status}, assigned to this test identity (not queued for the pipeline)`,
 );
@@ -84,12 +74,8 @@ assert.ok(response.ok, "Stored video could not be retrieved");
 const retrieved = Buffer.from(await response.arrayBuffer());
 assert.equal(createHash("sha256").update(retrieved).digest("hex"), hash);
 assert.equal(retrieved.length, bytes.length);
-console.log(
-  `PASS 3/4: downloaded video is byte-for-byte identical (SHA-256 ${hash})`,
-);
+console.log(`PASS 3/4: downloaded video is byte-for-byte identical (SHA-256 ${hash})`);
 const retry = await api("/api/uploads/complete", { receipt: prepared.receipt });
 assert.equal(retry.memory.id, row.id);
 console.log("PASS 4/4: repeated completion returns the same database row");
-console.log(
-  `Watch the stored recording: ${base}/capture.html?request=${prepared.requestId}`,
-);
+console.log(`Watch the stored recording: ${base}/capture.html?request=${prepared.requestId}`);

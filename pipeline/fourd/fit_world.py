@@ -2,6 +2,7 @@
 world frame as it is now (work/world/frames.npz). Writes <data>/to_world.json {T_train_to_world (4x4 row-major),
 scale, residual_m}. The 4D model is trained in the old frame; post.py --to_world applies this at export.
 usage: python fit_world.py <data dir> <work dir>"""
+
 import json
 import sys
 
@@ -27,9 +28,12 @@ rot_err = np.degrees(np.arccos(np.clip(cosang, -1, 1)))
 T = np.eye(4)
 T[:3, :3] = s * R
 T[:3, 3] = t
-out = {"T_train_to_world": T.flatten().tolist(), "scale": float(s),
-       "residual_m": {"max": float(res.max()), "median": float(np.median(res))},
-       "rot_err_deg": {"max": float(rot_err.max()), "median": float(np.median(rot_err))},
-       "world_json_scale": json.load(open(f"{work}/world/world.json"))["scale"]}
+out = {
+    "T_train_to_world": T.flatten().tolist(),
+    "scale": float(s),
+    "residual_m": {"max": float(res.max()), "median": float(np.median(res))},
+    "rot_err_deg": {"max": float(rot_err.max()), "median": float(np.median(rot_err))},
+    "world_json_scale": json.load(open(f"{work}/world/world.json"))["scale"],
+}
 json.dump(out, open(f"{data}/to_world.json", "w"), indent=1)
 print(json.dumps({k: v for k, v in out.items() if k != "T_train_to_world"}))

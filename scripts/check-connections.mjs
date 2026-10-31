@@ -9,7 +9,8 @@ try {
   const { identity, token } = await response.json();
   if (!/^(0x)?[a-f0-9]{64}$/i.test(identity) || typeof token !== "string") throw new Error("Invalid identity response");
   const report = await fetch(`${endpoint}/api/connections?identity=${identity.replace(/^0x/, "")}`, {
-    headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15000),
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(15000),
   });
   if (![200, 503].includes(report.status)) throw new Error(`Connections endpoint returned HTTP ${report.status}`);
   const body = await report.json();

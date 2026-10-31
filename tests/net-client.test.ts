@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { computeReconnectDelayMs, DisconnectedError, Identity, resolveReconnectPolicy, UnknownCallResultError } from "spacetimedb";
+import {
+  computeReconnectDelayMs,
+  DisconnectedError,
+  Identity,
+  resolveReconnectPolicy,
+  UnknownCallResultError,
+} from "spacetimedb";
 import { accountStorageKey, databaseSettings, encodeAccountKey } from "../apps/web/src/account-key";
 import { DbConnection } from "../apps/web/src/module_bindings";
 import {
@@ -89,7 +95,18 @@ function fakeConnection() {
   return {
     isActive: true,
     db: Object.fromEntries(
-      ["memory", "room", "party", "profile", "player", "timeline", "branch", "objectState", "branchKeyframes", "clockSample"].map((n) => [n, table()]),
+      [
+        "memory",
+        "room",
+        "party",
+        "profile",
+        "player",
+        "timeline",
+        "branch",
+        "objectState",
+        "branchKeyframes",
+        "clockSample",
+      ].map((n) => [n, table()]),
     ),
     subscriptionBuilder: () => subscription,
     reducers: { sampleClock: async () => {} },
@@ -102,16 +119,21 @@ function recordBuilds(): Build[] {
   const builds: Build[] = [];
   vi.spyOn(DbConnection, "builder").mockImplementation(() => {
     const build: Build = { on: {}, conn: fakeConnection() };
-    const builder: any = new Proxy({}, {
-      get: (_target, name: string) => (...args: any[]) => {
-        if (name === "withToken") build.token = args[0];
-        if (name === "withAutomaticReconnect") build.reconnect = args[0];
-        if (name.startsWith("on")) build.on[name] = args[0];
-        if (name !== "build") return builder;
-        builds.push(build);
-        return build.conn;
+    const builder: any = new Proxy(
+      {},
+      {
+        get:
+          (_target, name: string) =>
+          (...args: any[]) => {
+            if (name === "withToken") build.token = args[0];
+            if (name === "withAutomaticReconnect") build.reconnect = args[0];
+            if (name.startsWith("on")) build.on[name] = args[0];
+            if (name !== "build") return builder;
+            builds.push(build);
+            return build.conn;
+          },
       },
-    });
+    );
     return builder;
   });
   return builds;
@@ -146,7 +168,10 @@ describe("connection", () => {
     const credential = "header.payload.signature";
     const builds = recordBuilds();
     const session = tab("account", { "memreplay-token:account": "saved-guest" });
-    session.setItem(accountStorageKey(), encodeAccountKey({ ...databaseSettings(), identity: new Identity(9n).toHexString(), token: credential }));
+    session.setItem(
+      accountStorageKey(),
+      encodeAccountKey({ ...databaseSettings(), identity: new Identity(9n).toHexString(), token: credential }),
+    );
     const net = multiplayer(undefined);
     net.connect();
     expect(builds[0].token).toBe(credential);
@@ -202,9 +227,16 @@ describe("connection", () => {
     conn.applied();
     expect([net.ready, net.status, net.error]).toEqual([true, "Connected", ""]);
     on.onDisconnect({}, new Error("WebSocket closed (code 1006)"), 1, 1400);
-    expect([net.ready, net.status, net.error]).toEqual([false, "Connection lost — reconnecting in 1 s…", "WebSocket closed (code 1006)"]);
+    expect([net.ready, net.status, net.error]).toEqual([
+      false,
+      "Connection lost — reconnecting in 1 s…",
+      "WebSocket closed (code 1006)",
+    ]);
     on.onConnectError({}, new Error("Failed to connect"), 2, 2600);
-    expect([net.status, net.failure]).toEqual(["Reconnecting… (attempt 2, next in 3 s)", { kind: "connection", message: "Failed to connect" }]);
+    expect([net.status, net.failure]).toEqual([
+      "Reconnecting… (attempt 2, next in 3 s)",
+      { kind: "connection", message: "Failed to connect" },
+    ]);
     on.onAutomaticReconnect(conn, new Identity(7n), "token-1");
     expect(net.status).toBe("Resynchronizing…");
     conn.applied(); // the SDK replays the subscription after a reconnect
@@ -322,7 +354,10 @@ describe("connection recovery", () => {
     const { builds, net } = setup();
     net.dispose();
     const credential = "header.payload.signature";
-    sessionStorage.setItem(accountStorageKey(), encodeAccountKey({ ...databaseSettings(), identity: new Identity(9n).toHexString(), token: credential }));
+    sessionStorage.setItem(
+      accountStorageKey(),
+      encodeAccountKey({ ...databaseSettings(), identity: new Identity(9n).toHexString(), token: credential }),
+    );
     const signedIn = multiplayer(undefined);
     signedIn.connect();
     builds[1].on.onConnectError({}, Object.assign(new Error("Rejected"), { name: "WebSocketTokenError", status: 401 }));
@@ -380,38 +415,42 @@ describe.each(lockManagers)("one identity per live tab, with %s", (_name, locksF
     expect((await claimStoredToken(storage({}), key, locks)).token).toBeUndefined(); // nothing stored: a new guest
   });
 
-  test.skipIf(skip)("Multiplayer: a duplicated tab connects as a new guest, whose token a later copy finds taken", async () => {
-    const builds = recordBuilds();
-    const database = `tabs-${Math.random()}`, key = `memreplay-token:${database}`;
-    const tabA = tab(database, { [key]: "token-a" });
-    const a = multiplayer(locks);
-    a.connect();
-    await until(() => builds.length === 1, "tab A's connection");
-    expect(builds[0].token).toBe("token-a");
+  test.skipIf(skip)(
+    "Multiplayer: a duplicated tab connects as a new guest, whose token a later copy finds taken",
+    async () => {
+      const builds = recordBuilds();
+      const database = `tabs-${Math.random()}`,
+        key = `memreplay-token:${database}`;
+      const tabA = tab(database, { [key]: "token-a" });
+      const a = multiplayer(locks);
+      a.connect();
+      await until(() => builds.length === 1, "tab A's connection");
+      expect(builds[0].token).toBe("token-a");
 
-    tab(database, { [key]: "token-a" }); // duplicated from A
-    const b = multiplayer(locks);
-    b.connect();
-    await until(() => builds.length === 2, "tab B's connection", IDENTITY_WAIT_MS + 2000);
-    expect(builds[1].token).toBeUndefined(); // a new guest
-    expect(b.status).toMatch(/open in another tab/);
-    const tabB = sessionStorage;
-    builds[1].on.onConnect(builds[1].conn, new Identity(2n), "token-b"); // the server's new identity
-    expect(tabB.getItem(key)).toBe("token-b");
-    expect(tabA.getItem(key)).toBe("token-a");
+      tab(database, { [key]: "token-a" }); // duplicated from A
+      const b = multiplayer(locks);
+      b.connect();
+      await until(() => builds.length === 2, "tab B's connection", IDENTITY_WAIT_MS + 2000);
+      expect(builds[1].token).toBeUndefined(); // a new guest
+      expect(b.status).toMatch(/open in another tab/);
+      const tabB = sessionStorage;
+      builds[1].on.onConnect(builds[1].conn, new Identity(2n), "token-b"); // the server's new identity
+      expect(tabB.getItem(key)).toBe("token-b");
+      expect(tabA.getItem(key)).toBe("token-a");
 
-    tab(database, { [key]: "token-b" }); // window.open from B, after it connected
-    multiplayer(locks).connect();
-    await until(() => builds.length === 3, "tab C's connection", IDENTITY_WAIT_MS + 2000);
-    expect(builds[2].token).toBeUndefined();
+      tab(database, { [key]: "token-b" }); // window.open from B, after it connected
+      multiplayer(locks).connect();
+      await until(() => builds.length === 3, "tab C's connection", IDENTITY_WAIT_MS + 2000);
+      expect(builds[2].token).toBeUndefined();
 
-    tab(database, { [key]: "token-a" }); // A reloads: its old page goes away
-    const reloaded = multiplayer(locks);
-    reloaded.connect();
-    a.dispose();
-    await until(() => builds.length === 4, "A's reload", IDENTITY_WAIT_MS + 2000);
-    expect(builds[3].token).toBe("token-a");
-  });
+      tab(database, { [key]: "token-a" }); // A reloads: its old page goes away
+      const reloaded = multiplayer(locks);
+      reloaded.connect();
+      a.dispose();
+      await until(() => builds.length === 4, "A's reload", IDENTITY_WAIT_MS + 2000);
+      expect(builds[3].token).toBe("token-a");
+    },
+  );
 });
 
 test("without Web Locks (an insecure origin) the stored token is used as before", async () => {
@@ -428,15 +467,20 @@ test("library guest ID survives a new tab session without sharing a multiplayer 
   const session = tab("library-test");
   const persistent = storage();
   vi.stubGlobal("localStorage", persistent);
-  const first = new Multiplayer(true); nets.push(first); first.connect();
+  const first = new Multiplayer(true);
+  nets.push(first);
+  first.connect();
   builds[0].on.onConnect(builds[0].conn, new Identity(1n), "library-guest");
   expect(persistent.getItem("memreplay-library-token:library-test")).toBe("library-guest");
   expect(session.getItem("memreplay-token:library-test")).toBeNull();
   first.dispose();
   tab("library-test");
-  vi.stubGlobal("localStorage", persistent);   // a new tab of the same browser shares localStorage (tab() resets it)
-  const second = new Multiplayer(true); nets.push(second); second.connect();
+  vi.stubGlobal("localStorage", persistent); // a new tab of the same browser shares localStorage (tab() resets it)
+  const second = new Multiplayer(true);
+  nets.push(second);
+  second.connect();
   expect(builds[1].token).toBe("library-guest");
-  const viewer = multiplayer(undefined); viewer.connect();
+  const viewer = multiplayer(undefined);
+  viewer.connect();
   expect(builds[2].token).toBeUndefined();
 });

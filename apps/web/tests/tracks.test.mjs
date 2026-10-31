@@ -9,7 +9,16 @@ const vec = (vector, expected) => expected.forEach((x, i) => close(vector.toArra
 
 test("validateTrack accepts an absent or finite 3-vector v and rejects anything else", () => {
   validateTrack([frame(0, 0), frame(1, 1, [1, 0, -2.5])]);
-  for (const v of [[NaN, 0, 0], [Infinity, 0, 0], [1, 2], [1, 2, 3, 4], "fast", null, { x: 1, y: 0, z: 0 }, [1, "2", 3]]) {
+  for (const v of [
+    [NaN, 0, 0],
+    [Infinity, 0, 0],
+    [1, 2],
+    [1, 2, 3, 4],
+    "fast",
+    null,
+    { x: 1, y: 0, z: 0 },
+    [1, "2", 3],
+  ]) {
     assert.throws(() => validateTrack([{ ...frame(0, 0), v }], "ball"), /invalid v/, `v=${JSON.stringify(v)}`);
   }
 });

@@ -15,6 +15,7 @@ floor, and is 0.8-2.3 m tall; keep_ghost() checks that on the points-sequence fi
 
     memreplay clean <memory dir>     # prune the splats and filter the ghosts of a published memory, in place
 """
+
 from __future__ import annotations
 
 import json
@@ -28,14 +29,14 @@ import numpy as np
 
 NEAR_PATH = 0.5
 MAX_SCALE = 1.5
-FAR = 60.0              # m from the path: beyond this, far-field rules apply
+FAR = 60.0  # m from the path: beyond this, far-field rules apply
 FAR_SCALE_PER_M = 0.06  # size limit beyond FAR grows with distance (9 m for a sky Gaussian 150 m out)
-MAX_DIST = 400.0        # m: nothing farther than this (the viewer's far plane is 200 m from the eye)
+MAX_DIST = 400.0  # m: nothing farther than this (the viewer's far plane is 200 m from the eye)
 SKY_FILL = float(os.environ.get("MEMREPLAY_SKY_FILL", "2.5"))  # grow far sky Gaussians by this factor (1 = off)
-SKY_MIN_OPACITY = 0.7   # and make them at least this opaque: a sky is smooth and sits behind everything
-SKY_ABOVE_EYE = 5.0     # m above the camera path: below this a far Gaussian may be a facade, not sky
-NEAR_BIG_RADIUS = 1.5   # m from the path
-NEAR_BIG = 0.35         # m: a Gaussian this long, this close, is a floater (close surfaces are finely resolved)
+SKY_MIN_OPACITY = 0.7  # and make them at least this opaque: a sky is smooth and sits behind everything
+SKY_ABOVE_EYE = 5.0  # m above the camera path: below this a far Gaussian may be a facade, not sky
+NEAR_BIG_RADIUS = 1.5  # m from the path
+NEAR_BIG = 0.35  # m: a Gaussian this long, this close, is a floater (close surfaces are finely resolved)
 
 
 def prune(data: np.ndarray, path_xyz: np.ndarray) -> np.ndarray:
@@ -46,15 +47,15 @@ def prune(data: np.ndarray, path_xyz: np.ndarray) -> np.ndarray:
     s = np.exp(np.stack([data["scale_0"], data["scale_1"], data["scale_2"]], 1).astype(np.float64))
     op = 1 / (1 + np.exp(-data["opacity"].astype(np.float64)))
     d = cKDTree(path_xyz).query(xyz, k=1)[0]
-    srt = np.sort(s, axis=1)                                   # small, mid, big
+    srt = np.sort(s, axis=1)  # small, mid, big
     big, mid = srt[:, 2], np.maximum(srt[:, 1], 1e-6)
-    far = d > FAR                                              # distant facades and the sky dome
+    far = d > FAR  # distant facades and the sky dome
     keep = np.isfinite(xyz).all(1) & (d > NEAR_PATH) & (d < MAX_DIST) & (op > 0.002)
     keep &= big < np.where(far, FAR_SCALE_PER_M * d, MAX_SCALE)  # giants (far ones may legitimately be metres across)
-    keep &= far | ~((big > 0.12) & (big / mid > 8))            # needles: one long axis (flat discs build floors)
-    keep &= far | ~((big > 0.6) & (op < 0.3))                  # big, faint blobs: haze and light blooms
-    keep &= ~(far & (op < 0.1))                                # far and faint: never visible, only a cost
-    keep &= ~((d < NEAR_BIG_RADIUS) & (big > NEAR_BIG))        # big blobs right in front of the camera: floaters
+    keep &= far | ~((big > 0.12) & (big / mid > 8))  # needles: one long axis (flat discs build floors)
+    keep &= far | ~((big > 0.6) & (op < 0.3))  # big, faint blobs: haze and light blooms
+    keep &= ~(far & (op < 0.1))  # far and faint: never visible, only a cost
+    keep &= ~((d < NEAR_BIG_RADIUS) & (big > NEAR_BIG))  # big blobs right in front of the camera: floaters
     return keep
 
 
@@ -214,8 +215,9 @@ def clean_memory_dir(mdir: Path) -> dict:
         m = json.loads(p.read_text())
         path = track_positions(m)
         cams = None
-        if (mdir / "world" / "cameras.json").exists():          # pipeline folders have it; published ones may not
+        if (mdir / "world" / "cameras.json").exists():  # pipeline folders have it; published ones may not
             from .handoff import Cameras
+
             cams = Cameras.model_validate_json((mdir / "world" / "cameras.json").read_text()).frames
         bg = m["background"]["url"]
         if bg.endswith((".spz", ".ply")) and bg not in done and (mdir / bg).exists():
