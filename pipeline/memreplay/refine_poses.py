@@ -10,6 +10,7 @@ correction to the other keyframes, and rewrites world/cameras.json (the original
     memreplay stage refine --work <work>            # on the pod (gsplat_static/ckpts, colmap/images present)
     python -m memreplay.refine_poses <dir> <ckpt>   # anywhere: <dir>/world/cameras.json + <dir>/colmap_names.txt
 """
+
 from __future__ import annotations
 
 import glob
@@ -52,13 +53,15 @@ def run(work: Path, ckpt_path: Path | None = None, test_every: int = 12) -> dict
 
     work = Path(work)
     if ckpt_path is None:
-        ckpts = sorted(glob.glob(str(work / "gsplat_static" / "ckpts" / "ckpt_*_rank0.pt")),
-                       key=lambda p: int(Path(p).stem.split("_")[1]))
+        ckpts = sorted(
+            glob.glob(str(work / "gsplat_static" / "ckpts" / "ckpt_*_rank0.pt")),
+            key=lambda p: int(Path(p).stem.split("_")[1]),
+        )
         if not ckpts:
             raise SystemExit("no static checkpoint")
         ckpt_path = Path(ckpts[-1])
         cfg = (work / "gsplat_static" / "cfg.yml").read_text()
-        test_every = int(next(l for l in cfg.splitlines() if l.strip().startswith("test_every")).split(":")[1])
+        test_every = int(next(line for line in cfg.splitlines() if line.strip().startswith("test_every")).split(":")[1])
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     if "pose_adjust" not in ckpt:
         print("[refine] trained without pose_opt; nothing to do")
@@ -68,7 +71,7 @@ def run(work: Path, ckpt_path: Path | None = None, test_every: int = 12) -> dict
         names = sorted(names_file.read_text().split())
     else:
         names = sorted(p.stem for p in (work / "colmap" / "images").glob("*.jpg"))
-    train_idx = [int(n) for i, n in enumerate(names) if i % test_every != 0]     # gsplat's train split
+    train_idx = [int(n) for i, n in enumerate(names) if i % test_every != 0]  # gsplat's train split
     src = work / "world" / "cameras.json"
     orig = work / "world" / "cameras.vipe.json"
     if not orig.exists():
@@ -79,20 +82,29 @@ def run(work: Path, ckpt_path: Path | None = None, test_every: int = 12) -> dict
     state = ckpt["pose_adjust"]
     assert state["embeds.weight"].shape[0] == len(train_idx), (state["embeds.weight"].shape, len(train_idx))
     refined = _apply(state, c2w)
-    D = np.einsum("nij,njk->nik", refined, np.linalg.inv(c2w))       # world-frame correction per training frame
+    D = np.einsum("nij,njk->nik", refined, np.linalg.inv(c2w))  # world-frame correction per training frame
     shifts = np.linalg.norm(refined[:, :3, 3] - c2w[:, :3, 3], axis=1)
-    ang = np.degrees(np.arccos(np.clip((np.einsum("nii->n", np.einsum("nij,nkj->nik", refined[:, :3, :3], c2w[:, :3, :3])) - 1) / 2, -1, 1)))
-    stats = {"frames": len(train_idx), "shift_median_m": round(float(np.median(shifts)), 3),
-             "shift_p90_m": round(float(np.percentile(shifts, 90)), 3), "shift_max_m": round(float(shifts.max()), 3),
-             "rot_median_deg": round(float(np.median(ang)), 2), "rot_p90_deg": round(float(np.percentile(ang, 90)), 2),
-             "mean_dxyz": [round(float(x), 3) for x in (refined[:, :3, 3] - c2w[:, :3, 3]).mean(0)]}
+    ang = np.degrees(
+        np.arccos(
+            np.clip((np.einsum("nii->n", np.einsum("nij,nkj->nik", refined[:, :3, :3], c2w[:, :3, :3])) - 1) / 2, -1, 1)
+        )
+    )
+    stats = {
+        "frames": len(train_idx),
+        "shift_median_m": round(float(np.median(shifts)), 3),
+        "shift_p90_m": round(float(np.percentile(shifts, 90)), 3),
+        "shift_max_m": round(float(shifts.max()), 3),
+        "rot_median_deg": round(float(np.median(ang)), 2),
+        "rot_p90_deg": round(float(np.percentile(ang, 90)), 2),
+        "mean_dxyz": [round(float(x), 3) for x in (refined[:, :3, 3] - c2w[:, :3, 3]).mean(0)],
+    }
     ti = np.array(train_idx)
     out = []
     for c in cams.frames:
         k = int(np.argmin(np.abs(ti - c.idx)))
         M = D[k] @ np.array(c.c2w).reshape(4, 4)
         u, _, vt = np.linalg.svd(M[:3, :3])
-        M[:3, :3] = u @ vt                                           # a pure rotation
+        M[:3, :3] = u @ vt  # a pure rotation
         out.append(c.model_copy(update={"c2w": M.reshape(-1).tolist()}))
     src.write_text(Cameras(frames=out).model_dump_json())
     (work / "world" / "pose_refine.json").write_text(json.dumps(stats, indent=2))

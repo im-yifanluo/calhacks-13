@@ -1,0 +1,16 @@
+{
+  "name": "@memreplay/upload",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Upload API: signed video uploads, six-digit account passwords and scene publishing, on Node or Cloudflare Workers",
+  "scripts": {
+    "start": "node src/node/server.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1156.0",
+    "@aws-sdk/s3-request-presigner": "^3.1156.0"
+  }
+}

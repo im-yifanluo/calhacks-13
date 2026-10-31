@@ -1,24 +1,9 @@
-import { databaseSettings, savedAccount } from "../account-key";
+import { databaseSettings, savedAccount } from "../account/key";
 import { DbConnection, tables } from "../module_bindings";
 import { DisconnectedError, type Identity } from "spacetimedb";
-import type {
-  Memory,
-  Room,
-  Player,
-  Timeline,
-  Branch,
-  ObjectState,
-  BranchKeyframes,
-} from "../module_bindings/types";
-export type {
-  Memory,
-  Room,
-  Player,
-  Timeline,
-  Branch,
-  ObjectState,
-  BranchKeyframes,
-};
+import type { Memory, Room, Player, Timeline, Branch, ObjectState, BranchKeyframes } from "../module_bindings/types";
+import { claimStoredToken, holdLock, lockName, type Locks } from "./identity-lock";
+export type { Memory, Room, Player, Timeline, Branch, ObjectState, BranchKeyframes };
 export type Pose = {
   px: number;
   py: number;
@@ -56,8 +41,7 @@ const HEARTBEAT_TIMEOUT_MS = 8000;
 export const initialRetryDelayMs = (failures: number) =>
   Math.min(RECONNECT_MAX_DELAY_MS, 1000 * 2 ** Math.max(0, failures - 1));
 const seconds = (ms: number) => Math.max(1, Math.round(ms / 1000));
-const messageOf = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /** A failed call or connection, by what it was about. A later success of the same kind clears it. */
 export interface Failure {
@@ -65,89 +49,13 @@ export interface Failure {
   readonly message: string;
 }
 
-/** The part of the Web Locks API (`navigator.locks`) used to tell tabs apart. */
-export type Locks = Pick<LockManager, "request">;
-/** How long a page waits for its stored identity before deciding another live tab uses it (ms). */
-export const IDENTITY_WAIT_MS = 1000;
-
-/** A short, stable tag for a token, so lock names never contain the token itself (53-bit cyrb53). */
-export function tokenTag(token: string): string {
-  let h1 = 0xdeadbeef,
-    h2 = 0x41c6ce57;
-  for (let i = 0; i < token.length; i++) {
-    const c = token.charCodeAt(i);
-    h1 = Math.imul(h1 ^ c, 2654435761);
-    h2 = Math.imul(h2 ^ c, 1597334677);
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
-}
-const lockName = (key: string, token: string) => `${key}:${tokenTag(token)}`;
-
-/**
- * Holds the exclusive Web Lock `name` until the returned function is called. Resolves to undefined
- * when another page still holds it after `waitMs` (0: only if it is free right now). Without Web
- * Locks (an insecure origin, an old browser) every page gets it.
- */
-export function holdLock(
-  locks: Locks | undefined,
-  name: string,
-  waitMs: number,
-): Promise<(() => void) | undefined> {
-  const none = () => {};
-  if (!locks) return Promise.resolve(none);
-  return new Promise((resolve) => {
-    let letGo = none;
-    const held = new Promise<void>((done) => (letGo = done));
-    const abort = new AbortController();
-    const timer = waitMs > 0 ? setTimeout(() => abort.abort(), waitMs) : undefined;
-    const options: LockOptions = waitMs > 0 ? { signal: abort.signal } : { ifAvailable: true };
-    // AbortError: still held elsewhere after waitMs. Any other error means locks don't work here.
-    const failed = (error: unknown) => {
-      clearTimeout(timer);
-      resolve((error as Error)?.name === "AbortError" ? undefined : none);
-    };
-    try {
-      locks
-        .request(name, options, (lock) => {
-          clearTimeout(timer);
-          resolve(lock ? letGo : undefined);
-          return lock ? held : undefined;
-        })
-        .catch(failed);
-    } catch (error) {
-      failed(error);
-    }
-  });
-}
-
-/**
- * The token this page may connect with. A duplicated tab, or a window the app opens, starts with a
- * copy of its opener's sessionStorage, so with the same SpacetimeDB identity, and two tabs with one
- * identity release each other's objects. Every page holds a Web Lock named after its token while it
- * uses it; a page that finds the lock taken drops its copy and connects as a new guest. A reload
- * waits up to `waitMs` for its previous page to let go.
- */
-export async function claimStoredToken(
-  storage: Pick<Storage, "getItem" | "removeItem">,
-  key: string,
-  locks: Locks | undefined,
-  waitMs = IDENTITY_WAIT_MS,
-): Promise<{ token?: string; release: () => void }> {
-  const token = storage.getItem(key) || undefined;
-  if (!token) return { release: () => {} };
-  const release = await holdLock(locks, lockName(key, token), waitMs);
-  if (release) return { token, release };
-  storage.removeItem(key);
-  return { release: () => {} };
-}
-
 export class Multiplayer extends EventTarget {
   /** Library-only guest persistence. Viewer tabs retain separate player identities. */
-  private get tokenStorage() { return this.persistentLibraryGuest ? localStorage : sessionStorage; }
+  private get tokenStorage() {
+    return this.persistentLibraryGuest ? localStorage : sessionStorage;
+  }
   private rememberToken(key: string, token: string) {
-    if (savedAccount()) return;   // a password account keeps its token in the account store
+    if (savedAccount()) return; // a password account keeps its token in the account store
     if (!this.persistentLibraryGuest) this.hold(token);
     this.tokenStorage.setItem(key, token);
   }
@@ -214,7 +122,8 @@ export class Multiplayer extends EventTarget {
     clearTimeout(this.heartbeat);
     this.heartbeat = undefined;
     this.watchConnection();
-    const key = (this.key = `memreplay-${this.persistentLibraryGuest ? "library-" : ""}token:${import.meta.env.VITE_STDB_DATABASE || "memory-replay"}`);
+    const key =
+      (this.key = `memreplay-${this.persistentLibraryGuest ? "library-" : ""}token:${import.meta.env.VITE_STDB_DATABASE || "memory-replay"}`);
     const account = savedAccount();
     if (account) return this.open(key, account.token);
     const storage = this.tokenStorage;
@@ -329,8 +238,7 @@ export class Multiplayer extends EventTarget {
             this.resolve("connection");
             this.changed();
             this.syncClock();
-            if (!this.clockTimer)
-              this.clockTimer = setInterval(() => this.syncClock(), 30000);
+            if (!this.clockTimer) this.clockTimer = setInterval(() => this.syncClock(), 30000);
           })
           .onError((ctx) => {
             if (this.connection !== connection || this.disposed) return;
@@ -408,11 +316,14 @@ export class Multiplayer extends EventTarget {
     if (!this.ready || !connection || this.heartbeat) return;
     // A suspended phone can leave a socket looking open. An acknowledged
     // clock sample detects that without replaying any party/physics mutations.
-    const timer = this.heartbeat = setTimeout(() => {
+    const timer = (this.heartbeat = setTimeout(() => {
       if (this.connection === connection) this.reconnect();
-    }, HEARTBEAT_TIMEOUT_MS);
-    void connection.reducers.sampleClock({ clientSentUs: BigInt(Date.now()) * 1000n })
-      .catch(() => { if (this.connection === connection && this.ready) this.reconnect(); })
+    }, HEARTBEAT_TIMEOUT_MS));
+    void connection.reducers
+      .sampleClock({ clientSentUs: BigInt(Date.now()) * 1000n })
+      .catch(() => {
+        if (this.connection === connection && this.ready) this.reconnect();
+      })
       .finally(() => {
         clearTimeout(timer);
         if (this.heartbeat === timer) this.heartbeat = undefined;
@@ -427,14 +338,18 @@ export class Multiplayer extends EventTarget {
       const finish = (error?: Error) => {
         clearTimeout(timer);
         this.removeEventListener("change", check);
-        error ? reject(error) : resolve();
+        if (error) reject(error);
+        else resolve();
       };
       const check = () => {
         if (this.disposed) finish(new Error("This page's connection was closed"));
         else if (this.authBlocked) finish(new Error(this.status));
         else if (this.ready && this.connection?.isActive) finish();
       };
-      const timer = setTimeout(() => finish(new Error("Still reconnecting. Check your internet connection, then try again.")), Math.max(0, timeoutMs));
+      const timer = setTimeout(
+        () => finish(new Error("Still reconnecting. Check your internet connection, then try again.")),
+        Math.max(0, timeoutMs),
+      );
       this.addEventListener("change", check);
       check();
     });
@@ -444,34 +359,31 @@ export class Multiplayer extends EventTarget {
     const deadline = Date.now() + timeoutMs;
     for (let attempt = 0; ; attempt++) {
       await this.waitUntilReady(deadline - Date.now());
-      try { return await action(); }
-      catch (error) {
+      try {
+        return await action();
+      } catch (error) {
         // UnknownCallResultError means the server may have committed it: never replay.
         if (!(error instanceof DisconnectedError) || attempt >= 1 || Date.now() >= deadline) throw error;
         this.reconnect();
       }
     }
   }
-  private calibrate(row: {
-    identity: Identity;
-    clientSentUs: bigint;
-    serverTs: { microsSinceUnixEpoch: bigint };
-  }) {
+  private calibrate(row: { identity: Identity; clientSentUs: bigint; serverTs: { microsSinceUnixEpoch: bigint } }) {
     if (!row.identity.isEqual(this.identity!)) return;
     const received = Date.now() * 1000,
       sent = Number(row.clientSentUs),
       rtt = received - sent;
     if (rtt >= 0 && rtt < this.bestRtt) {
       this.bestRtt = rtt;
-      this.offsetUs =
-        Number(row.serverTs.microsSinceUnixEpoch) - (sent + received) / 2;
+      this.offsetUs = Number(row.serverTs.microsSinceUnixEpoch) - (sent + received) / 2;
     }
   }
   /** Record a failure of this kind; it replaces any older one. */
   report(error: unknown, kind = "request") {
     let message = messageOf(error);
     // While SpacetimeDB is down, the dev proxy answers the SDK's token check with a 5xx.
-    if (kind === "connection" && /verify token: 5\d\d/i.test(message)) message = "The multiplayer server isn't answering; retrying.";
+    if (kind === "connection" && /verify token: 5\d\d/i.test(message))
+      message = "The multiplayer server isn't answering; retrying.";
     this.failure = { kind, message };
     this.changed();
   }
@@ -507,9 +419,7 @@ export class Multiplayer extends EventTarget {
     return (await this.attempt(action, kind)) === undefined;
   }
   get self() {
-    return this.identity
-      ? this.connection?.db.player.identity.find(this.identity)
-      : undefined;
+    return this.identity ? this.connection?.db.player.identity.find(this.identity) : undefined;
   }
   get room() {
     const p = this.self;
@@ -519,8 +429,12 @@ export class Multiplayer extends EventTarget {
     const r = this.room;
     return r ? this.connection?.db.party.roomId.find(r.id) : undefined;
   }
-  get isLeader() { return !!this.room?.host.isEqual(this.identity!); }
-  get canControlTime() { return !this.party || (this.ready && this.isLeader); }
+  get isLeader() {
+    return !!this.room?.host.isEqual(this.identity!);
+  }
+  get canControlTime() {
+    return !this.party || (this.ready && this.isLeader);
+  }
   get pendingMemory() {
     const id = this.party?.pendingMemoryId;
     return id ? this.connection?.db.memory.id.find(id) : undefined;
@@ -536,84 +450,32 @@ export class Multiplayer extends EventTarget {
   /** Personal library. A joined party reads its shared memory separately via `memory`. */
   get memories() {
     return this.connection && this.identity
-      ? [...this.connection.db.memory.iter()].filter(m => m.owner.isEqual(this.identity!)).sort((a, b) =>
-          a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
-        )
+      ? [...this.connection.db.memory.iter()]
+          .filter((m) => m.owner.isEqual(this.identity!))
+          .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
       : [];
   }
   get players() {
     const r = this.room;
-    return r
-      ? [...this.connection!.db.player.iter()].filter(
-          (p) => p.roomId === r.id && p.online,
-        )
-      : [];
-  }
-  get branches() {
-    const r = this.room;
-    return r
-      ? [...this.connection!.db.branch.iter()].filter((b) => b.roomId === r.id && b.memoryId === r.memoryId)
-      : [];
-  }
-  get objects() {
-    const tl = this.timeline;
-    return tl
-      ? [...this.connection!.db.objectState.iter()].filter(
-          (o) => o.branchId === tl.branchId,
-        )
-      : [];
-  }
-  get chunks() {
-    const ids = new Set(this.branches.map((b) => b.id));
-    return this.connection
-      ? [...this.connection.db.branchKeyframes.iter()].filter((c) =>
-          ids.has(c.branchId),
-        )
-      : [];
+    return r ? [...this.connection!.db.player.iter()].filter((p) => p.roomId === r.id && p.online) : [];
   }
   time() {
     const tl = this.timeline;
     if (!tl) return 0;
     const elapsed = tl.paused
       ? 0
-      : Math.max(
-          0,
-          (Date.now() * 1000 +
-            this.offsetUs -
-            Number(tl.anchorServerTs.microsSinceUnixEpoch)) *
-            tl.speed,
-        );
-    return Math.min(
-      Number(this.memory?.durationUs ?? 0n) / 1e6,
-      (Number(tl.anchorMediaUs) + elapsed) / 1e6,
-    );
+      : Math.max(0, (Date.now() * 1000 + this.offsetUs - Number(tl.anchorServerTs.microsSinceUnixEpoch)) * tl.speed);
+    return Math.min(Number(this.memory?.durationUs ?? 0n) / 1e6, (Number(tl.anchorMediaUs) + elapsed) / 1e6);
   }
-  sendPose(
-    p: Omit<
-      Player,
-      "identity" | "roomId" | "name" | "device" | "color" | "online"
-    >,
-  ) {
+  sendPose(p: Omit<Player, "identity" | "roomId" | "name" | "device" | "color" | "online">) {
     const now = performance.now();
     if (!this.ready || !this.room || now - this.poseAt < 80) return;
     this.poseAt = now;
     void this.attempt(() => this.connection!.reducers.setPose(p), null);
   }
-  // Object calls report nothing here: the adapter shows its own errors in the status line.
-  grab(objectId: string, p: Pose) {
-    return this.run(() => this.connection!.reducers.grab({ objectId, ...p }), null);
-  }
+  // Reports nothing here: the adapter shows its own errors in the status line.
   move(objectId: string, p: Pose) {
-    return this.run(
-      () => this.connection!.reducers.moveObject({ objectId, ...p }),
-      null,
-    );
-  }
-  release(objectId: string, rest: boolean, p: Pose) {
-    return this.run(
-      () => this.connection!.reducers.release({ objectId, rest, ...p }),
-      null,
-    );
+    return this.run(() => this.connection!.reducers.moveObject({ objectId, ...p }), null);
   }
   dispose() {
     this.disposed = true;

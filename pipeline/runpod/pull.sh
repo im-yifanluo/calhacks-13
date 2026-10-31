@@ -11,7 +11,8 @@ for c in "$@"; do
     --include='memory.json' --include='memory.static.json' --include='colmap_names.txt' \
     --include='world/' --include='world/bg_room.spz' --include='world/bg_static.spz' --include='world/room_collider.glb' \
     --include='world/cameras.json' --include='world/cameras.vipe.json' --include='world/world.json' --include='world/ghosts.json' --include='world/pose_refine.json' --include='world/exposure.json' \
-    --include='objects/' --include='objects/*.spz' --include='objects/*.json' --include='people/' --include='people/*' \
+    --include='world/bg.spz' --include='world/bg_points.ply' --include='world/ghosts/' --include='world/ghosts/*.bin' \
+    --include='objects/' --include='objects/*.spz' --include='objects/*.json' \
     --include='input/' --include='input/audio.m4a' --include='verify/' --include='verify/report.json' \
     --exclude='*' \
     "root@$MEMREPLAY_SSH_HOST:$MEMREPLAY_REMOTE_WORK/$c/" "$D/"

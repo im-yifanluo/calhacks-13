@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 """Build the args for judge.js (a Claude Code Workflow script: judge + skeptic per clip, then a report) from each scene's compare.json (written by evalclip.py)."""
+
 import json
 import sys
 from pathlib import Path
 
+from clips import TITLES
+
 MEM = Path(__file__).resolve().parents[2] / "apps/web/public/memories"
-TITLES = {"img8013": "Hotel room", "img8014": "Hotel room corner", "img8015": "Hotel corridor",
-          "img8016": "Hotel lobby", "img8017": "Night walk downtown",
-          "v59": "Stage: speaker at the podium", "v71": "Stage and the hall", "v83": "Hackathon hall walk",
-          "v106": "Hackathon hall, long walk", "o3329": "Palace of Fine Arts: short", "o3328": "Palace of Fine Arts: rotunda and people",
-          "o3330": "Palace of Fine Arts: colonnade walk", "o3331": "Palace of Fine Arts: colonnade walk 2",
-          "o3332": "Palace of Fine Arts: garden and people"}
 NOTES = {
     "img8013": "42 s hand-held walk around a hotel room (bed, desk, TV, window), chest-height phone. No people.",
     "img8014": "11 s look at a hotel room corner: couch, floor lamp (lit), TV, side table with papers. No people.",
@@ -27,10 +24,12 @@ NOTES = {
     "o3331": "60 s outdoors from the glasses: the same colonnade walk, more people passing close by.",
     "o3332": "50 s outdoors from the glasses: path past planters and bushes to the columns, people walking ahead, one passing very close.",
 }
-COMMON = ("The render is the reconstructed static room (Gaussian splat) with movable props carved out as separate "
-          "splats and any people shown as translucent point 'ghosts', drawn from the recorded camera at the video's "
-          "field of view. Expected, acceptable differences: lamps and screens may not glow, people are abstract ghosts, "
-          "thin cables may be missing. Rows flagged 'tracking lost' render black on purpose.")
+COMMON = (
+    "The render is the reconstructed static room (Gaussian splat) with movable props carved out as separate "
+    "splats and any people shown as translucent point 'ghosts', drawn from the recorded camera at the video's "
+    "field of view. Expected, acceptable differences: lamps and screens may not glow, people are abstract ghosts, "
+    "thin cables may be missing. Rows flagged 'tracking lost' render black on purpose."
+)
 
 
 def main(ids):
@@ -42,9 +41,17 @@ def main(ids):
             continue
         d = json.loads(cj.read_text())
         gaps = d.get("gap_rows", [])
-        clips.append({"id": cid, "title": TITLES[cid], "grid": str(MEM / cid / "compare.jpg"), "metrics": str(cj),
-                      "gaps": gaps, "notes": f"{NOTES[cid]} {COMMON}",
-                      "shots": [{"t": f["t"], "inGap": f["t"] in gaps} for f in d["frames"]]})
+        clips.append(
+            {
+                "id": cid,
+                "title": TITLES[cid],
+                "grid": str(MEM / cid / "compare.jpg"),
+                "metrics": str(cj),
+                "gaps": gaps,
+                "notes": f"{NOTES[cid]} {COMMON}",
+                "shots": [{"t": f["t"], "inGap": f["t"] in gaps} for f in d["frames"]],
+            }
+        )
     return {"clips": clips}
 
 

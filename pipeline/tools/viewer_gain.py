@@ -9,6 +9,7 @@ the exported colours when the file is present (copy it to the pod's work/<id>/wo
 
     python pipeline/tools/viewer_gain.py <clip id> ...      (after evalclip.py)
 """
+
 import json
 import sys
 from pathlib import Path
@@ -32,21 +33,28 @@ def fit(cid: str) -> dict:
             continue
         shot = SHOTS / cid / f"{cid}_{f['t']:.1f}.png"
         if not shot.exists():
-            shot = Path("/private/tmp/claude-501/-Users-yifanluo-Hackathons-CalHacks-13/e2a2e10a-ec8f-4abc-bab2-5e2c4c111cc5/scratchpad/cap/shots") / cid / shot.name
+            raise SystemExit(f"{shot} is missing: capture the renders first (pipeline/tools/evalclip.py)")
         r = autocrop(cv2.imread(str(shot))).astype(np.float32) / 255
-        o = frame_at(REPO / "data/work" / cid / "input/clip.mp4", f["t"], (r.shape[1], r.shape[0])).astype(np.float32) / 255
+        o = (
+            frame_at(REPO / "data/work" / cid / "input/clip.mp4", f["t"], (r.shape[1], r.shape[0])).astype(np.float32)
+            / 255
+        )
         X.append(cv2.GaussianBlur(r, (0, 0), 4).reshape(-1, 3)[::5])
         Y.append(cv2.GaussianBlur(o, (0, 0), 4).reshape(-1, 3)[::5])
     X, Y = np.concatenate(X), np.concatenate(Y)
     gain, bias = np.ones(3), np.zeros(3)
-    for c in range(3):                                           # BGR in OpenCV
+    for c in range(3):  # BGR in OpenCV
         A = np.stack([X[:, c], np.ones(len(X))], 1)
         g, b = np.linalg.lstsq(A, Y[:, c], rcond=None)[0]
         gain[c], bias[c] = float(np.clip(g, 0.6, 1.4)), float(np.clip(b, -0.2, 0.2))
     before = float(np.abs(X - Y).mean())
     after = float(np.abs(np.clip(X * gain + bias, 0, 1) - Y).mean())
-    out = {"gain": [round(float(v), 4) for v in gain[::-1]], "bias": [round(float(v), 4) for v in bias[::-1]],   # RGB
-           "rows": len(cj["frames"]) - len(gaps), "mean_abs_error": [round(before, 4), round(after, 4)]}
+    out = {
+        "gain": [round(float(v), 4) for v in gain[::-1]],
+        "bias": [round(float(v), 4) for v in bias[::-1]],  # RGB
+        "rows": len(cj["frames"]) - len(gaps),
+        "mean_abs_error": [round(before, 4), round(after, 4)],
+    }
     (MEM / cid / "world").mkdir(exist_ok=True)
     (MEM / cid / "world" / "viewer_gain.json").write_text(json.dumps(out))
     print(cid, out)

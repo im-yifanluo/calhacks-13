@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview --host",
     "dev:lan": "vite --host",
-    "test": "tsc -p tsconfig.test.json && node --test tests/*.test.mjs"
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",

@@ -1,0 +1,32 @@
+services:
+  api:
+    build:
+      context: ../../../..
+      dockerfile: server/upload/deploy/docker/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 8788
+      UPLOAD_HOST: 0.0.0.0
+      UPLOAD_STORAGE: s3
+    expose:
+      - "8788"
+  https:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      UPLOAD_DOMAIN: ${UPLOAD_DOMAIN:?Set UPLOAD_DOMAIN to your API hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+volumes:
+  caddy_data:
+  caddy_config:

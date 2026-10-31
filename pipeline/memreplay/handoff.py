@@ -1,4 +1,4 @@
-"""File formats between the steps of the one-person vision pipeline. See pipeline/README.md.
+"""File formats between the steps of the vision pipeline. See pipeline/README.md.
 
 One glasses clip per memory, one work dir per memory. Upload or copy the work dir as-is,
 because memory.json uses URLs relative to it.
@@ -27,6 +27,7 @@ because memory.json uses URLs relative to it.
 World frame everywhere after S3: meters, +Y up, floor at y = 0.
 Camera matrices use OpenCV camera axes (x right, y down, z forward); merge converts for three.js.
 """
+
 from __future__ import annotations
 
 import struct
@@ -80,7 +81,9 @@ class Cameras(BaseModel):
 
 
 class WorldInfo(BaseModel):
-    T_vipe_to_world: Mat4 = Field(min_length=16, max_length=16)  # rotation + translation (+ scale) applied to ViPE output
+    T_vipe_to_world: Mat4 = Field(
+        min_length=16, max_length=16
+    )  # rotation + translation (+ scale) applied to ViPE output
     scale: float = 1.0  # 1.0 = trust ViPE's metric depth; set from eye height only if ViPE's scale looks wrong
     floorY: float = 0.0
     up: tuple[float, float, float] = (0.0, 1.0, 0.0)
@@ -131,7 +134,7 @@ Every block starts 4-byte aligned, so the viewer can wrap positions in a Uint16A
 """
 
 
-def write_points_sequence(path: Path, frames: list[tuple["object", "object"]], sample_hz: float) -> None:
+def write_points_sequence(path: Path, frames: list[tuple[object, object]], sample_hz: float) -> None:
     """frames: list of (xyz float array [N,3], rgb uint8 array [N,3]); N may differ per frame."""
     import numpy as np
 
@@ -145,7 +148,7 @@ def write_points_sequence(path: Path, frames: list[tuple["object", "object"]], s
             f.write(block + b"\0" * (-len(block) % 4))
 
 
-def read_points_sequence(path: Path) -> tuple[float, list[tuple["object", "object"]]]:
+def read_points_sequence(path: Path) -> tuple[float, list[tuple[object, object]]]:
     import numpy as np
 
     data = Path(path).read_bytes()

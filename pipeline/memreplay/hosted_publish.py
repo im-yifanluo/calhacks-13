@@ -1,4 +1,5 @@
 """Publish Runpod outputs through memos' worker-authenticated multipart R2 bridge."""
+
 from __future__ import annotations
 
 import json
@@ -25,11 +26,18 @@ def request(path: str, body=None, *, method=None, raw=False):
     data = body if raw else json.dumps(body).encode() if body is not None else None
     headers = {"Authorization": "Bearer " + os.environ["PIPELINE_TOKEN"], "User-Agent": "memos-pipeline/1.0"}
     if data is not None:
-        headers.update({"Content-Type": "application/octet-stream" if raw else "application/json", "Content-Length": str(len(data))})
+        headers.update(
+            {
+                "Content-Type": "application/octet-stream" if raw else "application/json",
+                "Content-Length": str(len(data)),
+            }
+        )
     opener = urllib.request.build_opener(NoRedirect)
     for attempt in range(3):
         try:
-            req = urllib.request.Request(base + path, data=data, headers=headers, method=method or ("POST" if data is not None else "GET"))
+            req = urllib.request.Request(
+                base + path, data=data, headers=headers, method=method or ("POST" if data is not None else "GET")
+            )
             with opener.open(req, timeout=120) as response:
                 return json.loads(response.read(65536))
         except urllib.error.HTTPError as error:
@@ -39,12 +47,16 @@ def request(path: str, body=None, *, method=None, raw=False):
         except (urllib.error.URLError, TimeoutError):
             if attempt == 2:
                 raise RuntimeError("Memos pipeline API is unreachable") from None
-        time.sleep(2 ** attempt)
+        time.sleep(2**attempt)
 
 
 def preflight():
     config = request("/api/pipeline/config")
-    for name, env in (("server", "STDB_HTTP_URL"), ("database", "STDB_DATABASE"), ("workerIdentity", "PIPELINE_IDENTITY")):
+    for name, env in (
+        ("server", "STDB_HTTP_URL"),
+        ("database", "STDB_DATABASE"),
+        ("workerIdentity", "PIPELINE_IDENTITY"),
+    ):
         if config.get(name, "").rstrip("/") != os.environ.get(env, "").rstrip("/"):
             raise RuntimeError(f"Upload service and worker disagree on {env}")
     return config
@@ -58,13 +70,18 @@ def publish_hosted(work: Path, memory_id: int) -> str:
     files.sort(key=lambda f: f.name == "memory.json")
     manifest_url = None
     for file in files:
-        upload = request("/api/pipeline/assets/start", {"memoryId": str(memory_id), "path": file.relative_to(work).as_posix(), "size": file.stat().st_size})
+        upload = request(
+            "/api/pipeline/assets/start",
+            {"memoryId": str(memory_id), "path": file.relative_to(work).as_posix(), "size": file.stat().st_size},
+        )
         try:
             parts = []
             with file.open("rb") as source:
                 for number in range(1, upload["partCount"] + 1):
                     chunk = source.read(upload["partBytes"])
-                    path = "/api/pipeline/assets/part?" + urllib.parse.urlencode({"ticket": upload["ticket"], "part": number})
+                    path = "/api/pipeline/assets/part?" + urllib.parse.urlencode(
+                        {"ticket": upload["ticket"], "part": number}
+                    )
                     parts.append(request(path, chunk, method="PUT", raw=True))
             complete = request("/api/pipeline/assets/complete", {"ticket": upload["ticket"], "parts": parts})
             if file.name == "memory.json":

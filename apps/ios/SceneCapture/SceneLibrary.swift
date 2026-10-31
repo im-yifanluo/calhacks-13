@@ -164,7 +164,7 @@ final class SceneLibrary: ObservableObject {
         if endpoint.isEmpty {
             endpoint = "http://127.0.0.1:5173"
             savedEndpoint = endpoint
-            message = "Simulator ready. On records; Off saves and uploads to the local server."
+            message = "Simulator ready. Record starts a clip; Stop & save saves it and uploads it to the local server."
         }
         #endif
         #endif

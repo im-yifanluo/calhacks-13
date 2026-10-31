@@ -8,6 +8,7 @@ mask and is not hidden behind the depth there (multi-view vote). Those Gaussians
 Writes world/bg_room.spz (room without props), objects/<id>.spz, and switches those objects' visual to the splat
 (the primitive stays as the physics collider). Props with too few Gaussians keep their primitive.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,6 @@ import numpy as np
 
 from .handoff import Cameras, WorldInfo
 from .vipe_io import Vipe, dilate
-from .world import WorldPoses
 
 MIN_GAUSSIANS = 50
 SNAP_FLOOR = False
@@ -57,8 +57,12 @@ def read_ply(path: Path) -> np.ndarray:
 
 def write_ply(path: Path, data: np.ndarray) -> None:
     typ = {"<f4": "float", "|u1": "uchar", "<f8": "double", "<i4": "int"}
-    header = "ply\nformat binary_little_endian 1.0\n" + f"element vertex {len(data)}\n" + "".join(
-        f"property {typ[data.dtype[name].str]} {name}\n" for name in data.dtype.names) + "end_header\n"
+    header = (
+        "ply\nformat binary_little_endian 1.0\n"
+        + f"element vertex {len(data)}\n"
+        + "".join(f"property {typ[data.dtype[name].str]} {name}\n" for name in data.dtype.names)
+        + "end_header\n"
+    )
     with open(path, "wb") as f:
         f.write(header.encode())
         f.write(data.tobytes())
@@ -71,7 +75,8 @@ def to_spz(ply: Path, spz: Path) -> None:
 def run(work: Path) -> dict:
     work = Path(work).resolve()
     from .bake import static_ply
-    ply = static_ply(work)                                     # baked colours when available (S6c)
+
+    ply = static_ply(work)  # baked colours when available (S6c)
     if ply is None:
         raise SystemExit("no static splat yet: run `memreplay stage background --static` first")
     data = read_ply(ply)
@@ -82,8 +87,7 @@ def run(work: Path) -> dict:
     objs_doc = json.loads((work / "objects" / "objects.json").read_text())
     objs = {o["id"]: o for o in objs_doc["objects"]}
     cams = {c.idx: c for c in Cameras.model_validate_json((work / "world" / "cameras.json").read_text()).frames}
-    scale = WorldInfo.model_validate_json((work / "world" / "world.json").read_text()).scale
-    v, wp = Vipe(work / "vipe"), WorldPoses(work)
+    v = Vipe(work / "vipe")
     # 1. put the splat's floor exactly at y = 0, and rewrite the static room with it
     cam_xz = np.array([[c.c2w[3], c.c2w[11]] for c in cams.values()])
     opacity = 1 / (1 + np.exp(-data["opacity"].astype(np.float64)))
@@ -94,11 +98,12 @@ def run(work: Path) -> dict:
     xyz[:, 1] -= shift
     # 2. prune floaters in front of the camera path, giants and needles (cleanup.py)
     from .cleanup import fill_sky, prune, seen_count
+
     path = np.array([[c.c2w[3], c.c2w[7], c.c2w[11]] for c in cams.values()])
     keep = prune(data, path) & (seen_count(xyz, list(cams.values())) >= 2)
     pruned = int((~keep).sum())
     data, xyz = data[keep], xyz[keep]
-    fill_sky(data, path)                                       # the sky dome: overlap and firm up (cleanup.py)
+    fill_sky(data, path)  # the sky dome: overlap and firm up (cleanup.py)
     write_ply(work / "gsplat_static" / "aligned.ply", data)
     to_spz(work / "gsplat_static" / "aligned.ply", work / "world" / "bg_static.spz")
     owner = np.full(len(xyz), -1)
@@ -107,9 +112,11 @@ def run(work: Path) -> dict:
     for oi, e in enumerate(kept):
         o = objs[e["id"]]
         p0 = np.array(o["track"][0]["p"], float)
-        size = e.get("spec", {}).get("size_m") or o["visual"].get("size") or [0.3, 0.3, 0.3]   # stable across reruns
+        size = e.get("spec", {}).get("size_m") or o["visual"].get("size") or [0.3, 0.3, 0.3]  # stable across reruns
         cand = np.flatnonzero((np.linalg.norm(xyz - p0, axis=1) < 0.6 * max(size) + 0.1) & (owner == -1))
-        views = sorted([s for s in e["obs"] if not s["touches_border"]] or e["obs"], key=lambda s: -s["area"])[:MAX_VIEWS]
+        views = sorted([s for s in e["obs"] if not s["touches_border"]] or e["obs"], key=lambda s: -s["area"])[
+            :MAX_VIEWS
+        ]
         votes, seen = np.zeros(len(cand)), np.zeros(len(cand))
         for s in views:
             c, m = cams.get(s["idx"]), v.mask(s["idx"])
@@ -138,8 +145,15 @@ def run(work: Path) -> dict:
             inside = np.all(np.abs(xyz[cand] - p0) <= half, axis=1) & (xyz[cand, 1] > p0[1] - size[1] / 2 + 0.03)
             mine, how = inside, "box"
         owner[cand[mine]] = oi
-        report.append({"id": e["id"], "candidates": int(len(cand)), "gaussians": int(mine.sum()), "views": len(views),
-                       "method": how})
+        report.append(
+            {
+                "id": e["id"],
+                "candidates": int(len(cand)),
+                "gaussians": int(mine.sum()),
+                "views": len(views),
+                "method": how,
+            }
+        )
 
     (work / "objects").mkdir(exist_ok=True)
     tmp = work / "gsplat_static"
@@ -147,22 +161,22 @@ def run(work: Path) -> dict:
         o = objs[e["id"]]
         if r["gaussians"] < MIN_GAUSSIANS:
             r["visual"] = "primitive (too few Gaussians)"
-            owner[owner == oi] = -1                                  # leave them in the room
+            owner[owner == oi] = -1  # leave them in the room
             continue
         sub = data[owner == oi].copy()
         p0 = np.array(o["track"][0]["p"], float)
-        for k, name in enumerate(("x", "y", "z")):                   # object-local: the track moves it
+        for k, name in enumerate(("x", "y", "z")):  # object-local: the track moves it
             sub[name] = (sub[name] - p0[k]).astype(np.float32)
         write_ply(tmp / f"obj_{e['id']}.ply", sub)
         to_spz(tmp / f"obj_{e['id']}.ply", work / "objects" / f"{e['id']}.spz")
-        o.setdefault("primitive", o["visual"])                        # keep the shape for reference
+        o.setdefault("primitive", o["visual"])  # keep the shape for reference
         o["visual"] = {"kind": "splat", "url": f"objects/{e['id']}.spz", "format": "spz"}
         r["visual"] = "splat"
     room = data[owner == -1]
     write_ply(tmp / "room.ply", room)
     to_spz(tmp / "room.ply", work / "world" / "bg_room.spz")
     for o in objs_doc["objects"]:
-        o.pop("primitive", None)                                      # not part of the scene format
+        o.pop("primitive", None)  # not part of the scene format
     (work / "objects" / "objects.json").write_text(json.dumps(objs_doc, indent=2))
     winfo = WorldInfo.model_validate_json((work / "world" / "world.json").read_text())
     winfo.diagnostics["room_splat_count"] = int(len(room))
@@ -172,6 +186,8 @@ def run(work: Path) -> dict:
     winfo.diagnostics["props_layer"] = report
     (work / "world" / "world.json").write_text(winfo.model_dump_json(indent=2))
     (work / "objects" / "layers.json").write_text(json.dumps(report, indent=2))
-    print(f"[layers] splat floor moved by {-shift:+.3f} m; pruned {pruned}; room {len(room)} Gaussians; props: " +
-          ", ".join(f"{r['id']} {r['gaussians']} ({r['visual']})" for r in report))
+    print(
+        f"[layers] splat floor moved by {-shift:+.3f} m; pruned {pruned}; room {len(room)} Gaussians; props: "
+        + ", ".join(f"{r['id']} {r['gaussians']} ({r['visual']})" for r in report)
+    )
     return {"room": len(room), "props": report}

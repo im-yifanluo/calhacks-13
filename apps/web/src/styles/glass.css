@@ -1,0 +1,135 @@
+/*
+ * memos glass: the shared look for the viewer, the library and the capture page.
+ * - Frosted glass: a 58% dark tint over a blurred, saturated and dimmed backdrop. The scene's colours show through,
+ *   while over a white splat white text stays at about 6:1 and secondary text (82%) at about 4.8:1.
+ * - White text in three levels (100 / 82 / 62 %; the third only for large or non-essential text); white is also the
+ *   primary action (dark ink on white).
+ * - Colour only for meaning: takes (amber), lost tracking (coral), live (green), errors (rose).
+ * - Blur only on the controls layer, never nested, never animated. Fallbacks for no backdrop-filter, reduced
+ *   transparency, more contrast and reduced motion.
+ * The VR panel (xr/panel.ts) draws the same tokens onto a canvas; keep them in step.
+ */
+:root {
+  --font:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI Variable", "Segoe UI", Roboto, system-ui,
+    sans-serif;
+  --font-display:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI Variable", "Segoe UI", Roboto, system-ui,
+    sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Text on glass. */
+  --text: #ffffff;
+  --text-2: rgba(255, 255, 255, 0.82);
+  --text-3: rgba(255, 255, 255, 0.62);
+  --text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+
+  /* The glass itself. */
+  --glass-tint: rgba(22, 22, 28, 0.58);
+  --glass-tint-strong: rgba(22, 22, 28, 0.68);
+  --glass-sheen: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.07),
+    rgba(255, 255, 255, 0.015) 42%,
+    rgba(255, 255, 255, 0)
+  );
+  --glass-filter: blur(28px) saturate(170%) brightness(0.78);
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-highlight: rgba(255, 255, 255, 0.3);
+  --glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.26), 0 1px 3px rgba(0, 0, 0, 0.18);
+  /* Without backdrop-filter (or for small pieces outside a blurred parent): tint alone has to carry the contrast. */
+  --glass-solid: rgba(28, 28, 34, 0.86);
+
+  /* Fills inside glass: controls, hover, pressed, fields, dividers. */
+  --fill: rgba(255, 255, 255, 0.12);
+  --fill-hover: rgba(255, 255, 255, 0.2);
+  --fill-active: rgba(255, 255, 255, 0.28);
+  --field: rgba(0, 0, 0, 0.24);
+  --field-border: rgba(255, 255, 255, 0.16);
+  --line: rgba(255, 255, 255, 0.12);
+
+  /* Primary action: white with dark ink. */
+  --primary: #ffffff;
+  --primary-hover: #e8e8ed;
+  --on-primary: #111114;
+
+  /* Meaning. */
+  --fork: #ffd27a;
+  --gap: #ff9c88;
+  --live: #34d27b;
+  --danger: #ffb4a6;
+  --warning-tint: rgba(90, 58, 18, 0.74);
+
+  /* Shape and rhythm (4 pt grid). */
+  --radius-xl: 28px;
+  --radius-l: 22px;
+  --radius-m: 16px;
+  --radius-s: 12px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --tap: 44px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  color-scheme: dark;
+}
+@media (pointer: coarse) {
+  :root {
+    --tap: 48px;
+    --glass-filter: blur(22px) saturate(160%) brightness(0.78);
+  }
+}
+@media (prefers-contrast: more) {
+  :root {
+    --text-2: rgba(255, 255, 255, 0.9);
+    --text-3: rgba(255, 255, 255, 0.8);
+    --glass-tint: rgba(16, 16, 20, 0.8);
+    --glass-tint-strong: rgba(16, 16, 20, 0.88);
+    --glass-border: rgba(255, 255, 255, 0.6);
+  }
+}
+
+/* A glass surface. */
+.glass {
+  background: var(--glass-sheen), var(--glass-tint);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.04),
+    var(--glass-shadow);
+  color: var(--text);
+  text-shadow: var(--text-shadow);
+}
+.glass.strong {
+  background: var(--glass-sheen), var(--glass-tint-strong);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass,
+  .glass.strong {
+    background: var(--glass-sheen), var(--glass-solid);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass.strong {
+    background: #1f1f25;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Keyboard focus: a white ring just outside the control; on glass that floats over the scene, a dark halo under the
+   ring keeps it visible over a bright splat. */
+:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+.glass:focus-visible {
+  box-shadow:
+    0 0 0 6px rgba(10, 10, 15, 0.75),
+    var(--glass-shadow);
+}

@@ -1,5 +1,6 @@
 """S4 L0 export: room points (world/bg_points.ply), room collider (world/room_collider.glb) and
 people ghosts (world/ghosts/<id>.bin + world/ghosts.json)."""
+
 from __future__ import annotations
 
 import math
@@ -15,10 +16,12 @@ from .world import WorldPoses
 
 ROOM_MAX_DEPTH = 7.0
 ROOM_CAP = 300_000
-ROOM_FRAMES = 360            # frames sampled for the room points
-GHOST_BYTES_BUDGET = 48e6    # all ghost files together (doubled from 24e6 for denser people); still light enough for a phone
+ROOM_FRAMES = 360  # frames sampled for the room points
+GHOST_BYTES_BUDGET = (
+    48e6  # all ghost files together (doubled from 24e6 for denser people); still light enough for a phone
+)
 GHOST_MAX_PTS = 12_000
-GHOST_MAX_DEPTH = 30.0   # m; outdoors the people that matter walk 10-30 m away (was 8 m, tuned on rooms)
+GHOST_MAX_DEPTH = 30.0  # m; outdoors the people that matter walk 10-30 m away (was 8 m, tuned on rooms)
 
 
 # --- room points -------------------------------------------------------------------------------------
@@ -36,8 +39,9 @@ def _keys(p: np.ndarray, vox: float) -> np.ndarray:
     return (q[:, 0] << 42) | (q[:, 1] << 21) | q[:, 2]
 
 
-def room_points(work: Path, v: Vipe, wp: WorldPoses, frames: FramesInfo, vox: float = 0.02,
-                extra_static: list[int] | None = None):
+def room_points(
+    work: Path, v: Vipe, wp: WorldPoses, frames: FramesInfo, vox: float = 0.02, extra_static: list[int] | None = None
+):
     """Back-project background pixels from many frames, merge on a vox grid, keep voxels seen in >= 2 frames."""
     ids = np.arange(0, frames.frame_count, frames.key_stride)
     ids = ids[ids <= v.frame_indices[-1]]
@@ -45,13 +49,13 @@ def room_points(work: Path, v: Vipe, wp: WorldPoses, frames: FramesInfo, vox: fl
     reader = Frames(work / "input" / "clip.mp4")
     acc = None
     batch = []
-    for n, idx in enumerate(ids):
+    for idx in ids:
         idx = int(idx)
         if not wp.good(idx):
             continue
         d = v.depth(idx) * wp.depth_scale(idx)
         sel = (d < ROOM_MAX_DEPTH) & ~depth_edges(d)
-        st = v.static_mask(idx, d, margin_px=6, extra_static=extra_static)   # margin around people/props
+        st = v.static_mask(idx, d, margin_px=6, extra_static=extra_static)  # margin around people/props
         if st is not None:
             sel &= st
         p, vv, uu = backproject(d, v.K(idx), sel, stride=2)
@@ -66,7 +70,7 @@ def room_points(work: Path, v: Vipe, wp: WorldPoses, frames: FramesInfo, vox: fl
             parts = ([acc] if acc is not None else []) + batch
             acc = _voxel_reduce(*(np.concatenate([b[i] for b in parts]) for i in range(4)))
             batch = []
-    if batch:                                                  # flush the last partial batch
+    if batch:  # flush the last partial batch
         parts = ([acc] if acc is not None else []) + batch
         acc = _voxel_reduce(*(np.concatenate([b[i] for b in parts]) for i in range(4)))
     if acc is None:
@@ -75,7 +79,7 @@ def room_points(work: Path, v: Vipe, wp: WorldPoses, frames: FramesInfo, vox: fl
     # s_xyz/s_rgb are sums of per-frame means (one vote per frame), so divide by the frame count
     keep = cnt >= 2
     xyz, rgb, cnt = s_xyz[keep] / cnt[keep, None], s_rgb[keep] / cnt[keep, None], cnt[keep]
-    if len(xyz) > ROOM_CAP:                                     # keep the best-observed voxels
+    if len(xyz) > ROOM_CAP:  # keep the best-observed voxels
         top = np.argsort(-cnt, kind="stable")[:ROOM_CAP]
         xyz, rgb = xyz[top], rgb[top]
     return xyz.astype(np.float32), np.clip(rgb, 0, 255).astype(np.uint8)
@@ -86,15 +90,39 @@ def write_splat_ply(path: Path, xyz: np.ndarray, rgb: np.ndarray, radius: float 
     n = len(xyz)
     f_dc = (rgb.astype(np.float32) / 255.0 - 0.5) / 0.28209479
     logit = math.log(opacity / (1 - opacity))
-    data = np.zeros(n, dtype=[(c, "<f4") for c in ("x", "y", "z", "f_dc_0", "f_dc_1", "f_dc_2", "opacity",
-                                                   "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3")])
+    data = np.zeros(
+        n,
+        dtype=[
+            (c, "<f4")
+            for c in (
+                "x",
+                "y",
+                "z",
+                "f_dc_0",
+                "f_dc_1",
+                "f_dc_2",
+                "opacity",
+                "scale_0",
+                "scale_1",
+                "scale_2",
+                "rot_0",
+                "rot_1",
+                "rot_2",
+                "rot_3",
+            )
+        ],
+    )
     data["x"], data["y"], data["z"] = xyz[:, 0], xyz[:, 1], xyz[:, 2]
     data["f_dc_0"], data["f_dc_1"], data["f_dc_2"] = f_dc[:, 0], f_dc[:, 1], f_dc[:, 2]
     data["opacity"] = logit
     data["scale_0"] = data["scale_1"] = data["scale_2"] = math.log(radius)
     data["rot_0"] = 1.0
-    header = "ply\nformat binary_little_endian 1.0\n" + f"element vertex {n}\n" + \
-        "".join(f"property float {name}\n" for name in data.dtype.names) + "end_header\n"
+    header = (
+        "ply\nformat binary_little_endian 1.0\n"
+        + f"element vertex {n}\n"
+        + "".join(f"property float {name}\n" for name in data.dtype.names)
+        + "end_header\n"
+    )
     with open(path, "wb") as f:
         f.write(header.encode())
         f.write(data.tobytes())
@@ -135,9 +163,9 @@ def heightfield(xyz: np.ndarray, lo: np.ndarray, hi: np.ndarray, cell: float = 0
     span = np.zeros(nx * nz, np.float32)
     np.maximum.at(span, flat[tall], xyz[tall, 1])
     walls = ((tc >= 6) & (span > 1.6)).reshape(nx, nz)
-    H = cv2.medianBlur(H.reshape(nx, nz), 3)                    # de-speckle the floor/table layer only
+    H = cv2.medianBlur(H.reshape(nx, nz), 3)  # de-speckle the floor/table layer only
     nb = cv2.filter2D(walls.astype(np.float32), -1, np.ones((3, 3), np.float32), borderType=cv2.BORDER_CONSTANT) - walls
-    H[walls & (nb >= 1)] = 2.2                                  # wall columns with at least one wall neighbour
+    H[walls & (nb >= 1)] = 2.2  # wall columns with at least one wall neighbour
     return H, (x0, z0, cell)
 
 
@@ -147,10 +175,10 @@ def heightfield_mesh(H: np.ndarray, origin: tuple[float, float, float]):
     x0, z0, cell = origin
     nx, nz = H.shape
     gx, gz = np.meshgrid(np.arange(nx), np.arange(nz), indexing="ij")
-    verts = np.stack([x0 + (gx + 0.5) * cell, H, z0 + (gz + 0.5) * cell], -1).reshape(-1, 3)   # cell centres
+    verts = np.stack([x0 + (gx + 0.5) * cell, H, z0 + (gz + 0.5) * cell], -1).reshape(-1, 3)  # cell centres
     a = (gx[:-1, :-1] * nz + gz[:-1, :-1]).reshape(-1)
     b, c, d = a + nz, a + 1, a + nz + 1
-    faces = np.concatenate([np.stack([a, c, b], 1), np.stack([b, c, d], 1)])   # counter-clockwise seen from +Y
+    faces = np.concatenate([np.stack([a, c, b], 1), np.stack([b, c, d], 1)])  # counter-clockwise seen from +Y
     return trimesh.Trimesh(vertices=verts, faces=faces, process=False)
 
 
@@ -234,7 +262,7 @@ def ghosts(work: Path, v: Vipe, wp: WorldPoses, frames: FramesInfo) -> list[Dyna
     from .cleanup import keep_ghost, trim_frames
     from .objects import Support
 
-    ground = Support(work)                                    # the collider's height under a person (a stage counts)
+    ground = Support(work)  # the collider's height under a person (a stage counts)
     out = []
     (work / "world" / "ghosts").mkdir(parents=True, exist_ok=True)
     real = []
@@ -250,12 +278,24 @@ def ghosts(work: Path, v: Vipe, wp: WorldPoses, frames: FramesInfo) -> list[Dyna
         gid = f"person-{n}"
         write_points_sequence(work / "world" / "ghosts" / f"{gid}.bin", seqs[k], hz)
         vis = [i for i, (p, _) in enumerate(seqs[k]) if len(p)]
-        out.append(DynamicObject(
-            id=gid, label="person",
-            visual={"kind": "points-sequence", "url": f"world/ghosts/{gid}.bin", "frameCount": len(seqs[k]), "sampleHz": hz},
-            collider={"kind": "capsule", "halfHeight": 0.6, "radius": 0.25}, mass=0, grabbable=False,
-            visibleFrom=vis[0] / hz if vis else 0.0, visibleTo=vis[-1] / hz if vis else 0.0,
-            track=[Keyframe(t=0, p=(0, 0, 0), q=(0, 0, 0, 1))]))
+        out.append(
+            DynamicObject(
+                id=gid,
+                label="person",
+                visual={
+                    "kind": "points-sequence",
+                    "url": f"world/ghosts/{gid}.bin",
+                    "frameCount": len(seqs[k]),
+                    "sampleHz": hz,
+                },
+                collider={"kind": "capsule", "halfHeight": 0.6, "radius": 0.25},
+                mass=0,
+                grabbable=False,
+                visibleFrom=vis[0] / hz if vis else 0.0,
+                visibleTo=vis[-1] / hz if vis else 0.0,
+                track=[Keyframe(t=0, p=(0, 0, 0), q=(0, 0, 0, 1))],
+            )
+        )
     return out
 
 
@@ -281,7 +321,7 @@ def run(work: Path) -> None:
 
     H, origin = heightfield(xyz, lo, hi)
     heightfield_mesh(H, origin).export(work / "world" / "room_collider.glb")
-    np.savez(work / "world" / "room_heightfield.npz", H=H, origin=np.array(origin))   # S5 reads heights from this
+    np.savez(work / "world" / "room_heightfield.npz", H=H, origin=np.array(origin))  # S5 reads heights from this
     print(f"[l0] collider: {H.shape[0]}x{H.shape[1]} cells, {np.mean(H > 0.3) * 100:.0f}% raised")
 
     people = ghosts(work, v, wp, frames)

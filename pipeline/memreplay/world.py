@@ -1,19 +1,19 @@
 """S3 world frame: ViPE's arbitrary frame -> meters, +Y up, floor at y = 0, wearer starting at the origin
 looking down -Z (three.js forward). Writes world/world.json and world/cameras.json (keyframes)."""
+
 from __future__ import annotations
 
-import os
-
 import json
+import os
 from pathlib import Path
 
 import numpy as np
 
 from .handoff import CameraFrame, Cameras, CaptureInfo, FramesInfo, WorldInfo
-from .vipe_io import Vipe, backproject, depth_edges, dilate, transform
+from .vipe_io import Vipe, backproject, depth_edges, transform
 
-MAX_DEPTH = 6.0          # m; farther depth is too noisy to place the floor with
-SAMPLE_FRAMES = 80       # frames used for the floor fit
+MAX_DEPTH = 6.0  # m; farther depth is too noisy to place the floor with
+SAMPLE_FRAMES = 80  # frames used for the floor fit
 DEFAULT_CAMERA_HEIGHT = 1.45
 
 
@@ -21,8 +21,9 @@ def _unit(v: np.ndarray) -> np.ndarray:
     return v / np.linalg.norm(v)
 
 
-def static_points(v: Vipe, frame_ids: np.ndarray, stride: int = 6, max_depth: float = MAX_DEPTH,
-                  to_world: "WorldPoses | None" = None) -> np.ndarray:
+def static_points(
+    v: Vipe, frame_ids: np.ndarray, stride: int = 6, max_depth: float = MAX_DEPTH, to_world: WorldPoses | None = None
+) -> np.ndarray:
     """Static-scene points from the given frames, in ViPE's frame (or the final world frame with to_world)."""
     out = []
     for idx in frame_ids:
@@ -38,8 +39,15 @@ def static_points(v: Vipe, frame_ids: np.ndarray, stride: int = 6, max_depth: fl
     return np.concatenate(out) if out else np.zeros((0, 3))
 
 
-def horizontal_planes(P: np.ndarray, up: np.ndarray, max_tilt_deg: float = 30.0, thresh: float = 0.03,
-                      n_planes: int = 5, iters: int = 1500, seed: int = 0) -> list[dict]:
+def horizontal_planes(
+    P: np.ndarray,
+    up: np.ndarray,
+    max_tilt_deg: float = 30.0,
+    thresh: float = 0.03,
+    n_planes: int = 5,
+    iters: int = 1500,
+    seed: int = 0,
+) -> list[dict]:
     """Sequential RANSAC for planes whose normal is within max_tilt of `up`. Returns [{n, d, count, rms}]
     with n oriented along `up` and the plane n.x = d (d = height along up)."""
     rng = np.random.default_rng(seed)
@@ -67,20 +75,25 @@ def horizontal_planes(P: np.ndarray, up: np.ndarray, max_tilt_deg: float = 30.0,
         n, d = best
         inl = np.abs(rest @ n - d) < thresh
         Q = rest[inl]
-        c = Q.mean(0)                                            # refine with SVD on the inliers
+        c = Q.mean(0)  # refine with SVD on the inliers
         n2 = np.linalg.svd(Q - c, full_matrices=False)[2][-1]
         n2 = n2 * np.sign(n2 @ up)
         if n2 @ up > cos_max:
             n, d = n2, n2 @ c
             inl = np.abs(rest @ n - d) < thresh
         resid = rest[inl] @ n - d
-        planes.append({"n": n, "d": float(d), "count": int(inl.sum()), "rms": float(np.sqrt(np.mean(resid ** 2)))})
+        planes.append({"n": n, "d": float(d), "count": int(inl.sum()), "rms": float(np.sqrt(np.mean(resid**2)))})
         rest = rest[~inl]
     return planes
 
 
-def choose_floor(planes: list[dict], cam_pos: np.ndarray, P: np.ndarray | None = None,
-                 up_prior: np.ndarray | None = None, expected_h: float | None = None) -> dict | None:
+def choose_floor(
+    planes: list[dict],
+    cam_pos: np.ndarray,
+    P: np.ndarray | None = None,
+    up_prior: np.ndarray | None = None,
+    expected_h: float | None = None,
+) -> dict | None:
     """Horizontal surfaces (floor, tables, seats) share one normal. Group the planes by normal (8 deg) and try the
     groups by total support; in a group take the lowest plane with real support that leaves the cameras 0.4-2.6 m
     above it and has almost nothing below it: at most 10 % of all points more than 0.1 m below (depth noise, the
@@ -104,10 +117,14 @@ def choose_floor(planes: list[dict], cam_pos: np.ndarray, P: np.ndarray | None =
         pref = []
         for p in planes:
             h = float(np.median(cam_pos @ p["n"] - p["d"]))
-            level = p["n"] @ dom > np.cos(np.radians(8)) or (up_prior is not None and p["n"] @ up_prior > np.cos(np.radians(12)))
+            level = p["n"] @ dom > np.cos(np.radians(8)) or (
+                up_prior is not None and p["n"] @ up_prior > np.cos(np.radians(12))
+            )
             fl = floor_like(p)
-            print(f"[world] floor candidate h={p['d']:+.2f} n={p['count']} cam_above={h:.2f} ratio={expected_h / h:.2f} "
-                  f"level={bool(level)} floor_like={fl} below={p['below_frac']:.2f}")
+            print(
+                f"[world] floor candidate h={p['d']:+.2f} n={p['count']} cam_above={h:.2f} ratio={expected_h / h:.2f} "
+                f"level={bool(level)} floor_like={fl} below={p['below_frac']:.2f}"
+            )
             if level and p["count"] >= max(800, 0.2 * top) and 0.4 < h < 2.6 and fl and 0.6 <= expected_h / h <= 1.6:
                 pref.append((p["d"], p))
         if pref:
@@ -141,15 +158,17 @@ def up_prior(C: np.ndarray) -> tuple[np.ndarray, dict]:
     camera to turn a little (yaw); otherwise fall back to the average camera up (-y), which pitch biases."""
     x = C[:, :3, 0]
     up_avg = _unit(np.mean(-C[:, :3, 1], axis=0))
-    w, V = np.linalg.eigh(x.T @ x / len(x))                   # ascending eigenvalues
+    w, V = np.linalg.eigh(x.T @ x / len(x))  # ascending eigenvalues
     u = V[:, 0] * np.sign(V[:, 0] @ up_avg)
     gap = float(w[1] / max(w[0], 1e-9))
     # With little yaw but some roll, the right axes move toward up and never toward forward, so the smallest
     # eigenvector is the forward axis. Real up is never far from the (pitch-biased) average camera up.
     use_right = gap > 4.0 and float(u @ up_avg) > np.cos(np.radians(50))
-    return (u if use_right else up_avg), {"up_from": "camera right axes" if use_right else "camera up average",
-                                          "right_axis_eigen_gap": gap,
-                                          "avg_up_vs_right_up_deg": float(np.degrees(np.arccos(np.clip(u @ up_avg, -1, 1))))}
+    return (u if use_right else up_avg), {
+        "up_from": "camera right axes" if use_right else "camera up average",
+        "right_axis_eigen_gap": gap,
+        "avg_up_vs_right_up_deg": float(np.degrees(np.arccos(np.clip(u @ up_avg, -1, 1)))),
+    }
 
 
 def rotation_to(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -171,9 +190,9 @@ ALIGN_DEPTH = False
 # because the floor fit itself had picked the bed (choose_floor now rejects planes with a third of the room below
 # them) and the gate compared samples with their own median; both are fixed. gsplat's pose refinement then
 # corrects what is left, and refine_poses exports the result for playback.
-LEVEL_FRAMES = os.environ.get("MEMREPLAY_LEVEL_FRAMES", "1") == "1"   # export MEMREPLAY_LEVEL_FRAMES=0 to turn off
-POSE_JUMP_M = 0.15       # a pose this far off the smoothed path is a tracking glitch
-POSE_TURN_DEG = 20.0     # or a frame-to-frame turn this sharp (at 30 fps)
+LEVEL_FRAMES = os.environ.get("MEMREPLAY_LEVEL_FRAMES", "1") == "1"  # export MEMREPLAY_LEVEL_FRAMES=0 to turn off
+POSE_JUMP_M = 0.15  # a pose this far off the smoothed path is a tracking glitch
+POSE_TURN_DEG = 20.0  # or a frame-to-frame turn this sharp (at 30 fps)
 
 
 def pose_glitches(Cw: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -191,8 +210,9 @@ def pose_glitches(Cw: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return binary_dilation(bad, iterations=2), Ps
 
 
-def floor_samples(v: Vipe, inds: np.ndarray, Cw: np.ndarray, good: np.ndarray, step: int = 15,
-                  ds: np.ndarray | None = None) -> list[tuple[int, float]]:
+def floor_samples(
+    v: Vipe, inds: np.ndarray, Cw: np.ndarray, good: np.ndarray, step: int = 15, ds: np.ndarray | None = None
+) -> list[tuple[int, float]]:
     """(row, floor height) every `step` frames: the lowest dense layer of static points at least 0.6 m below
     the camera and within 5 m of it horizontally."""
     out = []
@@ -221,8 +241,15 @@ def floor_samples(v: Vipe, inds: np.ndarray, Cw: np.ndarray, good: np.ndarray, s
     return out
 
 
-def align_depth_scales(v: Vipe, inds: np.ndarray, Cw: np.ndarray, good: np.ndarray, ds: np.ndarray,
-                       step: int = 6, gaps: tuple[int, ...] = (6, 15, 30)) -> np.ndarray:
+def align_depth_scales(
+    v: Vipe,
+    inds: np.ndarray,
+    Cw: np.ndarray,
+    good: np.ndarray,
+    ds: np.ndarray,
+    step: int = 6,
+    gaps: tuple[int, ...] = (6, 15, 30),
+) -> np.ndarray:
     """Per-frame depth scale from pairwise agreement. Static points of frame a, projected into frame b
     (0.2-1 s later), should have the depth b's own (dense) depth map gives there: s_b d_b = s_a z_ab.
     Each pair gives log s_b - log s_a = log(z_ab / d_b); solve all pairs in least squares with a weak
@@ -280,12 +307,12 @@ def align_depth_scales(v: Vipe, inds: np.ndarray, Cw: np.ndarray, good: np.ndarr
         row[j], row[i] = wt, -wt
         A.append(row)
         bvec.append(wt * r)
-    for i in range(n - 1):                                   # weak smoothness
+    for i in range(n - 1):  # weak smoothness
         row = np.zeros(n)
         row[i + 1], row[i] = 0.3, -0.3
         A.append(row)
         bvec.append(0.0)
-    A.append(np.full(n, 10.0 / n))                           # mean log-scale = 0
+    A.append(np.full(n, 10.0 / n))  # mean log-scale = 0
     bvec.append(0.0)
     x = np.linalg.lstsq(np.array(A), np.array(bvec), rcond=None)[0]
     s = np.exp(np.clip(x, np.log(0.8), np.log(1.25)))
@@ -298,7 +325,11 @@ def run(work: Path) -> WorldInfo:
     work = Path(work)
     v = Vipe(work / "vipe")
     frames = FramesInfo.model_validate_json((work / "input" / "frames.json").read_text())
-    cap = CaptureInfo.model_validate_json((work / "capture.json").read_text()) if (work / "capture.json").exists() else None
+    cap = (
+        CaptureInfo.model_validate_json((work / "capture.json").read_text())
+        if (work / "capture.json").exists()
+        else None
+    )
     expected_h = cap.eye_height_m if cap else DEFAULT_CAMERA_HEIGHT
     inds, C = v.poses
     cam_pos = C[:, :3, 3]
@@ -312,28 +343,35 @@ def run(work: Path) -> WorldInfo:
         P = P[rng.choice(len(P), 300_000, replace=False)]
     planes = horizontal_planes(P, up_cam, max_tilt_deg=40.0, n_planes=10)
     floor = choose_floor(planes, cam_pos, P, up_cam, expected_h if cap else None)
-    diag["planes"] = [{"height": p["d"], "count": p["count"], "rms": p["rms"], "below_frac": p.get("below_frac"),
-                       "tilt_from_prior_deg": float(np.degrees(np.arccos(np.clip(p["n"] @ up_cam, -1, 1))))}
-                      for p in planes]
+    diag["planes"] = [
+        {
+            "height": p["d"],
+            "count": p["count"],
+            "rms": p["rms"],
+            "below_frac": p.get("below_frac"),
+            "tilt_from_prior_deg": float(np.degrees(np.arccos(np.clip(p["n"] @ up_cam, -1, 1)))),
+        }
+        for p in planes
+    ]
     if floor is not None:
         up, floor_d = floor["n"], floor["d"]
         diag.update(floor_found=True, floor_rms_m=floor["rms"], floor_points=floor["count"])
-    else:   # never saw the floor: put it one camera height below the median camera
+    else:  # never saw the floor: put it one camera height below the median camera
         up = up_cam
         floor_d = float(np.median(cam_pos @ up)) - expected_h
         diag.update(floor_found=False)
         print("[world] warning: no floor plane found; assuming the camera was held at the expected height")
     R = rotation_to(up, np.array([0.0, 1.0, 0.0]))
-    f = R @ C[0, :3, 2]                                              # first camera's forward (+z) on the floor -> -Z
+    f = R @ C[0, :3, 2]  # first camera's forward (+z) on the floor -> -Z
     f[1] = 0
     if np.linalg.norm(f) < 1e-3:
         f = R @ -C[0, :3, 1]
         f[1] = 0
     f = _unit(f)
-    yaw = np.arctan2(f[0], -f[2])                                   # Ry(yaw) @ f = (0, 0, -1)
+    yaw = np.arctan2(f[0], -f[2])  # Ry(yaw) @ f = (0, 0, -1)
     cy, sy = np.cos(yaw), np.sin(yaw)
     R = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]]) @ R
-    o = cam_pos[0] - (cam_pos[0] @ up - floor_d) * up                # first camera, dropped onto the floor
+    o = cam_pos[0] - (cam_pos[0] @ up - floor_d) * up  # first camera, dropped onto the floor
     T = np.eye(4)
     T[:3, :3] = R
     T[:3, 3] = -R @ o
@@ -370,23 +408,27 @@ def run(work: Path) -> WorldInfo:
         Ps[:, 1] += dy
         return fs, dy
 
-    fs, dy = (level(None) if LEVEL_FRAMES else ([], np.zeros(len(inds))))
+    fs, dy = level(None) if LEVEL_FRAMES else ([], np.zeros(len(inds)))
     # 3b. per-frame depth scale: ViPE's dense depth wobbles by ~10 % from frame to frame on some clips;
     #     scale each frame's depth to agree with a map built from all frames (twice), then re-level
     ds = np.ones(len(inds))
     if ALIGN_DEPTH:
         for _ in range(2):
             ds = align_depth_scales(v, inds, Cw, good, ds)
-    fs2, dy2 = (level(ds) if LEVEL_FRAMES else ([], np.zeros(len(inds))))
+    fs2, dy2 = level(ds) if LEVEL_FRAMES else ([], np.zeros(len(inds)))
     dy = dy + dy2
-    diag.update(level_samples=len(fs), level_offset_range_m=[float(dy.min()), float(dy.max())] if len(fs) >= 3 else None,
-                level_offset_std_m=float(dy.std()), depth_scale_range=[float(ds.min()), float(ds.max())],
-                depth_scale_std=float(ds.std()))
+    diag.update(
+        level_samples=len(fs),
+        level_offset_range_m=[float(dy.min()), float(dy.max())] if len(fs) >= 3 else None,
+        level_offset_std_m=float(dy.std()),
+        depth_scale_range=[float(ds.min()), float(ds.max())],
+        depth_scale_std=float(ds.std()),
+    )
 
     # 4. scale: trust ViPE's metric depth unless the camera height is far from the expected height
     med_h = float(np.median(Cw[good, 1, 3])) if good.any() else float(np.median(Cw[:, 1, 3]))
     scale = 1.0
-    lo_r, hi_r = (0.75, 1.25) if cap else (0.6, 1.7)              # without a measured height, only fix outliers
+    lo_r, hi_r = (0.75, 1.25) if cap else (0.6, 1.7)  # without a measured height, only fix outliers
     if med_h > 0 and not (lo_r <= expected_h / med_h <= hi_r):
         scale = expected_h / med_h
         print(f"[world] camera height {med_h:.2f} m vs expected {expected_h:.2f} m: rescaling by {scale:.3f}")
@@ -418,17 +460,28 @@ def run(work: Path) -> WorldInfo:
     cam_y = med_h * scale
     high = Pw[Pw[:, 1] > cam_y + 0.4, 1]
     ceiling = None
-    if len(high) > 0.02 * len(Pw):                                   # densest 4 cm layer above the cameras
+    if len(high) > 0.02 * len(Pw):  # densest 4 cm layer above the cameras
         hist, edges = np.histogram(high, bins=np.arange(cam_y + 0.4, cam_y + 6.0, 0.04))
         if hist.max() > 0.25 * len(high) / 4:
             ceiling = float(edges[np.argmax(hist)] + 0.02)
-    diag.update(ceiling_height_m=ceiling, camera_height_vipe_m=med_h, expected_camera_height_m=expected_h,
-                floor_flatness_rms_m=float(np.sqrt(np.mean(floor_pts[:, 1] ** 2))) if len(floor_pts) else None,
-                points_below_floor_frac=float(np.mean(Pw[:, 1] < -0.10)),
-                camera_up_vs_floor_deg=float(np.degrees(np.arccos(np.clip(up @ up_cam, -1, 1)))))
-    info = WorldInfo(T_vipe_to_world=T.reshape(-1).tolist(), scale=scale, floorY=0.0, median_camera_height_m=cam_y,
-                     eye_height_m=cap.eye_height_m if cap else None,
-                     boundsMin=tuple(lo.tolist()), boundsMax=tuple(hi.tolist()), diagnostics=diag)
+    diag.update(
+        ceiling_height_m=ceiling,
+        camera_height_vipe_m=med_h,
+        expected_camera_height_m=expected_h,
+        floor_flatness_rms_m=float(np.sqrt(np.mean(floor_pts[:, 1] ** 2))) if len(floor_pts) else None,
+        points_below_floor_frac=float(np.mean(Pw[:, 1] < -0.10)),
+        camera_up_vs_floor_deg=float(np.degrees(np.arccos(np.clip(up @ up_cam, -1, 1)))),
+    )
+    info = WorldInfo(
+        T_vipe_to_world=T.reshape(-1).tolist(),
+        scale=scale,
+        floorY=0.0,
+        median_camera_height_m=cam_y,
+        eye_height_m=cap.eye_height_m if cap else None,
+        boundsMin=tuple(lo.tolist()),
+        boundsMax=tuple(hi.tolist()),
+        diagnostics=diag,
+    )
 
     cams = []
     for idx in range(0, frames.frame_count, frames.key_stride):
@@ -436,16 +489,27 @@ def run(work: Path) -> WorldInfo:
             break
         k = wp.row(idx)
         c = Cw[k].copy()
-        c[:3, :3] /= scale                                           # a pure rotation for the head path
+        c[:3, :3] /= scale  # a pure rotation for the head path
         if not good[k]:
-            c[:3, 3] = Ps[k]                                         # glitch: use the smoothed position
-        cams.append(CameraFrame(idx=idx, t=idx / frames.fps, w=frames.width, h=frames.height,
-                                K=v.K(idx).reshape(-1).tolist(), c2w=c.reshape(-1).tolist(), good=bool(good[k])))
+            c[:3, 3] = Ps[k]  # glitch: use the smoothed position
+        cams.append(
+            CameraFrame(
+                idx=idx,
+                t=idx / frames.fps,
+                w=frames.width,
+                h=frames.height,
+                K=v.K(idx).reshape(-1).tolist(),
+                c2w=c.reshape(-1).tolist(),
+                good=bool(good[k]),
+            )
+        )
     (work / "world" / "world.json").write_text(info.model_dump_json(indent=2))
     (work / "world" / "cameras.json").write_text(Cameras(frames=cams).model_dump_json())
-    print(f"[world] floor {'found' if floor else 'ASSUMED'}; camera height {cam_y:.2f} m (expected {expected_h:.2f}); "
-          f"scale {scale:.3f}; {int(bad.sum())} glitch frames; re-levelled from {len(fs)} floor samples; "
-          f"{len(cams)} keyframes")
+    print(
+        f"[world] floor {'found' if floor else 'ASSUMED'}; camera height {cam_y:.2f} m (expected {expected_h:.2f}); "
+        f"scale {scale:.3f}; {int(bad.sum())} glitch frames; re-levelled from {len(fs)} floor samples; "
+        f"{len(cams)} keyframes"
+    )
     return info
 
 

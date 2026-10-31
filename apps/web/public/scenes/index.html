@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Local scenes · memos</title>
+    <style>
+      :root {
+        --bg: #0a0a0f;
+        --panel: #16161d;
+        --line: #26262f;
+        --text: #ededf0;
+        --muted: #9a9aa6;
+        --accent: #ffffff;
+      }
+      body {
+        margin: 0 auto;
+        padding: 24px 16px 48px;
+        max-width: 1100px;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          15px/1.45 system-ui,
+          sans-serif;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .panel {
+        margin-top: 20px;
+        padding: 14px 16px;
+        border-radius: 10px;
+        background: var(--panel);
+        overflow-x: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 500;
+      }
+      img {
+        width: 120px;
+        border-radius: 6px;
+      }
+      .links a {
+        display: inline-block;
+        margin: 0 10px 4px 0;
+        color: var(--accent);
+      }
+      code {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Local scenes</h1>
+    <div class="muted" id="updated">Loading…</div>
+    <div class="panel">
+      <table id="scenes">
+        <thead>
+          <tr>
+            <th>Scene</th>
+            <th>Preview</th>
+            <th>Open</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p class="muted">
+        <b>Dynamic</b> is the room with people and props on the timeline; <b>static</b> is the room alone.
+        <b>Free</b> lets you go anywhere; <b>guided</b> keeps you near the recorded path.
+      </p>
+    </div>
+    <script>
+      // Lists the scenes in apps/web/public/memories/, indexed by `python pipeline/tools/index_scenes.py`.
+      const updated = document.getElementById("updated");
+      const rows = document.querySelector("#scenes tbody");
+      const link = (href, label) => {
+        const a = document.createElement("a");
+        a.href = href;
+        a.textContent = label;
+        return a;
+      };
+      async function render() {
+        let index;
+        try {
+          const response = await fetch(`/memories/index.json?t=${Date.now()}`);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          index = await response.json();
+        } catch {
+          updated.innerHTML =
+            "No local scenes indexed. Copy scenes into <code>apps/web/public/memories/</code>, then run " +
+            "<code>python pipeline/tools/index_scenes.py</code>.";
+          return;
+        }
+        updated.textContent = `${index.scenes.length} scene(s) · indexed ${new Date(index.updated).toLocaleString()}`;
+        rows.replaceChildren();
+        for (const scene of index.scenes) {
+          const row = rows.insertRow();
+          const name = row.insertCell();
+          name.innerHTML = "<b></b><div class='muted'></div>";
+          name.querySelector("b").textContent = scene.title;
+          name.querySelector("div").textContent = `${scene.id}${scene.seconds ? ` · ${scene.seconds} s` : ""}`;
+          const preview = row.insertCell();
+          if (scene.preview)
+            preview.append(Object.assign(document.createElement("img"), { src: scene.preview, alt: "" }));
+          const links = row.insertCell();
+          links.className = "links";
+          for (const [kind, file] of [
+            ["dynamic", "memory.json"],
+            ["static", "memory.static.json"],
+          ]) {
+            if (!scene[kind]) continue;
+            for (const mode of ["free", "guided"])
+              links.append(link(`/?memory=/memories/${scene.id}/${file}&mode=${mode}`, `${kind} · ${mode}`));
+          }
+          if (scene.grid) links.append(link(scene.grid, "original vs render"));
+        }
+      }
+      render();
+    </script>
+  </body>
+</html>

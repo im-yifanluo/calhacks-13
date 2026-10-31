@@ -9,6 +9,7 @@ prefer over the trainer's own PLY when it is newer than the checkpoint.
 
     memreplay stage bake --work <work>        (CPU is fine: a 500k-Gaussian MLP pass takes seconds)
 """
+
 from __future__ import annotations
 
 import glob
@@ -19,7 +20,6 @@ from pathlib import Path
 
 import numpy as np
 
-
 # A per-clip fit (viewer_gain.py) made the glasses rooms slightly worse against the video (-0.3 dB), so the
 # default is identity; a fit is applied only when world/viewer_gain.json exists.
 VIEWER_GAIN_DEFAULT = [1.0, 1.0, 1.0]
@@ -27,8 +27,10 @@ VIEWER_BIAS_DEFAULT = [0.0, 0.0, 0.0]
 
 
 def latest_ckpt(work: Path) -> Path | None:
-    cks = sorted(glob.glob(str(work / "gsplat_static" / "ckpts" / "ckpt_*_rank0.pt")),
-                 key=lambda p: int(Path(p).stem.split("_")[1]))
+    cks = sorted(
+        glob.glob(str(work / "gsplat_static" / "ckpts" / "ckpt_*_rank0.pt")),
+        key=lambda p: int(Path(p).stem.split("_")[1]),
+    )
     return Path(cks[-1]) if cks else None
 
 
@@ -56,8 +58,8 @@ def run(work: Path) -> Path | None:
         return None
     examples = Path(os.environ.get("SRC", "/workspace/src")) / "gsplat" / "examples"
     sys.path.insert(0, str(examples))
-    from utils import AppearanceOptModule, rgb_to_sh
     from gsplat import export_splats
+    from utils import AppearanceOptModule, rgb_to_sh
 
     splats = ck["splats"]
     state = ck["app_module"]
@@ -70,12 +72,14 @@ def run(work: Path) -> Path | None:
     with torch.no_grad():
         mean = app.embeds.weight.mean(0, keepdim=True)
         spread = float(app.embeds.weight.std(0).mean())
-        app.embeds.weight[0] = mean[0]                          # row 0 now holds the average frame's appearance
+        app.embeds.weight[0] = mean[0]  # row 0 now holds the average frame's appearance
         feats = splats["features"].float()
         dirs = torch.zeros(1, feats.shape[0], 3)
-        rgb = torch.sigmoid(app(features=feats, embed_ids=torch.zeros(1, dtype=torch.long), dirs=dirs,
-                                sh_degree=sh_degree) + splats["colors"].float())
-        rgb = rgb.squeeze(0)                                    # [N, 3]
+        rgb = torch.sigmoid(
+            app(features=feats, embed_ids=torch.zeros(1, dtype=torch.long), dirs=dirs, sh_degree=sh_degree)
+            + splats["colors"].float()
+        )
+        rgb = rgb.squeeze(0)  # [N, 3]
         gain, bias, note, per_view = calibrate(work, splats, rgb)
         # the viewer's own colour gap (pipeline/tools/viewer_gain.py: Spark composites brighter and warmer than
         # gsplat), folded into the export so free mode is right too
@@ -89,8 +93,8 @@ def run(work: Path) -> Path | None:
             note += f"; viewer gain {vj['gain']} bias {vj['bias']}"
         else:
             note += "; default viewer gain"
-        g_all, b_all = gain * vg, bias * vg + vb                 # the whole chain, raw -> exported
-        rgb = (rgb * g_all + b_all).clamp(0, 1).unsqueeze(1)    # [N, 1, 3]
+        g_all, b_all = gain * vg, bias * vg + vb  # the whole chain, raw -> exported
+        rgb = (rgb * g_all + b_all).clamp(0, 1).unsqueeze(1)  # [N, 1, 3]
         # each training frame's own exposure, relative to the export: y = gi x + bi with x = (xe - b_all) / g_all
         exposure = {}
         for idx, (gi, bi) in per_view.items():
@@ -101,12 +105,22 @@ def run(work: Path) -> Path | None:
         sh0 = rgb_to_sh(rgb)
         shN = torch.empty([sh0.shape[0], 0, 3])
         out = work / "gsplat_static" / "baked.ply"
-        export_splats(means=splats["means"].float(), scales=splats["scales"].float(), quats=splats["quats"].float(),
-                      opacities=splats["opacities"].float(), sh0=sh0, shN=shN, format="ply", save_to=str(out))
+        export_splats(
+            means=splats["means"].float(),
+            scales=splats["scales"].float(),
+            quats=splats["quats"].float(),
+            opacities=splats["opacities"].float(),
+            sh0=sh0,
+            shN=shN,
+            format="ply",
+            save_to=str(out),
+        )
     m = rgb.squeeze(1).mean(0).tolist()
-    print(f"[bake] {work.name}: {sh0.shape[0]} Gaussians at the mean of {n_images} appearance embeddings "
-          f"(embedding spread {spread:.3f}); colour calibration gain {[round(float(g), 3) for g in gain]} "
-          f"bias {[round(float(b), 3) for b in bias]} ({note}); mean colour {[round(x, 3) for x in m]} -> {out.relative_to(work)}")
+    print(
+        f"[bake] {work.name}: {sh0.shape[0]} Gaussians at the mean of {n_images} appearance embeddings "
+        f"(embedding spread {spread:.3f}); colour calibration gain {[round(float(g), 3) for g in gain]} "
+        f"bias {[round(float(b), 3) for b in bias]} ({note}); mean colour {[round(x, 3) for x in m]} -> {out.relative_to(work)}"
+    )
     return out
 
 
@@ -122,9 +136,9 @@ def calibrate(work: Path, splats: dict, rgb, n_views: int = 400):
         return one, zero, "no CUDA, not calibrated", {}
     try:
         import cv2
-        from gsplat import rasterization
         from datasets.colmap import Parser
-    except Exception as e:                                       # pragma: no cover
+        from gsplat import rasterization
+    except Exception as e:  # pragma: no cover
         return one, zero, f"not calibrated: {e}", {}
     p = Parser(data_dir=str(work / "colmap"), factor=1, normalize=False, test_every=12)
     idx = np.linspace(0, len(p.image_names) - 1, min(n_views, len(p.image_names))).astype(int)
@@ -135,7 +149,7 @@ def calibrate(work: Path, splats: dict, rgb, n_views: int = 400):
     op = torch.sigmoid(splats["opacities"].float()).to(dev)
     col = rgb.float().to(dev)
     X, Y = [], []
-    per_view = {}                                                # image idx -> (gain[3], bias[3]) for that frame
+    per_view = {}  # image idx -> (gain[3], bias[3]) for that frame
     with torch.no_grad():
         for i in idx:
             K = torch.tensor(p.Ks_dict[p.camera_ids[i]], dtype=torch.float32, device=dev)
@@ -144,8 +158,19 @@ def calibrate(work: Path, splats: dict, rgb, n_views: int = 400):
             H, W = gt.shape[:2]
             mpath = Path(p.image_paths[i]).parent.parent / "masks" / (Path(p.image_paths[i]).stem + ".png")
             mask = (cv2.imread(str(mpath), 0) > 127) if mpath.exists() else np.ones((H, W), bool)
-            img, alpha, _ = rasterization(means, quats, scales, op, col, w2c[None], K[None], W, H, packed=False,
-                                          backgrounds=torch.zeros(1, 3, device=dev))
+            img, alpha, _ = rasterization(
+                means,
+                quats,
+                scales,
+                op,
+                col,
+                w2c[None],
+                K[None],
+                W,
+                H,
+                packed=False,
+                backgrounds=torch.zeros(1, 3, device=dev),
+            )
             r = img[0].clamp(0, 1).cpu().numpy()
             a = alpha[0, ..., 0].cpu().numpy()
             sel = (a > 0.95) & mask
@@ -172,6 +197,9 @@ def calibrate(work: Path, splats: dict, rgb, n_views: int = 400):
         gain[c], bias[c] = float(np.clip(g, 0.7, 1.5)), float(np.clip(b, -0.15, 0.15))
     before = float(np.abs(X - Y).mean())
     after = float(np.abs(np.clip(X * gain + bias, 0, 1) - Y).mean())
-    return (torch.tensor(gain, dtype=torch.float32), torch.tensor(bias, dtype=torch.float32),
-            f"{len(idx)} views, {len(X)} px, mean abs error {before:.3f} -> {after:.3f}; per-frame exposure for {len(per_view)} frames",
-            per_view)
+    return (
+        torch.tensor(gain, dtype=torch.float32),
+        torch.tensor(bias, dtype=torch.float32),
+        f"{len(idx)} views, {len(X)} px, mean abs error {before:.3f} -> {after:.3f}; per-frame exposure for {len(per_view)} frames",
+        per_view,
+    )

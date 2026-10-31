@@ -1,0 +1,6 @@
+# The image needs only the dependency manifests and the API source: no keys, videos or local data.
+**
+!package.json
+!package-lock.json
+!server/upload/package.json
+!server/upload/src/**

@@ -1,4 +1,9 @@
-"""Draws docs/architecture/arch.svg (owners labelled). Render: Chrome headless screenshot of the SVG at 2x."""
+"""Draw docs/architecture/arch.svg, the system diagram in docs/architecture.md and the README.
+
+Render arch.png from it at twice the size, e.g. with headless Chrome:
+    google-chrome --headless --screenshot=arch.png --window-size=1720,760 --force-device-scale-factor=2 arch.svg
+"""
+
 from pathlib import Path
 
 W, H = 1720, 760
@@ -6,73 +11,73 @@ TEAL, TEAL_BG = "#2f7d6d", "#eef6f4"
 AMBER, AMBER_BG = "#b7801b", "#fff6e5"
 IND, IND_BG = "#4f5db3", "#eef0fb"
 INK, MUTED, LINE = "#1d2a31", "#5b6b74", "#4a5961"
-OWNER = {"Jerry": "#8a4fbf", "Nikko": "#2b6cb0", "Yifan": "#2f855a"}
 out = []
 
-def tag(x, y, names):
-    """owner pills centred on (x, y)"""
-    widths = [len(n) * 8.2 + 22 for n in names]
-    cx = x - (sum(widths) + 6 * (len(names) - 1)) / 2
-    for n, w in zip(names, widths):
-        out.append(f'<rect x="{cx}" y="{y - 12}" width="{w}" height="24" rx="12" fill="{OWNER[n]}"/>')
-        out.append(f'<text x="{cx + w / 2}" y="{y + 5}" class="o">{n}</text>')
-        cx += w + 6
 
-def box(x, y, w, h, title, sub, owners, stroke=TEAL, fill=TEAL_BG):
-    out.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="12" fill="{fill}" stroke="{stroke}" stroke-width="2"/>')
+def box(x, y, w, h, title, sub, stroke=TEAL, fill=TEAL_BG):
+    out.append(
+        f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="12" fill="{fill}" stroke="{stroke}" stroke-width="2"/>'
+    )
     cy = y + h / 2
     out.append(f'<text x="{x + w / 2}" y="{cy - 4 if sub else cy + 6}" class="t">{title}</text>')
     if sub:
         out.append(f'<text x="{x + w / 2}" y="{cy + 18}" class="s">{sub}</text>')
-    if owners:
-        tag(x + w / 2, y, owners)
 
-def cyl(x, y, w, h, title, sub, owners):
+
+def cyl(x, y, w, h, title, sub):
     e = 14
-    out.append(f'<path d="M{x},{y + e} A{w / 2},{e} 0 0 1 {x + w},{y + e} V{y + h - e} A{w / 2},{e} 0 0 1 {x},{y + h - e} Z" fill="{AMBER_BG}" stroke="{AMBER}" stroke-width="2"/>')
-    out.append(f'<path d="M{x},{y + e} A{w / 2},{e} 0 0 0 {x + w},{y + e}" fill="none" stroke="{AMBER}" stroke-width="2"/>')
+    out.append(
+        f'<path d="M{x},{y + e} A{w / 2},{e} 0 0 1 {x + w},{y + e} V{y + h - e} A{w / 2},{e} 0 0 1 {x},{y + h - e} Z" fill="{AMBER_BG}" stroke="{AMBER}" stroke-width="2"/>'
+    )
+    out.append(
+        f'<path d="M{x},{y + e} A{w / 2},{e} 0 0 0 {x + w},{y + e}" fill="none" stroke="{AMBER}" stroke-width="2"/>'
+    )
     cy = y + h / 2 + 6
     out.append(f'<text x="{x + w / 2}" y="{cy - 4}" class="t">{title}</text>')
     out.append(f'<text x="{x + w / 2}" y="{cy + 18}" class="s">{sub}</text>')
-    tag(x + w / 2, y + h - 2, owners)
+
 
 def arrow(d, both=False):
     start = ' marker-start="url(#a2)"' if both else ""
     out.append(f'<path d="{d}" fill="none" stroke="{LINE}" stroke-width="2.2" marker-end="url(#a)"{start}/>')
+
 
 def label(x, y, text):
     w = len(text) * 7.6 + 18
     out.append(f'<rect x="{x - w / 2}" y="{y - 14}" width="{w}" height="24" rx="12" fill="#ffffff" stroke="#d5dde1"/>')
     out.append(f'<text x="{x}" y="{y + 3}" class="l">{text}</text>')
 
-box(40, 70, 190, 80, "Ray-Ban Meta", "glasses", ["Nikko"])
-box(350, 70, 210, 80, "Phone app", "iOS · SceneCapture", ["Nikko"])
-box(740, 70, 230, 80, "Upload service", "Node · signs + verifies", ["Nikko"])
-cyl(1150, 58, 230, 104, "SpacetimeDB", "registry + live sync", ["Jerry"])
-cyl(740, 298, 230, 104, "Object storage", "R2 · videos + scenes", ["Jerry"])
-box(1450, 310, 220, 80, "GPU worker", "Runpod · memreplay", ["Yifan"], IND, IND_BG)
-out.append('<rect x="350" y="560" width="1030" height="160" rx="16" fill="#f7fafb" stroke="#c6d2d7" stroke-width="1.6" stroke-dasharray="6 5"/>')
+
+box(40, 70, 190, 80, "Ray-Ban Meta", "glasses")
+box(350, 70, 210, 80, "Phone app", "iOS · SceneCapture")
+box(740, 70, 230, 80, "Upload service", "signs + verifies uploads")
+cyl(1150, 58, 230, 104, "SpacetimeDB", "registry + live sync")
+cyl(740, 298, 230, 104, "Object storage", "R2 · videos + scenes")
+box(1450, 310, 220, 80, "GPU worker", "Runpod · memreplay", IND, IND_BG)
+out.append(
+    '<rect x="350" y="560" width="1030" height="160" rx="16" fill="#f7fafb" stroke="#c6d2d7" stroke-width="1.6" stroke-dasharray="6 5"/>'
+)
 out.append('<text x="372" y="588" class="g">Viewers · one web app (apps/web), runs in each device\'s browser</text>')
-tag(1330, 584, ["Jerry"])
-box(380, 610, 290, 80, "Quest Browser", "WebXR", [])
-box(720, 610, 290, 80, "Phone browser", "or the app's web view", [])
-box(1060, 610, 290, 80, "Desktop browser", "", [])
+box(380, 610, 290, 80, "Quest Browser", "WebXR")
+box(720, 610, 290, 80, "Phone browser", "touch + walk pad")
+box(1060, 610, 290, 80, "Desktop browser", "mouse + keyboard")
 
-arrow("M230,110 H344"); label(290, 92, "I1 · DAT SDK")
-arrow("M560,110 H734"); label(647, 92, "I2 · presign, complete")
-arrow("M970,110 H1144"); label(1057, 92, "I3 · create_memory")
-arrow("M455,150 V350 H734"); label(560, 350, "I2 · PUT video")
-arrow("M1560,310 V110 H1386"); label(1560, 220, "I4 · poll, set status")
-arrow("M1450,350 H976"); label(1090, 350, "I5 · GET video, PUT scene")
-arrow("M855,560 V420"); label(855, 488, "I6 · load scene files")
-arrow("M1265,560 V182", both=True); label(1265, 488, "I7 · party, clock, grabs, poses")
-
-legend = [("Nikko", "glasses + upload: phone app, upload service"), ("Jerry", "hosting (DB, storage, services), DB rules, then the viewer"),
-          ("Yifan", "pipeline: GPU worker, scene format")]
-for i, (n, what) in enumerate(legend):
-    y = 470 + i * 28
-    out.append(f'<circle cx="52" cy="{y}" r="7" fill="{OWNER[n]}"/>')
-    out.append(f'<text x="68" y="{y + 5}" class="lg"><tspan font-weight="700">{n}</tspan> · {what}</text>')
+arrow("M230,110 H344")
+label(290, 92, "I1 · DAT SDK")
+arrow("M560,110 H734")
+label(647, 92, "I2 · presign, complete")
+arrow("M970,110 H1144")
+label(1057, 92, "I3 · create_memory")
+arrow("M455,150 V350 H734")
+label(560, 350, "I2 · PUT video")
+arrow("M1560,310 V110 H1386")
+label(1560, 220, "I4 · poll, set status")
+arrow("M1450,350 H976")
+label(1090, 350, "I5 · GET video, PUT scene")
+arrow("M855,560 V420")
+label(855, 488, "I6 · load scene files")
+arrow("M1265,560 V182", both=True)
+label(1265, 488, "I7 · party, clock, grabs, poses")
 
 svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">
 <defs>
@@ -83,13 +88,10 @@ text {{ font-family: Inter, -apple-system, "Helvetica Neue", Arial, sans-serif; 
 .t {{ font-size: 18px; font-weight: 600; }}
 .s {{ font-size: 13.5px; fill: {MUTED}; }}
 .l {{ font-size: 13.5px; font-weight: 500; fill: #2c3a41; }}
-.o {{ font-size: 13px; font-weight: 700; fill: #ffffff; }}
 .g {{ font-size: 14px; font-weight: 600; fill: {MUTED}; text-anchor: start; }}
-.lg {{ font-size: 14px; fill: {INK}; text-anchor: start; }}
 </style></defs>
 <rect width="100%" height="100%" fill="#ffffff"/>
 {chr(10).join(out)}
 </svg>'''
 here = Path(__file__).parent
 (here / "arch.svg").write_text(svg)
-(here / "arch.html").write_text(f'<!doctype html><html><head><meta charset="utf-8"><style>html,body{{margin:0;background:#fff}}</style></head><body>{svg}</body></html>')
