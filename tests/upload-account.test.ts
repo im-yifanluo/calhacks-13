@@ -147,7 +147,7 @@ test("forged, foreign, mismatched and unregistered passwords cannot sign in", as
       })
     ).status,
   ).toBe(401);
-  expect(f.verifies()).toBe(before, "foreign key is rejected without contacting its embedded server");
+  expect(f.verifies(), "foreign key is rejected without contacting its embedded server").toBe(before);
   expect(
     (await f.call("/api/account", { personalKey: encodePersonalKey({ ...account, token: "fake.payload.signature" }) }))
       .status,

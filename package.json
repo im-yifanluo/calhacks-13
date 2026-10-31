@@ -12,8 +12,8 @@
   "scripts": {
     "dev": "npm run dev -w apps/web",
     "build": "npm run build -w apps/web",
-    "test": "vitest run && npm run test -w apps/web",
-    "typecheck": "tsc -p server/spacetime/tsconfig.json && tsc -p apps/web/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p tests/tsconfig.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "stdb:start": "spacetime start --listen-addr 127.0.0.1:${STDB_PORT:-3055}",

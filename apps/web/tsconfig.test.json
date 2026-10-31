@@ -1,16 +1,7 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "outDir": ".test-dist", "noEmit": false },
-  "include": [
-    "src/tracks.ts",
-    "src/timeline.ts",
-    "src/physics.ts",
-    "src/loader.ts",
-    "src/viewer.ts",
-    "src/audio.ts",
-    "src/input-xr.ts",
-    "src/input-desktop.ts",
-    "src/vr-panel.ts",
-    "src/follow.ts"
-  ]
+  "compilerOptions": {
+    "types": ["vite/client", "node"]
+  },
+  "include": ["src", "tests", "vitest.config.ts", "vite.config.ts"]
 }

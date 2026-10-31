@@ -74,6 +74,32 @@ async function json(req) {
     throw new ApiError(400, "Send a JSON object");
   }
 }
+
+/**
+ * Build the Node request handler for every /api route. Storage and database access are injected, so the same
+ * handler serves S3/R2, local disk and Cloudflare Workers. Optional hooks enable optional routes.
+ *
+ * @param {object} options
+ * @param {string} options.secret HMAC secret that signs upload tickets.
+ * @param {string} options.assetBase Public base URL of stored uploads.
+ * @param {string[]} options.allowedOrigins Browser origins allowed by CORS.
+ * @param {(identity: string, authorization: string) => Promise<boolean>} options.verify
+ * @param {(upload: object) => Promise<string>} options.sign Returns a signed PUT URL for an upload ticket.
+ * @param {(key: string) => Promise<{ size: number, type?: string } | null>} options.head
+ * @param {(upload: object, authorization: string, assignee: string) => Promise<unknown>} options.createMemory
+ * @param {string} options.pipelineIdentity The GPU worker's SpacetimeDB identity.
+ * @param {() => Promise<{ identity: string, token: string }>} options.registerIdentity
+ * @param {(owner: string, authorization: string) => Promise<any[]>} [options.listMemories]
+ * @param {(identity: string, authorization: string) => Promise<unknown>} [options.getProfile]
+ * @param {(displayName: string, authorization: string) => Promise<unknown>} [options.setProfile]
+ * @param {(authorization: string) => Promise<unknown>} [options.connections] Enables GET /api/connections.
+ * @param {object} [options.accountConfig] Enables the /api/account routes.
+ * @param {(name: string, authorization: string) => Promise<unknown>} [options.registerAccount]
+ * @param {(identity: string, authorization: string) => Promise<object>} [options.getAccount]
+ * @param {{ issue: Function, restore: Function }} [options.passwords] Enables six-digit passwords.
+ * @param {number} [options.maxUploadBytes]
+ * @param {boolean} [options.pipelineEnabled]
+ */
 export function makeHandler({
   secret,
   assetBase,
