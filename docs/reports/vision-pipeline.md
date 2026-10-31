@@ -1,6 +1,6 @@
 # Vision pipeline report: video → walkable 3D room → moving layer
 
-Oct 24, CalHacks 13. Built on branch `pipe/vision`; runbook in [pipeline/README.md](../pipeline/README.md).
+CalHacks 13, October 24, 2026. The runbook is [pipeline/README.md](../../pipeline/README.md).
 
 ## TL;DR
 
@@ -37,20 +37,22 @@ Oct 24, CalHacks 13. Built on branch `pipe/vision`; runbook in [pipeline/README.
 
 **On the Quest (static walk-through).** The memories are in `apps/web/public/memories/<clip>/` (git-ignored; copy
 them over with `memreplay publish` or the rsync line in the runbook).
+
 ```bash
 LOCAL_HTTP=1 npm run dev
 adb reverse tcp:5173 tcp:5173
 ```
+
 Quest Browser → `http://localhost:5173/?memory=/memories/img8016/memory.static.json` → **Enter VR**. One-time headset
 setup: root README, Part 3.
 
-| Clip | Scene | Static file | Dynamic file | Hands-on |
-|---|---|---|---|---|
-| `img8013` | Hotel room (bed, desk, kettle, bathroom), 42 s | `memories/img8013/memory.static.json` | `memories/img8013/memory.json` | works, kind of |
-| `img8014` | Room corner (TV, couch, lamp), 11 s | `memories/img8014/memory.static.json` | `memories/img8014/memory.json` | works |
-| `img8015` | Hotel corridor (vacuums, towels), 73 s | `memories/img8015/memory.static.json` | `memories/img8015/memory.json` | works, kind of |
+| Clip      | Scene                                            | Static file                           | Dynamic file                   | Hands-on                               |
+| --------- | ------------------------------------------------ | ------------------------------------- | ------------------------------ | -------------------------------------- |
+| `img8013` | Hotel room (bed, desk, kettle, bathroom), 42 s   | `memories/img8013/memory.static.json` | `memories/img8013/memory.json` | works, kind of                         |
+| `img8014` | Room corner (TV, couch, lamp), 11 s              | `memories/img8014/memory.static.json` | `memories/img8014/memory.json` | works                                  |
+| `img8015` | Hotel corridor (vacuums, towels), 73 s           | `memories/img8015/memory.static.json` | `memories/img8015/memory.json` | works, kind of                         |
 | `img8016` | Hotel lobby (plants, front desk, 2 people), 34 s | `memories/img8016/memory.static.json` | `memories/img8016/memory.json` | works, kind of (half is lost tracking) |
-| `img8017` | Night street walk (14 pedestrians), 2 min 22 s | `memories/img8017/memory.static.json` | `memories/img8017/memory.json` | not checked by hand |
+| `img8017` | Night street walk (14 pedestrians), 2 min 22 s   | `memories/img8017/memory.static.json` | `memories/img8017/memory.json` | not checked by hand                    |
 
 **On a laptop**: same URLs at `http://127.0.0.1:5173/...`; tick **Wearer's view** to watch from the recorded head
 path, **Colliders** to see the physics shapes. In `memory.json`, pause (Space), then drag a prop to throw it.
@@ -84,6 +86,7 @@ frames on average, and each frame's own gain/bias is stored on its camera keyfra
 phone's auto-exposure in wearer's view.
 
 **Dynamic layer**:
+
 - **Props** (S6b): first the room is pruned: Gaussians within 0.5 m of the walked path, giants, needles (one axis
   more than 8× the next and longer than 12 cm), big faint blobs, and anything fewer than two frames ever saw. (An
   earlier floor snap that moved the whole splat onto y = 0 is off: it was reading a couch or bed as the floor and
@@ -108,24 +111,26 @@ means and listed separately. "Room Gaussians" is what is left after pruning floa
 500k trained; "props" are the carved-out grabbable objects; "ghosts" are people shown as point clouds.
 
 <!-- RESULTS-TABLE -->
-| clip | length | floor fit | cam height | room Gaussians (pruned) | props | ghosts | lost tracking | PSNR | SSIM | colour | centre SSIM |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| Hotel room (`img8013`) | 42 s | assumed | 1.42 m | 380,785 (107,967) | 19 | 0 | none | 13.9 | 0.72 | 0.64 | 0.72 |
-| Hotel room corner (`img8014`) | 11 s | found | 1.61 m | 378,725 (70,279) | 4 | 0 | none | 20.5 | 0.87 | 0.83 | 0.90 |
-| Hotel corridor (`img8015`) | 73 s | found | 1.62 m | 334,570 (164,296) | 4 | 0 | 1.2 s | 16.4 | 0.62 | 0.79 | 0.59 |
-| Hotel lobby (`img8016`) | 34 s | found | 1.40 m | 378,143 (120,777) | 6 | 1 | 13.3 s in 4 stretches | 18.2 | 0.70 | 0.60 | 0.68 |
-| Night walk downtown (`img8017`) | 142 s | found | 1.58 m | 241,221 (258,779) | 0 | 2 | none | 17.6 | 0.60 | 0.68 | 0.61 |
+
+| clip                            | length | floor fit | cam height | room Gaussians (pruned) | props | ghosts | lost tracking         | PSNR | SSIM | colour | centre SSIM |
+| ------------------------------- | ------ | --------- | ---------- | ----------------------- | ----- | ------ | --------------------- | ---- | ---- | ------ | ----------- |
+| Hotel room (`img8013`)          | 42 s   | assumed   | 1.42 m     | 380,785 (107,967)       | 19    | 0      | none                  | 13.9 | 0.72 | 0.64   | 0.72        |
+| Hotel room corner (`img8014`)   | 11 s   | found     | 1.61 m     | 378,725 (70,279)        | 4     | 0      | none                  | 20.5 | 0.87 | 0.83   | 0.90        |
+| Hotel corridor (`img8015`)      | 73 s   | found     | 1.62 m     | 334,570 (164,296)       | 4     | 0      | 1.2 s                 | 16.4 | 0.62 | 0.79   | 0.59        |
+| Hotel lobby (`img8016`)         | 34 s   | found     | 1.40 m     | 378,143 (120,777)       | 6     | 1      | 13.3 s in 4 stretches | 18.2 | 0.70 | 0.60   | 0.68        |
+| Night walk downtown (`img8017`) | 142 s  | found     | 1.58 m     | 241,221 (258,779)       | 0     | 2      | none                  | 17.6 | 0.60 | 0.68   | 0.61        |
+
 <!-- /RESULTS-TABLE -->
 
 How the day's changes moved the numbers (PSNR / SSIM from the recorded camera, tracked rows):
 
-| clip | morning (first run) | clean retrain | + depth supervision + bake | + exposure replay + viewer gain (final) |
-|---|---|---|---|---|
-| Hotel room | fog (floor fit on the bed) | 14.6 / 0.73 | 13.8 / 0.70 | 13.9 / 0.72 |
-| Room corner | 19.0 / 0.88 | 20.3 / 0.89 | 20.2 / 0.88 | 20.5 / 0.87 |
-| Corridor | ~11, streaked | 11.2 / 0.50 | 15.9 / 0.60 | 16.4 / 0.62 |
-| Lobby (tracked half) | ~17 | 17.9 / 0.72 | 18.1 / 0.70 | 18.2 / 0.70 |
-| Night walk | not scored | 18.2 / 0.68 | 17.6 / 0.64 | 17.6 / 0.60 |
+| clip                 | morning (first run)        | clean retrain | + depth supervision + bake | + exposure replay + viewer gain (final) |
+| -------------------- | -------------------------- | ------------- | -------------------------- | --------------------------------------- |
+| Hotel room           | fog (floor fit on the bed) | 14.6 / 0.73   | 13.8 / 0.70                | 13.9 / 0.72                             |
+| Room corner          | 19.0 / 0.88                | 20.3 / 0.89   | 20.2 / 0.88                | 20.5 / 0.87                             |
+| Corridor             | ~11, streaked              | 11.2 / 0.50   | 15.9 / 0.60                | 16.4 / 0.62                             |
+| Lobby (tracked half) | ~17                        | 17.9 / 0.72   | 18.1 / 0.70                | 18.2 / 0.70                             |
+| Night walk           | not scored                 | 18.2 / 0.68   | 17.6 / 0.64                | 17.6 / 0.60                             |
 
 Depth supervision is what rescued the corridor (+5 dB); it did nothing for the short room corner and cost the night
 walk a little (its ViPE depth is noisy at street distances). Exposure replay adds 0.3–0.5 dB where the camera's
@@ -134,6 +139,7 @@ exposure moved, and makes the lamp rows of the room corner clip to white exactly
 (room corner 0.75 → 0.83); it was not re-judged.
 
 What the grids show (`apps/web/public/memories/<id>/compare.jpg`, also linked from the status page):
+
 - **Room corner**: the same scene at a glance: TV, couch, pillow, papers, lamp in place; the bright wall around the
   lamp is washed out and the far edges blur. Best clip.
 - **Night walk**: crosswalks, shop fronts, buildings and cars in the right places over 140 s of street; blur where
@@ -161,6 +167,7 @@ of credits from ~7 PM, noun lists and prop descriptions came from hand-written t
 (`objects/manual_specs.json`) instead of Claude.
 
 What the glasses scenes look like from the recorded camera (grids in `apps/web/public/memories/<id>/compare.jpg`):
+
 - **Stage, speaker at the podium (v59)**: the demo scene. The speaker stands as a moving point ghost at the podium in
   every sampled moment; bear, backdrop, stage and bag in place; the acrylic podium is only partly there; the far left
   of the hall smears. PSNR 18.3 / SSIM 0.75. The judges' "phantom tan box beside the podium" was the teddy's
@@ -185,25 +192,27 @@ Lessons from this footage: the capture viewport must match the clip's aspect (a 
 stretched every render 1.33× and cost 3 dB in every score, found by the judge panel); crowds overflow ViPE's 255
 instance ids (capped at 250); sky needs its own handling outdoors: sky pixels are now kept in the loss and seeded
 on a dome 150 m out (100 m after the rotunda's rescale), and the splat prune, which used to throw away everything
-beyond 80 m or bigger than 1.5 m, had to learn about the far field (the rotunda rendered a *black* sky at 11 dB
+beyond 80 m or bigger than 1.5 m, had to learn about the far field (the rotunda rendered a _black_ sky at 11 dB
 until it did: its sky is about 7,900 opaque Gaussians of 1–5 m at 94 m); and a per-clip viewer colour correction
 that helped indoors made these scenes slightly worse, so it is off by default.
 
 <!-- GLASSES-TABLE -->
+
 Scores from the recorded camera (six moments per clip, render vs video; PSNR in dB; colour = histogram match;
 centre = middle third), final pipeline of Oct 24, 9:30 PM PT. `pipeline/tools/results_table.py` regenerates this table.
 
-| clip | length | floor fit | scale | cam height | room Gaussians (pruned) | props | ghosts | lost tracking | PSNR | SSIM | colour | centre SSIM |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Stage: speaker at the podium (`v59`) | 18 s | found | 1.41 | 1.74 m | 415489 (84511) | 0 | 3 | 0 s in 0 | 18.313 | 0.748 | 0.725 | 0.623 |
-| Stage and the hall (`v71`) | 39 s | found | 1.0 | 1.51 m | 408415 (88102) | 3 | 11 | 0 s in 0 | 17.697 | 0.72 | 0.819 | 0.616 |
-| Hackathon hall walk (`v83`) | 45 s | found | 1.0 | 1.68 m | 403242 (96343) | 12 | 31 | 0 s in 0 | 16.055 | 0.576 | 0.626 | 0.528 |
-| Hackathon hall, long walk (`v106`) | 60 s | found | 1.0 | 1.64 m | 308010 (190815) | 12 | 14 | 0 s in 0 | 14.783 | 0.537 | 0.644 | 0.517 |
-| Palace of Fine Arts: short (`o3329`) | 7 s | found | 1.0 | 1.84 m | 465104 (33996) | 1 | 7 | 0 s in 0 | 17.868 | 0.63 | 0.401 | 0.621 |
-| Palace of Fine Arts: rotunda and people (`o3328`) | 43 s | found | 0.68 | 1.73 m | 263874 (236126) | 0 | 14 | 0 s in 0 | 18.698 | 0.69 | 0.598 | 0.676 |
-| Palace of Fine Arts: colonnade walk (`o3330`) | 60 s | found | 1.0 | 1.81 m | 314620 (185380) | 4 | 13 | 0 s in 0 | 18.357 | 0.677 | 0.431 | 0.67 |
-| Palace of Fine Arts: colonnade walk 2 (`o3331`) | 60 s | found | 1.0 | 1.85 m | 296454 (203104) | 2 | 14 | 0 s in 0 | 19.283 | 0.699 | 0.577 | 0.714 |
-| Palace of Fine Arts: garden and people (`o3332`) | 50 s | found | 1.0 | 1.87 m | 362130 (137622) | 11 | 5 | 0 s in 0 | 17.405 | 0.558 | 0.869 | 0.547 |
+| clip                                              | length | floor fit | scale | cam height | room Gaussians (pruned) | props | ghosts | lost tracking | PSNR   | SSIM  | colour | centre SSIM |
+| ------------------------------------------------- | ------ | --------- | ----- | ---------- | ----------------------- | ----- | ------ | ------------- | ------ | ----- | ------ | ----------- |
+| Stage: speaker at the podium (`v59`)              | 18 s   | found     | 1.41  | 1.74 m     | 415489 (84511)          | 0     | 3      | 0 s in 0      | 18.313 | 0.748 | 0.725  | 0.623       |
+| Stage and the hall (`v71`)                        | 39 s   | found     | 1.0   | 1.51 m     | 408415 (88102)          | 3     | 11     | 0 s in 0      | 17.697 | 0.72  | 0.819  | 0.616       |
+| Hackathon hall walk (`v83`)                       | 45 s   | found     | 1.0   | 1.68 m     | 403242 (96343)          | 12    | 31     | 0 s in 0      | 16.055 | 0.576 | 0.626  | 0.528       |
+| Hackathon hall, long walk (`v106`)                | 60 s   | found     | 1.0   | 1.64 m     | 308010 (190815)         | 12    | 14     | 0 s in 0      | 14.783 | 0.537 | 0.644  | 0.517       |
+| Palace of Fine Arts: short (`o3329`)              | 7 s    | found     | 1.0   | 1.84 m     | 465104 (33996)          | 1     | 7      | 0 s in 0      | 17.868 | 0.63  | 0.401  | 0.621       |
+| Palace of Fine Arts: rotunda and people (`o3328`) | 43 s   | found     | 0.68  | 1.73 m     | 263874 (236126)         | 0     | 14     | 0 s in 0      | 18.698 | 0.69  | 0.598  | 0.676       |
+| Palace of Fine Arts: colonnade walk (`o3330`)     | 60 s   | found     | 1.0   | 1.81 m     | 314620 (185380)         | 4     | 13     | 0 s in 0      | 18.357 | 0.677 | 0.431  | 0.67        |
+| Palace of Fine Arts: colonnade walk 2 (`o3331`)   | 60 s   | found     | 1.0   | 1.85 m     | 296454 (203104)         | 2     | 14     | 0 s in 0      | 19.283 | 0.699 | 0.577  | 0.714       |
+| Palace of Fine Arts: garden and people (`o3332`)  | 50 s   | found     | 1.0   | 1.87 m     | 362130 (137622)         | 11    | 5      | 0 s in 0      | 17.405 | 0.558 | 0.869  | 0.547       |
+
 <!-- /GLASSES-TABLE -->
 
 ### Hands-on check (Oct 24, 3 PM PT)
@@ -224,48 +233,52 @@ An Opus judge scored every clip's grid (layout, colour, moving things, each 1–
 whether it looked fixable in the pipeline; a second Opus model then re-judged the same grid as a skeptic, told to
 catch generosity and harshness alike; a third wrote the summary. The bar we set: layout ≥ 3.5 and colour ≥ 3 on
 average, no row below 2 on layout, lost-tracking rows scored apart. (`pipeline/tools/judge.js`, run through
-Claude Code's Workflow tool; the full verdicts, defect lists and skeptic notes are in `docs/judge/`.)
+Claude Code's Workflow tool; the full verdicts, defect lists and skeptic notes are in [judge/](judge/).)
 
 <!-- JUDGE-TABLE -->
-| clip | layout | colour | moving things | verdict | the skeptic |
-|---|---|---|---|---|---|
-| Room corner | 4.0 | 3.0 | 4 | **passes**, at the bar | agrees |
-| Lobby | 3.6 | 2.8 | 4 | fails on colour; 3 of 6 rows lost tracking, fade justified | agrees |
-| Corridor | 3.4 | 2.75 | 4 | fails, narrowly on both | agrees |
-| Hotel room | 3.2 | 2.7 | 4 | fails: bathroom rows 2.5, floaters, cast | agrees (3.0 / 2.5) |
-| Night walk | 2.9 | 2.8 | 3 | fails: ground near the camera is mush, cars missing | agrees |
+
+| clip        | layout | colour | moving things | verdict                                                    | the skeptic        |
+| ----------- | ------ | ------ | ------------- | ---------------------------------------------------------- | ------------------ |
+| Room corner | 4.0    | 3.0    | 4             | **passes**, at the bar                                     | agrees             |
+| Lobby       | 3.6    | 2.8    | 4             | fails on colour; 3 of 6 rows lost tracking, fade justified | agrees             |
+| Corridor    | 3.4    | 2.75   | 4             | fails, narrowly on both                                    | agrees             |
+| Hotel room  | 3.2    | 2.7    | 4             | fails: bathroom rows 2.5, floaters, cast                   | agrees (3.0 / 2.5) |
+| Night walk  | 2.9    | 2.8    | 3             | fails: ground near the camera is mush, cars missing        | agrees             |
+
 <!-- /JUDGE-TABLE -->
 
 #### Glasses scenes, final pipeline (Oct 24, 9 PM PT)
 
-Same panel and bar (layout ≥ 3.5 and colour ≥ 3), run on the final renders (`docs/judge/run4_glasses_final_*.{json,md}`).
+Same panel and bar (layout ≥ 3.5 and colour ≥ 3), run on the final renders (`judge/run4_glasses_final_*.{json,md}`).
 
 <!-- GLASSES-JUDGE -->
-| clip | layout | colour | moving things | verdict | the skeptic |
-|---|---|---|---|---|---|
-| Stage: speaker at the podium (`v59`) | 3.60 | 3.20 | 4.0 | **passes**, narrowly | agrees |
-| Stage and the hall (`v71`) | 3.75 | 3.20 | 3.5 | **passes**, narrowly | agrees |
-| Hackathon hall walk (`v83`) | 3.25 | 2.90 | 2.6 | fails on layout and colour | agrees |
-| Palace of Fine Arts: rotunda and people (`o3328`) | 3.60 | 2.90 | 3.0 | fails on colour | agrees |
-| Palace of Fine Arts: short (`o3329`) | 3.70 | 2.90 | 3.4 | fails on colour | agrees |
-| Palace of Fine Arts: colonnade walk (`o3330`) | 3.50 | 2.75 | 2.5 | fails on colour | agrees |
-| Palace of Fine Arts: colonnade walk 2 (`o3331`) | 3.50 | 2.80 | 3.5 | fails on colour | corrected (stricter) |
-| Palace of Fine Arts: garden and people (`o3332`) | 3.40 | 2.80 | 3.0 | fails on layout and colour | agrees |
-| Hackathon hall, long walk (`v106`) | 3.20 | 2.90 | 2.8 | fails on layout and colour | agrees |
+
+| clip                                              | layout | colour | moving things | verdict                    | the skeptic          |
+| ------------------------------------------------- | ------ | ------ | ------------- | -------------------------- | -------------------- |
+| Stage: speaker at the podium (`v59`)              | 3.60   | 3.20   | 4.0           | **passes**, narrowly       | agrees               |
+| Stage and the hall (`v71`)                        | 3.75   | 3.20   | 3.5           | **passes**, narrowly       | agrees               |
+| Hackathon hall walk (`v83`)                       | 3.25   | 2.90   | 2.6           | fails on layout and colour | agrees               |
+| Palace of Fine Arts: rotunda and people (`o3328`) | 3.60   | 2.90   | 3.0           | fails on colour            | agrees               |
+| Palace of Fine Arts: short (`o3329`)              | 3.70   | 2.90   | 3.4           | fails on colour            | agrees               |
+| Palace of Fine Arts: colonnade walk (`o3330`)     | 3.50   | 2.75   | 2.5           | fails on colour            | agrees               |
+| Palace of Fine Arts: colonnade walk 2 (`o3331`)   | 3.50   | 2.80   | 3.5           | fails on colour            | corrected (stricter) |
+| Palace of Fine Arts: garden and people (`o3332`)  | 3.40   | 2.80   | 3.0           | fails on layout and colour | agrees               |
+| Hackathon hall, long walk (`v106`)                | 3.20   | 2.90   | 2.8           | fails on layout and colour | agrees               |
+
 <!-- /GLASSES-JUDGE -->
 
-The panel's summary, in substance: *geometry and camera alignment hold in every clip and layout passes in five of six;
+The panel's summary, in substance: _geometry and camera alignment hold in every clip and layout passes in five of six;
 only the two stage clips pass on both counts, and only just; the two crowded hall walks also miss on layout. Colour
-decides the result*: grey walls come out peach,
+decides the result_: grey walls come out peach,
 the teddy and the sandstone saturated orange, tan brick salmon, the short clip with a cyan cast. After colour: people
 baked into the static room as smears where they sat or passed (hall walk, colonnade), walkers missing or rendered as
 sparse mosaics, floaters (sky blobs, flame-like smears on distant buildings, needle streaks on pavement), the phantom
 tan box beside the podium. Inherent to the footage: the clear acrylic podium, fast pans, distant colonnades with no
 parallax, textureless walls and thin things.
 
-Their summary, verbatim in substance: *"From the recorded camera the geometry usually holds: the poses line up and
+Their summary, verbatim in substance: _"From the recorded camera the geometry usually holds: the poses line up and
 every indoor room is recognisable. The scenes fall short mainly on colour and splat noise, both pipeline problems
-rather than footage limits."* The defects they called fixable: the warm cast on whites (every clip), floaters and
+rather than footage limits."_ The defects they called fixable: the warm cast on whites (every clip), floaters and
 stretched splats on walls and carpets, props carved out but not drawn, cars not treated as moving objects, the
 night walk's pavement close-up not faded. Inherent to the footage: motion-blur streaks on carpet, overexposed
 white tile, window reflections and lamp glow, night flare.
@@ -279,20 +292,21 @@ round of changes (the viewer gain in §4) targets the cast the panel still saw o
 
 While the layered pipeline ran, an independent agent trained true 4D Gaussian splatting on two glasses clips on a
 second pod: 4DGaussians (hustvl, CVPR 2024: canonical Gaussians plus a HexPlane deformation field), built in about
-10 minutes with small patches. Full report with method, settings and incidents: [FOURD_REPORT.md](FOURD_REPORT.md);
-code: `pipeline/fourd/`; side-by-side image: [fourd_vs_static_v59.jpg](fourd_vs_static_v59.jpg) (video | ours |
+10 minutes with small patches. Full report with method, settings and incidents: [4dgs.md](4dgs.md);
+code: `pipeline/experiments/fourd/`; side-by-side image: [4dgs-vs-static-v59.jpg](images/4dgs-vs-static-v59.jpg) (video | ours |
 4DGS, six moments of the speaker clip).
 
-| v59 (speaker at the podium), 44 held-out frames, recorded camera | PSNR | SSIM | LPIPS | people px | other px |
-|---|---|---|---|---|---|
-| 4DGS, vanilla (run c) | **30.5** | **0.934** | **0.163** | 25.1 | 31.1 |
-| 4DGS, split room / people + random background (run e, retrained to completion 9:18 PM) | 29.2 | 0.913 | 0.213 | 25.9 | 29.5 |
-| Layered pipeline, static room (`baked.ply`) | 18.2 | 0.794 | 0.338 | 9.1 | 20.0 |
+| v59 (speaker at the podium), 44 held-out frames, recorded camera                       | PSNR     | SSIM      | LPIPS     | people px | other px |
+| -------------------------------------------------------------------------------------- | -------- | --------- | --------- | --------- | -------- |
+| 4DGS, vanilla (run c)                                                                  | **30.5** | **0.934** | **0.163** | 25.1      | 31.1     |
+| 4DGS, split room / people + random background (run e, retrained to completion 9:18 PM) | 29.2     | 0.913     | 0.213     | 25.9      | 29.5     |
+| Layered pipeline, static room (`baked.ply`)                                            | 18.2     | 0.794     | 0.338     | 9.1       | 20.0     |
 
 v71 (stage, then a crowded hall), 97 held-out cameras: 4DGS 28.7 / 0.905 / 0.218 against 18.0 / 0.777 / 0.389 for
 the static room; on people pixels 25.7 against 9.5 dB.
 
 What it means:
+
 - **From the recorded camera, real 4DGS wins by a wide margin.** People are sharp, solid splats that move as in the
   video, and it needs no segmentation or tracking at all. Our people are point ghosts, hence 9 dB on people pixels.
 - **Vanilla 4DGS is not a VR scene.** Every Gaussian may move, so the deformation field absorbs camera-pose error and
@@ -319,6 +333,7 @@ What it means:
 In the order we hit it. Every fix is in the code and the runbook.
 
 **Setup (pod)**
+
 - **CUDA mismatch**: `cuda-toolkit` from NVIDIA's channel lost to conda-forge's newest (13.4 + gcc 15) while torch is
   12.8 → gsplat refused to build. Fix: pin `cuda-version=12.8` and check nvcc.
 - **ViPE built against the image's Debian Python** would fail (split `pyconfig.h`). Fix: uv's own Python
@@ -330,11 +345,12 @@ In the order we hit it. Every fix is in the code and the runbook.
   the NFS volume refuses chown. All fixed or worked around.
 
 **Footage**
+
 - **Colour of the input (fixed Oct 24 evening)**: the HDR → SDR conversion in S1 made every clip too bright and
   flat with a pale sky: it put HLG reference white at 85 % brightness, about 4× too high. Refitted to how macOS/iOS
   render the same frames (16 frames from the iPhone samples, Ray-Ban Meta exports and outdoor clips): proper HLG
   inverse OETF, system gamma 0.85, full signal → SDR white, soft shoulder. Error against Apple's rendering went
-  from 36 to about 1 level of 255 ([before/after](colour_fix.jpg)). Every scene in §3 was trained on the old,
+  from 36 to about 1 level of 255 ([before/after](images/colour-fix.jpg)). Every scene in §3 was trained on the old,
   washed-out conversion, so their colours (and the viewer-gain fits) are relative to it; re-run S1 onward for any
   clip whose colours matter.
 - **iPhone HDR** (HLG, BT.2020, 10-bit): plain decoding gives washed-out colours. Fix: a generated HLG→SDR 3D LUT.
@@ -342,6 +358,7 @@ In the order we hit it. Every fix is in the code and the runbook.
   layer is thin on these clips.
 
 **Geometry**
+
 - **Floor and "up"**: averaging the cameras' up direction was 22–30° off when the phone pointed down at a couch. Fix:
   up from the cameras' right axes (a hand-held phone barely rolls), then the best horizontal plane.
 - **"Sky" indoors**: ViPE's sky prompt fires on overexposed walls and lamps, which punched holes in the room. Fix: "sky"
@@ -380,6 +397,7 @@ In the order we hit it. Every fix is in the code and the runbook.
   11 → 17–20) because pose errors leak into the ratios. Switched off (`world.ALIGN_DEPTH`).
 
 **The splat vs the measured geometry**
+
 - The trained room looks right from the recorded viewpoints (§3), but its Gaussians don't sit on the measured surfaces:
   in the lobby only 8 % of its opaque Gaussians are within 5 cm of the room points (median 37 cm), and its floor was
   11 cm low and 0.5 m thick. A splat only has to look right from the training views; ViPE's pose wobble makes that
@@ -392,6 +410,7 @@ In the order we hit it. Every fix is in the code and the runbook.
   stretches where tracking was lost (`timeline.gaps`) fade to black. Free mode (`?mode=free`) shows the path only.
 
 **Measuring "does it match the video"**
+
 - `memreplay compare` scores viewer renders against the video frames (PSNR, SSIM, colour-histogram match, whole frame
   and centre third) and writes a grid (original | render | difference) per clip. Renders come from the recorded
   camera at the video's field of view, captured headless (`pipeline/tools/capture.js`, Chrome + Metal, 450×800); the
@@ -400,6 +419,7 @@ In the order we hit it. Every fix is in the code and the runbook.
   and drops to 8 dB when the trainer moves cameras, while the room still matches the video.
 
 **Objects**
+
 - **Identity hops**: ViPE's tracker moves an id between look-alike objects (one "sign" spanned 8 m). Fix: split ids at
   physically impossible jumps, then rejoin pieces that sit in the same place.
 - **Fixtures as props**: exit signs, a wall painting, hooks, a mirror. Fix: Claude also answers "free-standing or
@@ -410,6 +430,7 @@ In the order we hit it. Every fix is in the code and the runbook.
   wall columns were blurred out of the collider, the worker would hang a job on a stage error.
 
 **Glasses footage, evening (Oct 24)**
+
 - **Black sky on the rotunda (found 8:25 PM)**: the sky-dome retrain scored 11.2 dB against 17.6 before. The dome had
   worked (7,900 opaque Gaussians 94 m out), but `layers` pruned everything beyond 80 m or bigger than 1.5 m, rules
   written for floaters indoors. Fix: beyond 60 m the size limit grows with distance (0.06 m per metre), the needle and

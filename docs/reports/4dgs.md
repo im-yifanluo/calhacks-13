@@ -1,6 +1,6 @@
 # Real 4D Gaussian splatting vs. the static room + layers pipeline
 
-Track: an independent attempt at true 4D Gaussian splatting (4DGS) on the Ray-Ban Meta glasses clips, run in parallel with the main pipeline so the two can be compared. Written Sat Oct 24, about 9 PM PT. Code: `pipeline/fourd/`. Work files on the pod: `/workspace/4dgs/A/`. Log: `/workspace/logs/4dgs.log`.
+Track: an independent attempt at true 4D Gaussian splatting (4DGS) on the Ray-Ban Meta glasses clips, run in parallel with the main pipeline so the two can be compared. Written Sat Oct 24, about 9 PM PT. Code: `pipeline/experiments/fourd/`. Work files on the pod: `/workspace/4dgs/A/`. Log: `/workspace/logs/4dgs.log`.
 
 ## Short version
 
@@ -51,24 +51,24 @@ Track: an independent attempt at true 4D Gaussian splatting (4DGS) on the Ray-Ba
 
 ## Results, v59 (44 held-out frames, 962x1280)
 
-| | PSNR | SSIM | LPIPS (alex) | PSNR people px | PSNR non-people px |
-|---|---|---|---|---|---|
-| **4DGS run c** (final world frame), native renderer | **30.51** | **0.934** | **0.163** | **25.1** | **31.1** |
-| 4DGS run c, exported 10 Hz splats, white background | 30.51 | 0.934 | 0.163 | 25.1 | 31.1 |
-| 4DGS run c, exported 10 Hz splats, black background | 21.04 | 0.896 | 0.194 | 23.4 | 21.0 |
-| 4DGS run a (superseded frame, scaled-rotation cameras) | 30.37 | 0.934 | 0.163 | 24.9 | 30.9 |
-| Main static room, `gsplat_static/baked.ply` (what `bg_static.spz` holds), same cameras | 18.24 | 0.794 | 0.338 | 9.1 | 20.0 |
-| Main static room, `gsplat_static/ply/point_cloud_20099.ply`, same cameras | 18.96 | 0.794 | 0.307 | 8.6 | 21.7 |
-| Main static room, gsplat's own held-out eval (`val_step20099.json`, different frames) | 16.01 | 0.783 | 0.293 | | |
+|                                                                                        | PSNR      | SSIM      | LPIPS (alex) | PSNR people px | PSNR non-people px |
+| -------------------------------------------------------------------------------------- | --------- | --------- | ------------ | -------------- | ------------------ |
+| **4DGS run c** (final world frame), native renderer                                    | **30.51** | **0.934** | **0.163**    | **25.1**       | **31.1**           |
+| 4DGS run c, exported 10 Hz splats, white background                                    | 30.51     | 0.934     | 0.163        | 25.1           | 31.1               |
+| 4DGS run c, exported 10 Hz splats, black background                                    | 21.04     | 0.896     | 0.194        | 23.4           | 21.0               |
+| 4DGS run a (superseded frame, scaled-rotation cameras)                                 | 30.37     | 0.934     | 0.163        | 24.9           | 30.9               |
+| Main static room, `gsplat_static/baked.ply` (what `bg_static.spz` holds), same cameras | 18.24     | 0.794     | 0.338        | 9.1            | 20.0               |
+| Main static room, `gsplat_static/ply/point_cloud_20099.ply`, same cameras              | 18.96     | 0.794     | 0.307        | 8.6            | 21.7               |
+| Main static room, gsplat's own held-out eval (`val_step20099.json`, different frames)  | 16.01     | 0.783     | 0.293        |                |                    |
 
 Each method is scored against the frames it trained on: 4DGS against the clip as decoded at 02:00Z, the static room against the clip after the 02:30Z re-normalization. Run e (split) and v71 results follow below.
 
 **How much the 4DGS deformation moves things** (`motion.json`): the largest distance of each visible Gaussian from its time-averaged position, over the 10 Hz samples.
 
 | run | all, median | all, p90 | on a person (mid-clip), median | not on a person, median |
-|---|---|---|---|---|
-| a | 8.8 cm | 16.6 cm | 9.8 cm | 8.7 cm |
-| c | 7.1 cm | 14.7 cm | 9.2 cm | 6.9 cm |
+| --- | ----------- | -------- | ------------------------------ | ----------------------- |
+| a   | 8.8 cm      | 16.6 cm  | 9.8 cm                         | 8.7 cm                  |
+| c   | 7.1 cm      | 14.7 cm  | 9.2 cm                         | 6.9 cm                  |
 
 ## Comparison image (first version, run c; the docs image is now run e, see above)
 
@@ -79,15 +79,15 @@ Each method is scored against the frames it trained on: 4DGS against the clip as
 - **Image size:** everything is resized to 450x600.
 - **"cm" in the labels:** PSNR after a least-squares global colour map onto the frame (3x3 matrix plus bias). It removes the tone-map difference: the 4DGS model was trained on the pre-02:30Z, brighter version of the clip, and the two decodes of the same frame differ by 13.8 dB on their own. A non-linear tone change is only partly undone by a 3x3 map, so the 4DGS column is still somewhat penalized.
 
-| t (s) | keyframe idx | main, PSNR | 4DGS, PSNR | main, colour-matched | 4DGS, colour-matched |
-|---|---|---|---|---|---|
-| 1.5 | 45 | 18.6 | 13.7 | 21.3 | 24.2 |
-| 4.4 | 132 | 18.5 | 13.2 | 21.4 | 22.9 |
-| 7.3 | 219 | 18.3 | 13.2 | 20.3 | 24.5 |
-| 10.3 | 309 | 18.9 | 13.6 | 21.5 | 24.5 |
-| 13.2 | 396 | 17.6 | 13.9 | 19.4 | 25.6 |
-| 16.2 | 486 | 18.3 | 13.2 | 19.6 | 23.1 |
-| **mean** | | **18.4** | **13.5** | **20.6** | **24.1** |
+| t (s)    | keyframe idx | main, PSNR | 4DGS, PSNR | main, colour-matched | 4DGS, colour-matched |
+| -------- | ------------ | ---------- | ---------- | -------------------- | -------------------- |
+| 1.5      | 45           | 18.6       | 13.7       | 21.3                 | 24.2                 |
+| 4.4      | 132          | 18.5       | 13.2       | 21.4                 | 22.9                 |
+| 7.3      | 219          | 18.3       | 13.2       | 20.3                 | 24.5                 |
+| 10.3     | 309          | 18.9       | 13.6       | 21.5                 | 24.5                 |
+| 13.2     | 396          | 17.6       | 13.9       | 19.4                 | 25.6                 |
+| 16.2     | 486          | 18.3       | 13.2       | 19.6                 | 23.1                 |
+| **mean** |              | **18.4**   | **13.5**   | **20.6**             | **24.1**             |
 
 - **Raw PSNR favours the main pipeline only because of the tone map.** Its colours are calibrated against the current clip, while 4DGS reproduces the earlier, brighter decode.
 
@@ -96,12 +96,12 @@ Each method is scored against the frames it trained on: 4DGS against the clip as
 - **What I measured on pod B** (OpenCV 5.0; ffmpeg 6.1.1 and 9.0.2 give identical results), current clips:
 
   | clip, frame | OpenCV mean | ffmpeg mean | mean abs difference |
-  |---|---|---|---|
-  | v59, 45 | 116.0 | 101.2 | 16.8 levels |
-  | v59, 309 | 119.3 | 104.2 | 17.2 levels |
-  | o3328, 300 | 114.4 | 109.8 | 15.9 levels |
+  | ----------- | ----------- | ----------- | ------------------- |
+  | v59, 45     | 116.0       | 101.2       | 16.8 levels         |
+  | v59, 309    | 119.3       | 104.2       | 17.2 levels         |
+  | o3328, 300  | 114.4       | 109.8       | 15.9 levels         |
 
-- **Your 2.1-level figure for o3328 frame 300 must come from a different decoder pair** (the Mac's?).
+- **A 2.1-level difference measured elsewhere for o3328 frame 300 must come from a different decoder pair.**
 - **Both streams are tagged HLG/BT.2020** (`color_transfer=arib-std-b67`, `color_primaries=bt2020`), although after the LUT they hold SDR. `normalize.py` passes `-color_trc bt709` etc., but the tags do not end up in the stream. Decoders that look at the tags may convert differently.
 - **On pod B the caveat is not minor.** The fix: score against the same decoder used for training, and write correct SDR tags at normalize.
 - **Visually, 4DGS wins clearly:** the speaker is solid and sharp (face, lanyard, hands), and the podium, banner and teddy are crisp.
@@ -143,12 +143,12 @@ Each method is scored against the frames it trained on: 4DGS against the clip as
 - **Training:** 3k coarse + 14k fine iterations, 33 min alone on pod B GPU 0 (03:42–04:16Z). Spz-only export with `post.py --keep_ply 0`.
 - **History:** a first run e on the old frames died at fine iteration ~10.3k when the disk filled. Its 7k checkpoint scored 25.99 / 0.886 / 0.245.
 
-| v59, 44 held-out frames, video space (render re-exposed; GT = OpenCV frames of the current clip) | PSNR | SSIM | LPIPS | people px | other px |
-|---|---|---|---|---|---|
-| **run e, final** | **29.20** | **0.913** | **0.213** | **25.9** | **29.5** |
-| run c (vanilla; old frames; white background) | 30.51 | 0.934 | 0.163 | 25.1 | 31.1 |
-| run c, exported splats, black background | 21.04 | 0.896 | 0.194 | 23.4 | 21.0 |
-| main static room, `baked.ply`, same cameras | 18.24 | 0.794 | 0.338 | 9.1 | 20.0 |
+| v59, 44 held-out frames, video space (render re-exposed; GT = OpenCV frames of the current clip) | PSNR      | SSIM      | LPIPS     | people px | other px |
+| ------------------------------------------------------------------------------------------------ | --------- | --------- | --------- | --------- | -------- |
+| **run e, final**                                                                                 | **29.20** | **0.913** | **0.213** | **25.9**  | **29.5** |
+| run c (vanilla; old frames; white background)                                                    | 30.51     | 0.934     | 0.163     | 25.1      | 31.1     |
+| run c, exported splats, black background                                                         | 21.04     | 0.896     | 0.194     | 23.4      | 21.0     |
+| main static room, `baked.ply`, same cameras                                                      | 18.24     | 0.794     | 0.338     | 9.1       | 20.0     |
 
 - **Room motion** (`motion.json`): non-person Gaussians median 0.0 cm, p90 2.2 cm. Person Gaussians median 6.7 cm, p90 15.8 cm.
 - **Size:** 31.5k dynamic and 199.7k static Gaussians.
@@ -157,28 +157,29 @@ Each method is scored against the frames it trained on: 4DGS against the clip as
   - `frames_dyn/t_0000..0176.spz`: 177 files of about 0.53 MB, 93 MB in total.
   - For comparison, all-Gaussians-per-frame spz would be 693 MB (kept in `/workspace/4dgs/A/out/v59e_e/frames/`).
 - **Opaque:** trained on random backgrounds, so it renders the same on any viewer background.
-- **Comparison image** (`docs/fourd_vs_static_v59.jpg` is now run e, re-exposed with `exposure.json` and rendered on black). Means over the six rows:
+- **Comparison image** (`images/4dgs-vs-static-v59.jpg` is now run e, re-exposed with `exposure.json` and rendered on black). Means over the six rows:
 
-  | reference | main pipeline | 4DGS run e |
-  |---|---|---|
-  | ffmpeg `-ss` frame | 18.4 | 21.3 |
-  | ffmpeg frame, colour-matched | 20.6 | 27.6 |
-  | OpenCV frame (the decode both methods trained on) | 19.4 | 31.8 |
+  | reference                                         | main pipeline | 4DGS run e |
+  | ------------------------------------------------- | ------------- | ---------- |
+  | ffmpeg `-ss` frame                                | 18.4          | 21.3       |
+  | ffmpeg frame, colour-matched                      | 20.6          | 27.6       |
+  | OpenCV frame (the decode both methods trained on) | 19.4          | 31.8       |
 
 ## v71 (39 s, stage then a crowded hall)
 
 **Setup:**
+
 - Frames: every 2nd frame, 582 in total. 485 train, 97 held-out (idx % 12 == 6).
 - Training: 3k coarse + 18k fine iterations, temporal grid of 300 cells.
 - Time: 60 min on GPU 0, which it shared with the v59 split runs.
 - Tone: v71 was converted after its clip was re-normalized, so both methods trained on the same frames and the comparison is direct.
 
-| v71, 97 held-out frames | PSNR | SSIM | LPIPS | PSNR people px | PSNR non-people px |
-|---|---|---|---|---|---|
-| **4DGS** (native renderer) | **28.70** | **0.905** | **0.218** | **25.7** | **29.0** |
-| Main static room, `gsplat_static/baked.ply`, same cameras | 17.97 | 0.777 | 0.389 | 9.5 | 21.1 |
-| Main static room, `point_cloud_20099.ply`, same cameras | 17.93 | 0.778 | 0.388 | 9.5 | 20.9 |
-| Main static room, gsplat's own eval (`val_step20099.json`) | 15.06 | 0.742 | 0.358 | | |
+| v71, 97 held-out frames                                    | PSNR      | SSIM      | LPIPS     | PSNR people px | PSNR non-people px |
+| ---------------------------------------------------------- | --------- | --------- | --------- | -------------- | ------------------ |
+| **4DGS** (native renderer)                                 | **28.70** | **0.905** | **0.218** | **25.7**       | **29.0**           |
+| Main static room, `gsplat_static/baked.ply`, same cameras  | 17.97     | 0.777     | 0.389     | 9.5            | 21.1               |
+| Main static room, `point_cloud_20099.ply`, same cameras    | 17.93     | 0.778     | 0.388     | 9.5            | 20.9               |
+| Main static room, gsplat's own eval (`val_step20099.json`) | 15.06     | 0.742     | 0.358     |                |                    |
 
 - **The hall is crowded, and the gap on people pixels (25.7 vs 9.5 dB) is the biggest 4DGS win.** 4DGS reproduces the crowd moving through the hall; the static room has no people in it.
 - **v71 export:** 389 per-time splats at 10 Hz in `/workspace/4dgs/A/out/v71_a/frames/`, spz only. I deleted the PLYs to save disk space; see the warning below. This is the vanilla model (white background, everything deforms), so it has the same wobble and transparency caveats as v59 run c.
@@ -227,7 +228,7 @@ Each method is scored against the frames it trained on: 4DGS against the clip as
   - Models: `/workspace/4dgs/A/runs/{v59/c, v59d/e, v71/a}`. Run a is in `/workspace/4dgs/runs/v59/a`.
   - Datasets: `/workspace/4dgs/A/data/`.
   - Scores and logs: `/workspace/4dgs/A/out/`.
-- **Code:** `pipeline/fourd/`:
+- **Code:** `pipeline/experiments/fourd/`:
   - `convert.py`
   - `train.sh`
   - `post.py` (eval, videos, export)

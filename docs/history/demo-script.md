@@ -1,4 +1,6 @@
-# P4 demo and Devpost draft
+# Demo script and Devpost draft
+
+> The three-minute demo plan and submission text from the hackathon, kept as a record.
 
 ## Three-minute rehearsal
 
@@ -21,7 +23,7 @@
 | P3 scene    | Actual object assets/colliders render; headset hands/controllers work; measured frame rate is acceptable |
 | Demo assets | Only intended demo recordings and public URLs; no binary assets or credentials in Git                    |
 
-Jerry's branch was tested with 16 automated module/upload/client/storage tests, the real SpacetimeDB 2.13 network suite, and a browser session at desktop and 390×844 viewport sizes. A real two-second synthetic MP4 also passed upload, independent database lookup, byte-for-byte retrieval, repeated-completion and browser playback checks; see [CAPTURE_TEST.md](CAPTURE_TEST.md). Jerry's native iPhone O/F app is not in the merged build (never compiled). Cloud storage, GPU reconstruction and physical-device gates remain unverified. A resized browser is not evidence of a real phone test.
+Jerry's branch was tested with 16 automated module/upload/client/storage tests, the real SpacetimeDB 2.13 network suite, and a browser session at desktop and 390×844 viewport sizes. A real two-second synthetic MP4 also passed upload, independent database lookup, byte-for-byte retrieval, repeated-completion and browser playback checks; see [capture-testing.md](../capture-testing.md). Jerry's native iPhone O/F app is not in the merged build (never compiled). Cloud storage, GPU reconstruction and physical-device gates remain unverified. A resized browser is not evidence of a real phone test.
 
 ## Devpost copy (draft; review before submitting)
 

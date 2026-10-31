@@ -1,5 +1,8 @@
 # Memory Replay: CalHacks 13 plan
 
+> The plan as written at the start of the hackathon, kept as a record. File paths, owners and statuses are from that
+> time; the current design is in [architecture.md](../architecture.md).
+
 Record a moment on Ray-Ban Meta glasses, rebuild it as a **4D scene** (3D + time), and walk back into it with friends on a **Quest 3S or a phone**. Pause time, grab things, throw them, and branch off an **alternate timeline**.
 
 *Written Fri Oct 23, 7 PM. Vision pipeline revised Sat Oct 24, after midnight, for one owner: ViPE on one clip, simple object shapes picked by Claude, SAM 3 and SAM 3D cut. Items marked (verify) or unverified still need checking.*
@@ -72,14 +75,14 @@ The Slack connected to Claude is **RoboTouchLab (UIUC), not CalHacks**, so none 
 ```
 
 ### 2.1 The contract: `memory.json`
-Defined in [`packages/shared/src/manifest.ts`](../packages/shared/src/manifest.ts), with a Python mirror in [`pipeline/memreplay/manifest.py`](../pipeline/memreplay/manifest.py). It holds:
+Defined in [`packages/shared/src/manifest.ts`](../../packages/shared/src/manifest.ts), with a Python mirror in [`pipeline/memreplay/manifest.py`](../../pipeline/memreplay/manifest.py). It holds:
 - **World frame:** +Y up, meters, floor at y = 0. The pipeline gravity-aligns the scene and checks its scale (S3), so **the viewer never sees ViPE's raw frame.**
 - **Source:** clip length, fps and size, plus **`audioUrl`** (`input/audio.m4a`), played in sync with the timeline.
 - **Background:** one splat (`.ply` points at L0, a trained `.spz` later), plus **`colliderUrl`**: a room collider `.glb` (floor + tables as a 10 cm heightfield), so thrown things land on tables.
 - **Camera track:** the wearer's head path at 10 Hz plus the field of view, for "see it through my eyes" mode.
 - **Objects:** visual, collider, mass, grabbable, visible time range, and a track `[{t, p, q}]` at 10 Hz. New in this revision:
   - visual kind **`primitive`**: a tinted sphere, box or cylinder (grabbable objects);
-  - visual kind **`points-sequence`**: per-frame colored points in one binary file (people ghosts; layout in [`pipeline/memreplay/handoff.py`](../pipeline/memreplay/handoff.py));
+  - visual kind **`points-sequence`**: per-frame colored points in one binary file (people ghosts; layout in [`pipeline/memreplay/handoff.py`](../../pipeline/memreplay/handoff.py));
   - collider kind **`cylinder`**, next to box, sphere, capsule and convex hull;
   - per-keyframe **velocity `v`** in m/s, handed to physics on pause.
 
@@ -87,9 +90,9 @@ The viewer develops against `apps/web/public/mock/memory.json` and never waits o
 
 ### 2.2 Reconstruction pipeline (`pipeline/`, Python, Runpod GPU)
 
-**Step-by-step commands and Runpod setup: [pipeline/README.md](../pipeline/README.md).**
+**Step-by-step commands and Runpod setup: [pipeline/README.md](../../pipeline/README.md).**
 
-**One person ("Vision") owns the whole pipeline. One clip per memory; there is no separate room sweep.** Each memory gets one work dir, and every step reads and writes files in it (layout and formats in [`pipeline/memreplay/handoff.py`](../pipeline/memreplay/handoff.py)). So any step reruns alone: `memreplay stage <name> --work work/<id>`. S2 is ViPE's own `run.py`. S7 is `memreplay merge work/<id>`, which is done and tested; the other `memreplay` steps are still stubs.
+**One person ("Vision") owns the whole pipeline. One clip per memory; there is no separate room sweep.** Each memory gets one work dir, and every step reads and writes files in it (layout and formats in [`pipeline/memreplay/handoff.py`](../../pipeline/memreplay/handoff.py)). So any step reruns alone: `memreplay stage <name> --work work/<id>`. S2 is ViPE's own `run.py`. S7 is `memreplay merge work/<id>`, which is done and tested; the other `memreplay` steps are still stubs.
 
 **Input: what the glasses give**
 
@@ -189,7 +192,7 @@ If it fails, move down the S2 fallbacks in order.
 
 ### 2.3 Viewer (`apps/web`)
 
-> **Status:** merged. Nikko's engine (`loader`, `physics`, `timeline`, `tracks`, `viewer`, `input-xr`, `input-desktop`) is the viewer; Jerry's client is `net/index.ts`; `net/adapter.ts` connects them; `session.ts` is the room panel and `phone-joystick.ts` the phone joystick. File-by-file layout in [INTEGRATION.md](INTEGRATION.md) §2 C. The module list below is the original design.
+> **Status:** merged. Nikko's engine (`loader`, `physics`, `timeline`, `tracks`, `viewer`, `input-xr`, `input-desktop`) is the viewer; Jerry's client is `net/index.ts`; `net/adapter.ts` connects them; `session.ts` is the room panel and `phone-joystick.ts` the phone joystick. File-by-file layout: [viewer.md](../viewer.md). The module list below is the original design.
 Modules:
 - `loader`: manifest, Spark `SplatMesh`es, colliders.
 - `clock`: the shared playhead.
@@ -213,7 +216,7 @@ Modules:
 
 ### 2.4 Multiplayer and timelines (`server/spacetime`)
 
-> **Status:** merged. The module is Jerry's (`server/spacetime/src/index.ts`); the table below lists its fields. Rules (who may set status, chunk validation, the simulation lock, catching) are in [INTEGRATION.md](INTEGRATION.md) §2 B. The upload page and presigned upload are in `server/upload/` and `apps/web/src/upload.ts`. `scripts/pipeline-status.py` reports pipeline progress, but no worker calls it yet.
+> **Status:** merged. The module is Jerry's (`server/spacetime/src/index.ts`); the table below lists its fields. Rules (who may set status, chunk validation, the simulation lock, catching) are in [multiplayer.md](../multiplayer.md). The upload page and presigned upload are in `server/upload/` and `apps/web/src/upload.ts`. `scripts/pipeline-status.py` reports pipeline progress, but no worker calls it yet.
 **Tables**
 
 | Table | Fields (short) | Written by |
