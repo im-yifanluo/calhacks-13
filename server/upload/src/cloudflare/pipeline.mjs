@@ -1,7 +1,8 @@
 /** Runpod → managed R2 bridge. Only the assigned, verified SpacetimeDB worker may publish. */
 import { randomUUID } from "node:crypto";
-import { databaseConfig, readTicket, ticket } from "./core.mjs";
-import { ApiError } from "./accounts.mjs";
+import { ApiError } from "../accounts.mjs";
+import { databaseConfig } from "../database.mjs";
+import { readTicket, ticket } from "../tickets.mjs";
 
 export const SCENE_PART_BYTES = 16 * 1024 ** 2;
 export const MAX_SCENE_ASSET_BYTES = 2 * 1024 ** 3;

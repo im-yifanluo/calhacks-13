@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { databaseConfig } from "../service.mjs";
+import { databaseConfig } from "../src/database.mjs";
 afterEach(() => vi.unstubAllGlobals());
 test("phone memory listing exposes scene output and preserves owner filtering", async () => {
   const identity = "a".repeat(64),

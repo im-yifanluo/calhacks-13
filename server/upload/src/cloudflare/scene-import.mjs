@@ -1,7 +1,8 @@
 /** Account-owned, immutable rendered bundles. Registration happens after asset verification. */
 import { randomUUID } from "node:crypto";
-import { ApiError, credentials, accountSettings } from "./accounts.mjs";
-import { databaseConfig, ticket, readTicket } from "./core.mjs";
+import { ApiError, credentials, accountSettings } from "../accounts.mjs";
+import { databaseConfig } from "../database.mjs";
+import { readTicket, ticket } from "../tickets.mjs";
 
 const types = {
   json: "application/json",

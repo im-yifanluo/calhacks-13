@@ -142,7 +142,7 @@ try {
           "--config",
           workerDirectory
             ? join(workerDirectory, "dist/server/wrangler.json")
-            : join(repo, "server/upload/wrangler.jsonc"),
+            : join(repo, "server/upload/deploy/cloudflare/wrangler.jsonc"),
           "--persist-to",
           join(directory, "r2"),
           "--ip",
@@ -162,7 +162,7 @@ try {
           "--var",
           `PIPELINE_IDENTITY:${workerIdentity}`,
         ]
-      : ["server/upload/start.mjs"];
+      : ["server/upload/src/node/server.mjs"];
     const process = launch(globalThis.process.execPath, args, env);
     await until(async () => {
       process.check();

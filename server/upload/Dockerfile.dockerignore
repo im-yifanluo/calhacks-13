@@ -1,7 +1,0 @@
-# This Dockerfile only needs the API source and dependency manifests. No keys, videos, or local data.
-**
-!package.json
-!package-lock.json
-!server/
-!server/upload/
-!server/upload/*.mjs

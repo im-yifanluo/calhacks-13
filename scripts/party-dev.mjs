@@ -49,9 +49,9 @@ if (lan)
     "Open this same address on the Mac and iPhone using the same Wi-Fi. Keep the Mac awake. Guest parties work over HTTP; account sign-in, camera capture and immersive VR need trusted HTTPS.",
   );
 const children = [
-  spawn(process.execPath, ["server/upload/local.mjs"], {
+  spawn(process.execPath, ["server/upload/src/node/server.mjs"], {
     cwd: root,
-    env,
+    env: { ...env, UPLOAD_STORAGE: "local" },
     stdio: "inherit",
   }),
   spawn(

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
-import { makeHandler, productionConfig } from "../server/upload/service.mjs";
+import { makeHandler } from "../server/upload/src/handler.mjs";
+import { s3Config } from "../server/upload/src/node/s3.mjs";
 import { DbConnection } from "../apps/web/src/module_bindings";
 const database = process.env.STDB_DATABASE || "memory-replay";
 const uri = process.env.STDB_WS_URL || `ws://127.0.0.1:${process.env.STDB_PORT || 3055}`;
@@ -162,7 +163,7 @@ try {
   // Exercise pipeline HTTP reducer permissions and the array payload consumed by the signing service.
   const http = uri.replace(/^ws/, "http");
   const uploadId = crypto.randomUUID();
-  const config = productionConfig({
+  const config = s3Config({
     S3_BUCKET: "local-test",
     ASSET_BASE_URL: "https://assets.example",
     UPLOAD_SIGNING_SECRET: "local-test-only-".repeat(3),

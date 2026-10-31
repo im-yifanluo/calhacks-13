@@ -1,14 +1,11 @@
-import { createServer } from "node:http";
-import { pathToFileURL } from "node:url";
 import { S3Client, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { connectionConfig } from "./connections.mjs";
-import { makeHandler, databaseConfig } from "./core.mjs";
-import { passwordVault } from "./passwords.mjs";
+import { connectionConfig } from "../connections.mjs";
+import { databaseConfig } from "../database.mjs";
+import { passwordVault } from "../passwords.mjs";
 import { s3PasswordStore } from "./passwords-s3.mjs";
-export { ticket, readTicket, metadata, makeHandler, databaseConfig } from "./core.mjs";
 
-export function productionConfig(env = process.env) {
+export function s3Config(env = process.env) {
   for (const name of [
     "S3_BUCKET",
     "ASSET_BASE_URL",
@@ -86,12 +83,4 @@ export function productionConfig(env = process.env) {
       }
     },
   };
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const server = createServer(makeHandler(productionConfig()));
-  server.requestTimeout = 30000;
-  server.listen(Number(process.env.UPLOAD_PORT || 8788), process.env.UPLOAD_HOST || "127.0.0.1", () =>
-    console.log("Upload signing service ready"),
-  );
 }

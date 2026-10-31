@@ -1,4 +1,4 @@
-import { handleHostedRequest } from "../server/upload/worker.mjs";
+import { handleHostedRequest } from "../server/upload/src/cloudflare/worker.mjs";
 import viewerHtml from "../public/index.html?raw";
 import libraryHtml from "../public/library.html?raw";
 import handler from "vinext/server/fetch-handler";

@@ -25,12 +25,12 @@
     "connections:check": "node scripts/check-connections.mjs",
     "worker:env:local": "node scripts/local-worker-env.mjs",
     "test:video": "tsx scripts/test-video.ts",
-    "upload:local": "node server/upload/local.mjs",
-    "upload:start": "node server/upload/start.mjs",
+    "upload:local": "UPLOAD_STORAGE=local node server/upload/src/node/server.mjs",
+    "upload:start": "node server/upload/src/node/server.mjs",
     "test:upload-api": "tsx scripts/test-upload-api.ts",
     "test:pipeline": "node scripts/test-pipeline.mjs",
     "test:pipeline:live": "tsx scripts/test-pipeline-live.ts",
-    "upload:dev": "node --env-file=server/upload/.env server/upload/service.mjs",
+    "upload:dev": "node --env-file=server/upload/.env server/upload/src/node/server.mjs",
     "tunnel": "cloudflared tunnel --url https://localhost:5173 --no-tls-verify",
     "ios:generate": "python3 scripts/generate_xcode_project.py",
     "ios:demo:build": "xcodebuild -project apps/ios/SceneCaptureDemo.xcodeproj -scheme SceneCaptureDemo -configuration Debug -sdk iphonesimulator -derivedDataPath /tmp/memreplay-ios-demo build",
@@ -48,11 +48,7 @@
     "prettier": "3.6.2",
     "tsx": "^4.23.15",
     "vitest": "^5.0.5",
-    "wrangler": "4.92.0"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.1156.0",
-    "@aws-sdk/s3-request-presigner": "^3.1156.0",
+    "wrangler": "4.92.0",
     "ws": "^8.22.0"
   }
 }

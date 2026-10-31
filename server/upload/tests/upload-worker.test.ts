@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { handleHostedRequest, HOSTED_MAX_UPLOAD_BYTES } from "../worker.mjs";
-import { encodePersonalKey } from "../accounts.mjs";
+import { encodePersonalKey } from "../src/accounts.mjs";
+import { handleHostedRequest, HOSTED_MAX_UPLOAD_BYTES } from "../src/cloudflare/worker.mjs";
 
 const owner = "a".repeat(64),
   other = "b".repeat(64);

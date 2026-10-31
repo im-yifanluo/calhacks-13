@@ -1,6 +1,8 @@
 import { expect, test } from "vitest";
 import { createServer } from "node:http";
-import { makeHandler, ticket, readTicket, metadata, productionConfig } from "../service.mjs";
+import { makeHandler, metadata } from "../src/handler.mjs";
+import { s3Config } from "../src/node/s3.mjs";
+import { readTicket, ticket } from "../src/tickets.mjs";
 const secret = "x".repeat(40),
   owner = "a".repeat(64);
 test("upload receipts reject tampering and expiration", () => {
@@ -109,7 +111,7 @@ test("presign/complete requires identity, matching object and creates memory onl
 });
 
 test("real S3 presigner signs Content-Type and no empty-body checksum", async () => {
-  const config = productionConfig({
+  const config = s3Config({
     S3_BUCKET: "test-bucket",
     S3_ENDPOINT: "https://storage.example.test",
     S3_REGION: "auto",
@@ -318,7 +320,7 @@ test("S3 completion before the PUT reports a missing upload", async () => {
   });
   await new Promise<void>((resolve) => storage.listen(0, "127.0.0.1", resolve));
   try {
-    const config = productionConfig({
+    const config = s3Config({
       S3_BUCKET: "test-bucket",
       S3_ENDPOINT: `http://127.0.0.1:${(storage.address() as any).port}`,
       S3_REGION: "us-east-1",
@@ -349,11 +351,11 @@ test("deployment config rejects unsafe asset URLs and trims browser origins", ()
     AWS_SECRET_ACCESS_KEY: "test",
     UPLOAD_ALLOWED_ORIGINS: " https://memos.example , ",
   };
-  expect(productionConfig(env).allowedOrigins).toEqual(["https://memos.example"]);
-  expect(productionConfig(env).accountConfig).toEqual({ server: "https://maincloud.example", database: "memos" });
+  expect(s3Config(env).allowedOrigins).toEqual(["https://memos.example"]);
+  expect(s3Config(env).accountConfig).toEqual({ server: "https://maincloud.example", database: "memos" });
   for (const url of ["file:///tmp/videos", "https://user:password@assets.example", "https://assets.example?secret=x"])
-    expect(() => productionConfig({ ...env, ASSET_BASE_URL: url })).toThrow();
-  expect(() => productionConfig({ ...env, S3_ENDPOINT: "ftp://storage.example" })).toThrow();
+    expect(() => s3Config({ ...env, ASSET_BASE_URL: url })).toThrow();
+  expect(() => s3Config({ ...env, S3_ENDPOINT: "ftp://storage.example" })).toThrow();
 });
 
 test("profile API binds names to a verified token and rejects another user's ID", async () => {

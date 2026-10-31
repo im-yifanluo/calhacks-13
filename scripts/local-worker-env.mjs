@@ -1,7 +1,7 @@
 /** Write a private, sourceable environment for the existing worker. Never prints its token. */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
-import { databaseConfig } from "../server/upload/service.mjs";
+import { databaseConfig } from "../server/upload/src/database.mjs";
 
 const env = process.env;
 const directory = resolve(env.LOCAL_UPLOAD_DIR || "data/uploads");

@@ -1,7 +1,7 @@
 import { test, expect, vi, afterEach } from "vitest";
-import { handleHostedRequest } from "../worker.mjs";
-import { sceneReferences } from "../scene-import.mjs";
-import { encodePersonalKey } from "../accounts.mjs";
+import { encodePersonalKey } from "../src/accounts.mjs";
+import { sceneReferences } from "../src/cloudflare/scene-import.mjs";
+import { handleHostedRequest } from "../src/cloudflare/worker.mjs";
 afterEach(() => vi.restoreAllMocks());
 test("rendered bundles register only after references exist, preserve ownership, and reject cross-account receipts", async () => {
   const owner = "a".repeat(64),
@@ -66,7 +66,11 @@ test("rendered bundles register only after references exist, preserve ownership,
   const upload = async (path: string, data: Buffer) => {
     const s = await (await call("/api/scenes/presign", { receipt: start.receipt, path, size: data.length }))!.json();
     return handleHostedRequest(
-      new Request(s.putUrl, { method: "PUT", headers: { "Content-Length": String(data.length) }, body: data }),
+      new Request(s.putUrl, {
+        method: "PUT",
+        headers: { "Content-Length": String(data.length) },
+        body: new Uint8Array(data),
+      }),
       env,
     );
   };

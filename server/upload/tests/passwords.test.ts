@@ -2,10 +2,10 @@ import { afterEach, expect, test, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { passwordVault, r2PasswordStore, validPassword } from "../passwords.mjs";
-import { localPasswordStore } from "../passwords-local.mjs";
-import { s3PasswordStore } from "../passwords-s3.mjs";
-import { databaseConfig } from "../core.mjs";
+import { databaseConfig } from "../src/database.mjs";
+import { s3PasswordStore } from "../src/node/passwords-s3.mjs";
+import { localPasswordStore } from "../src/node/passwords-sqlite.mjs";
+import { passwordVault, r2PasswordStore, validPassword } from "../src/passwords.mjs";
 
 const settings = { server: "https://db.test", database: "memos" },
   secret = "test-server-secret-".repeat(4);
@@ -168,7 +168,7 @@ test("R2 and S3 adapters enforce conditional writes rather than last-writer-wins
   expect(await r2.write("r2", "one")).toBe(true);
   expect(await r2.write("r2", "two")).toBe(false);
   const read = await r2.read("r2");
-  expect(await r2.write("r2", "two", read.version)).toBe(true);
+  expect(await r2.write("r2", "two", read!.version)).toBe(true);
   const send = vi
     .fn()
     .mockResolvedValueOnce({ Body: { transformToString: async () => "one" }, ETag: "v1" })

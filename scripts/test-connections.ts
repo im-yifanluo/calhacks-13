@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
-import { createLocalHandler } from "../server/upload/local.mjs";
+import { createLocalHandler } from "../server/upload/src/node/local.mjs";
 import { DbConnection } from "../apps/web/src/module_bindings";
 
 const exec = promisify(execFile),

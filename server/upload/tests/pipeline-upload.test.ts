@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { handleHostedRequest } from "../worker.mjs";
-import { SCENE_PART_BYTES } from "../pipeline.mjs";
+import { SCENE_PART_BYTES } from "../src/cloudflare/pipeline.mjs";
+import { handleHostedRequest } from "../src/cloudflare/worker.mjs";
 
 afterEach(() => vi.restoreAllMocks());
 function fixture() {

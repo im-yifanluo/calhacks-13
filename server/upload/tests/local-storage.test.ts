@@ -3,8 +3,8 @@ import { createServer, type RequestListener } from "node:http";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createLocalHandler, localStorage } from "../local.mjs";
-import { ticket } from "../service.mjs";
+import { createLocalHandler, localStorage } from "../src/node/local.mjs";
+import { ticket } from "../src/tickets.mjs";
 const secret = "local-test-secret".repeat(3);
 const owner = "a".repeat(64),
   worker = "c".repeat(64);

@@ -3,9 +3,9 @@ import { createServer } from "node:http";
 import { mkdtemp, mkdir, rm, writeFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { connectionConfig } from "../connections.mjs";
-import { sceneStorage } from "../scenes.mjs";
-import { makeHandler } from "../service.mjs";
+import { connectionConfig } from "../src/connections.mjs";
+import { makeHandler } from "../src/handler.mjs";
+import { sceneStorage } from "../src/node/local-scenes.mjs";
 
 const owner = "a".repeat(64),
   worker = "b".repeat(64);

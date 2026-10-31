@@ -1,29 +1,7 @@
-import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
-import {
-  ApiError,
-  accountSettings,
-  accountName,
-  credentials,
-  decodePersonalKey,
-  encodePersonalKey,
-} from "./accounts.mjs";
+import { randomUUID } from "node:crypto";
+import { ApiError, accountName, credentials, decodePersonalKey, encodePersonalKey } from "./accounts.mjs";
+import { readTicket, ticket } from "./tickets.mjs";
 
-export function ticket(payload, secret) {
-  const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  return `${data}.${createHmac("sha256", secret).update(data).digest("base64url")}`;
-}
-export function readTicket(value, secret) {
-  const [data, sig] = String(value).split(".");
-  const expected = createHmac("sha256", secret)
-    .update(data ?? "")
-    .digest();
-  const received = Buffer.from(sig ?? "", "base64url");
-  if (received.length !== expected.length || !timingSafeEqual(received, expected))
-    throw new Error("Invalid upload receipt");
-  const payload = JSON.parse(Buffer.from(data, "base64url").toString());
-  if (payload.expires < Date.now()) throw new Error("Upload receipt expired; request a new upload");
-  return payload;
-}
 /**
  * Validates a presign request. `pipeline: false` marks a test upload (capture simulation,
  * test-video): its memory row is assigned to the uploader instead of the pipeline worker,
@@ -77,18 +55,20 @@ async function json(req) {
 
 /**
  * Build the Node request handler for every /api route. Storage and database access are injected, so the same
- * handler serves S3/R2, local disk and Cloudflare Workers. Optional hooks enable optional routes.
+ * handler serves S3/R2, local disk and Cloudflare Workers. Every hook is optional to the handler itself: the upload
+ * routes need `secret`, `assetBase`, `sign`, `head`, `createMemory` and `pipelineIdentity`, and other hooks enable
+ * their own routes.
  *
  * @param {object} options
- * @param {string} options.secret HMAC secret that signs upload tickets.
- * @param {string} options.assetBase Public base URL of stored uploads.
+ * @param {string} [options.secret] HMAC secret that signs upload tickets.
+ * @param {string} [options.assetBase] Public base URL of stored uploads.
  * @param {string[]} options.allowedOrigins Browser origins allowed by CORS.
  * @param {(identity: string, authorization: string) => Promise<boolean>} options.verify
- * @param {(upload: object) => Promise<string>} options.sign Returns a signed PUT URL for an upload ticket.
- * @param {(key: string) => Promise<{ size: number, type?: string } | null>} options.head
- * @param {(upload: object, authorization: string, assignee: string) => Promise<unknown>} options.createMemory
- * @param {string} options.pipelineIdentity The GPU worker's SpacetimeDB identity.
- * @param {() => Promise<{ identity: string, token: string }>} options.registerIdentity
+ * @param {(upload: object) => Promise<string>} [options.sign] Returns a signed PUT URL for an upload ticket.
+ * @param {(key: string) => Promise<{ size: number, type?: string } | null>} [options.head]
+ * @param {(upload: object, authorization: string, assignee: string) => Promise<unknown>} [options.createMemory]
+ * @param {string} [options.pipelineIdentity] The GPU worker's SpacetimeDB identity.
+ * @param {() => Promise<{ identity: string, token: string }>} [options.registerIdentity]
  * @param {(owner: string, authorization: string) => Promise<any[]>} [options.listMemories]
  * @param {(identity: string, authorization: string) => Promise<unknown>} [options.getProfile]
  * @param {(displayName: string, authorization: string) => Promise<unknown>} [options.setProfile]
@@ -299,116 +279,5 @@ export function makeHandler({
         error: error instanceof Error && !systemError(error) ? error.message : "Upload failed; retry",
       });
     }
-  };
-}
-export function databaseConfig(env = process.env) {
-  const settings = accountSettings(env);
-  // The account names the public browser destination; server-side verification uses the internal host.
-  const base = accountSettings({ STDB_HTTP_URL: env.STDB_HTTP_URL, STDB_DATABASE: env.STDB_DATABASE }).server;
-  const url = `${base}/v1/database/${encodeURIComponent(env.STDB_DATABASE)}`;
-  return {
-    accountConfig: settings,
-    registerAccount: async (name, auth) => {
-      const response = await fetch(`${url}/call/register_account`, {
-        method: "POST",
-        headers: { Authorization: auth, "Content-Type": "application/json" },
-        body: JSON.stringify([name]),
-        signal: AbortSignal.timeout(10000),
-      });
-      if (!response.ok)
-        throw new ApiError(
-          response.status >= 500 ? 502 : 400,
-          "Could not register this name. An existing password keeps its registered name.",
-        );
-    },
-    getAccount: async (identity, auth) => {
-      if (!/^[a-f0-9]{64}$/.test(identity)) throw new ApiError(401, "Invalid identity");
-      const response = await fetch(`${url}/sql`, {
-        method: "POST",
-        headers: { Authorization: auth, "Content-Type": "text/plain" },
-        body: `SELECT display_name, provider FROM profile WHERE identity = 0x${identity}`,
-        signal: AbortSignal.timeout(10000),
-      });
-      if (!response.ok) throw new ApiError(502, "Could not read the account from SpacetimeDB");
-      const [result] = await response.json();
-      return { identity, displayName: result.rows[0]?.[0] ?? "", provider: result.rows[0]?.[1] ?? "guest" };
-    },
-    verify: async (id, auth) =>
-      (
-        await fetch(`${base}/v1/identity/${id}/verify`, {
-          headers: { Authorization: auth },
-          signal: AbortSignal.timeout(10000),
-        })
-      ).ok,
-    registerIdentity: async () => {
-      const response = await fetch(`${base}/v1/identity`, {
-        method: "POST",
-        signal: AbortSignal.timeout(10000),
-      });
-      if (!response.ok) throw new Error("Identity registration failed");
-      return response.json();
-    },
-    setProfile: async (displayName, auth) => {
-      const response = await fetch(`${url}/call/set_display_name`, {
-        method: "POST",
-        headers: { Authorization: auth, "Content-Type": "application/json" },
-        body: JSON.stringify([displayName]),
-        signal: AbortSignal.timeout(10000),
-      });
-      if (!response.ok) throw new Error("Could not save your name");
-    },
-    getProfile: async (identity, auth) => {
-      if (!/^[a-f0-9]{64}$/i.test(identity)) throw new Error("Invalid identity");
-      const response = await fetch(`${url}/sql`, {
-        method: "POST",
-        headers: { Authorization: auth },
-        body: `SELECT display_name FROM profile WHERE identity = 0x${identity}`,
-        signal: AbortSignal.timeout(10000),
-      });
-      if (!response.ok) throw new Error("Could not load your profile");
-      const [result] = await response.json();
-      return { identity, displayName: result.rows[0]?.[0] ?? "" };
-    },
-    listMemories: async (identity, auth) => {
-      if (!/^[a-f0-9]{64}$/i.test(identity)) throw new Error("Invalid identity");
-      const response = await fetch(`${url}/sql`, {
-        method: "POST",
-        headers: { Authorization: auth },
-        body: `SELECT id, title, source_url, status, duration_us, request_id, pipeline_identity, manifest_url, progress, error FROM memory WHERE owner = 0x${identity}`,
-        signal: AbortSignal.timeout(10000),
-      });
-      if (!response.ok) throw new Error("Database lookup failed");
-      const [result] = await response.json();
-      // SQL returns an identity as ["0x<64 hex>"]; report it like the API's identities.
-      const hex = (value) =>
-        String(Array.isArray(value) ? value[0] : value)
-          .replace(/^0x/, "")
-          .toLowerCase();
-      return result.rows.map(
-        ([id, title, sourceUrl, status, durationUs, requestId, pipelineIdentity, manifestUrl, progress, error]) => ({
-          id: String(id),
-          title,
-          sourceUrl,
-          status,
-          durationUs: String(durationUs),
-          requestId,
-          pipelineIdentity: hex(pipelineIdentity),
-          pipeline: hex(pipelineIdentity) !== identity.toLowerCase(),
-          manifestUrl,
-          progress,
-          error,
-        }),
-      );
-    },
-    createMemory: async (d, auth, pipeline) => {
-      const response = await fetch(`${base}/v1/database/${encodeURIComponent(env.STDB_DATABASE)}/call/create_memory`, {
-        method: "POST",
-        headers: { Authorization: auth, "Content-Type": "application/json" },
-        body: JSON.stringify([d.requestId, d.title, d.sourceUrl, d.manifestUrl || "", ["0x" + pipeline], d.durationUs]),
-        signal: AbortSignal.timeout(15000),
-      });
-      if (!response.ok)
-        throw new Error(`createMemory failed (${response.status}): ${(await response.text()).slice(0, 300)}`);
-    },
   };
 }

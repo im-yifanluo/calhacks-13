@@ -13,7 +13,7 @@ Environment:
   PIPELINE_TOKEN  the worker identity's token:
                   - with `npm run upload:local`: "token" in data/uploads/.worker-identity.json,
                     minted on the service's first start;
-                  - with service.mjs: "token" from `curl -X POST $STDB_HTTP_URL/v1/identity`,
+                  - with S3/R2 storage: "token" from `curl -X POST $STDB_HTTP_URL/v1/identity`,
                     whose "identity" is the service's PIPELINE_IDENTITY.
 
 Exit codes: 0 accepted; 1 rejected (the HTTP status and the reducer's reason are printed) or

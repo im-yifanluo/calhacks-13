@@ -3,7 +3,7 @@
 Any client can call create_memory with any sourceUrl and assign the row to the worker, so
 the worker must not trust the URL. It downloads only what the upload service issued:
 
-  service.mjs (S3/R2)   ASSET_BASE_URL/videos/<owner>/<uuid>.<mp4|mov|webm>
+  S3/R2 storage         ASSET_BASE_URL/videos/<owner>/<uuid>.<mp4|mov|webm>
   npm run upload:local  PUBLIC_ORIGIN/api/local-media/videos/<owner>/<uuid>.<ext>
 
 and caps the download: at most MAX_SOURCE_BYTES (the upload limit; check Content-Length,
@@ -22,9 +22,9 @@ import re
 import sys
 from urllib.parse import urlsplit
 
-MAX_SOURCE_BYTES = 2 * 1024**3  # service.mjs refuses larger uploads
+MAX_SOURCE_BYTES = 2 * 1024**3  # the upload service refuses larger uploads
 
-# The key service.mjs's metadata() makes: videos/<uploader identity>/<request UUID>.<ext>.
+# The key the upload service's metadata() makes: videos/<uploader identity>/<request UUID>.<ext>.
 KEY = re.compile(
     r"videos/([0-9a-f]{64})/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:mp4|mov|webm)",
     re.IGNORECASE,

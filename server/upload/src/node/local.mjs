@@ -1,15 +1,15 @@
 /** Local disk transport for capture tests. Uses the real SpacetimeDB module. */
-import { createServer } from "node:http";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, writeFile, open, stat, unlink, link } from "node:fs/promises";
 import { dirname, resolve, join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { databaseConfig, makeHandler, ticket, readTicket } from "./service.mjs";
-import { connectionConfig } from "./connections.mjs";
-import { sceneStorage } from "./scenes.mjs";
-import { passwordVault } from "./passwords.mjs";
-import { localPasswordStore } from "./passwords-local.mjs";
+import { databaseConfig } from "../database.mjs";
+import { makeHandler } from "../handler.mjs";
+import { readTicket, ticket } from "../tickets.mjs";
+import { connectionConfig } from "../connections.mjs";
+import { sceneStorage } from "./local-scenes.mjs";
+import { passwordVault } from "../passwords.mjs";
+import { localPasswordStore } from "./passwords-sqlite.mjs";
 
 const validKey = /^videos\/[a-f0-9]{64}\/[a-f0-9-]{36}\.(mp4|mov|webm)$/i;
 export async function localStorage({ directory, secret, publicOrigin }) {
@@ -231,14 +231,4 @@ export async function createLocalHandler(env = process.env) {
     res.setHeader("Access-Control-Expose-Headers", "X-Content-SHA256,Content-Length");
     if (!(await storage.handle(req, res)) && !(await scenes(req, res))) await api(req, res);
   };
-}
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const server = createServer(await createLocalHandler());
-  const directory = resolve(process.env.LOCAL_UPLOAD_DIR || "data/uploads");
-  server.requestTimeout = 15 * 60 * 1000;
-  server.listen(Number(process.env.UPLOAD_PORT || 8788), process.env.UPLOAD_HOST || "127.0.0.1", () =>
-    console.log(
-      `Local capture storage ready. Video files and the worker identity (.worker-identity.json): ${directory}; metadata: SpacetimeDB. No GPU reconstruction is simulated.`,
-    ),
-  );
 }

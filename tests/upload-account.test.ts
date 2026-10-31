@@ -1,9 +1,9 @@
 import { afterEach, expect, test } from "vitest";
 import { createServer, type Server } from "node:http";
-import { makeHandler } from "../server/upload/service.mjs";
-import { decodePersonalKey, encodePersonalKey } from "../server/upload/accounts.mjs";
+import { decodePersonalKey, encodePersonalKey } from "../server/upload/src/accounts.mjs";
+import { makeHandler } from "../server/upload/src/handler.mjs";
 import { decodeAccountKey, encodeAccountKey } from "../apps/web/src/account-key";
-import { passwordVault } from "../server/upload/passwords.mjs";
+import { passwordVault } from "../server/upload/src/passwords.mjs";
 
 const settings = { server: "https://db.example", database: "memos-test" };
 const identity = "a".repeat(64),
