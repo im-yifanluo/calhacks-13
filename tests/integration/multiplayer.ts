@@ -162,7 +162,6 @@ try {
   await until(() => !a.conn.db.player.identity.find(again.conn.identity!)?.online);
   // Exercise pipeline HTTP reducer permissions and the array payload consumed by the signing service.
   const http = uri.replace(/^ws/, "http");
-  const uploadId = crypto.randomUUID();
   const config = s3Config({
     S3_BUCKET: "local-test",
     ASSET_BASE_URL: "https://assets.example",

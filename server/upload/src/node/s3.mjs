@@ -78,7 +78,8 @@ export function s3Config(env = process.env) {
         const result = await s3.send(new HeadObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
         return { size: result.ContentLength, type: result.ContentType };
       } catch (error) {
-        if (error?.$metadata?.httpStatusCode === 404) throw new Error("Upload not found; PUT the video first");
+        if (error?.$metadata?.httpStatusCode === 404)
+          throw new Error("Upload not found; PUT the video first", { cause: error });
         throw error;
       }
     },

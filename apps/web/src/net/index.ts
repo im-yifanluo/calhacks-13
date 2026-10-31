@@ -411,7 +411,8 @@ export class Multiplayer extends EventTarget {
       const finish = (error?: Error) => {
         clearTimeout(timer);
         this.removeEventListener("change", check);
-        error ? reject(error) : resolve();
+        if (error) reject(error);
+        else resolve();
       };
       const check = () => {
         if (this.disposed) finish(new Error("This page's connection was closed"));

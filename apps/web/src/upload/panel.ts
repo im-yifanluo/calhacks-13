@@ -135,7 +135,8 @@ function videoDuration(file: File): Promise<number> {
       video.removeAttribute("src");
       video.load();
       URL.revokeObjectURL(url);
-      value instanceof Error ? reject(value) : resolve(value);
+      if (value instanceof Error) reject(value);
+      else resolve(value);
     };
     video.onloadedmetadata = () =>
       Number.isFinite(video.duration) ? done(video.duration) : done(new Error("Invalid video duration"));

@@ -27,8 +27,9 @@ async function checkDestination() {
     throw new Error("The account service uses a different database. Check the server settings.");
   if (config.passwordLength !== 6) throw new Error("Update the upload service to enable six-digit passwords.");
 }
-function verifiedResponse(value: any) {
-  const account = decodeAccountKey(value?.personalKey);
+function verifiedResponse(value: Partial<Record<string, unknown>>) {
+  if (typeof value?.personalKey !== "string") throw new Error("The account service returned an invalid account.");
+  const account = decodeAccountKey(value.personalKey);
   if (
     value?.identity !== account.identity ||
     value?.token !== account.token ||

@@ -139,7 +139,10 @@ export class FakeClient {
     }
     for (const op of ops) {
       const listeners = [...this.tables[op.table].listeners[op.kind]];
-      for (const cb of listeners) op.kind === "update" ? cb({}, op.old, op.row) : cb({}, op.row);
+      for (const cb of listeners) {
+        if (op.kind === "update") cb({}, op.old, op.row);
+        else cb({}, op.row);
+      }
     }
   }
 }

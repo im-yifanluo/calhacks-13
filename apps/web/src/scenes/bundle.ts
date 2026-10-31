@@ -22,6 +22,7 @@ export function filePath(path: string): string {
   if (
     !path ||
     path.startsWith("/") ||
+    // eslint-disable-next-line no-control-regex -- control characters are exactly what this rejects
     /[\\\x00-\x1f]/.test(path) ||
     path.split("/").some((p) => !p || p === "." || p === "..")
   )

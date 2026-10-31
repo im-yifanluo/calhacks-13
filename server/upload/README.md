@@ -37,11 +37,11 @@ tests/
 
 From the repository root:
 
-| Command | Storage | Notes |
-| --- | --- | --- |
-| `npm run upload:local` | Local disk (`data/uploads`) | Development default. Mints a GPU-worker identity on first start. |
-| `npm run upload:dev` | S3/R2 | Reads `server/upload/.env` (copy `.env.example`). |
-| `npm run upload:start` | `UPLOAD_STORAGE` (default `s3`) | The deployment entry point; listens on 0.0.0.0 when `NODE_ENV=production`. |
-| `docker compose -f server/upload/deploy/docker/compose.yaml up` | S3/R2 | With HTTPS through Caddy; see `deploy/docker/.env.example`. |
+| Command                                                         | Storage                         | Notes                                                                      |
+| --------------------------------------------------------------- | ------------------------------- | -------------------------------------------------------------------------- |
+| `npm run upload:local`                                          | Local disk (`data/uploads`)     | Development default. Mints a GPU-worker identity on first start.           |
+| `npm run upload:dev`                                            | S3/R2                           | Reads `server/upload/.env` (copy `.env.example`).                          |
+| `npm run upload:start`                                          | `UPLOAD_STORAGE` (default `s3`) | The deployment entry point; listens on 0.0.0.0 when `NODE_ENV=production`. |
+| `docker compose -f server/upload/deploy/docker/compose.yaml up` | S3/R2                           | With HTTPS through Caddy; see `deploy/docker/.env.example`.                |
 
 The Node service listens on port 8788 by default, and the web app's dev server proxies `/api` to it.

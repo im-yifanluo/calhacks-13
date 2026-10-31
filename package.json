@@ -14,6 +14,7 @@
     "build": "npm run build -w apps/web",
     "test": "vitest run",
     "typecheck": "npm run typecheck --workspaces --if-present && tsc -p tests/tsconfig.json",
+    "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "stdb:start": "spacetime start --listen-addr 127.0.0.1:${STDB_PORT:-3055}",
@@ -43,11 +44,15 @@
     "node": "^22.13.0 || >=23.4.0"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "@types/node": "^22.20.5",
     "@types/ws": "^8.18.2",
+    "eslint": "10.13.0",
     "fake-indexeddb": "^6.2.6",
+    "globals": "17.13.0",
     "prettier": "3.6.2",
     "tsx": "^4.23.15",
+    "typescript-eslint": "8.71.2",
     "vitest": "^5.0.5",
     "wrangler": "4.92.0",
     "ws": "^8.22.0"

@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "vitest";
 import { createModuleTestHarness, TestAuth, TestClock } from "spacetimedb/server/test-utils";
-import { ConnectionId, Identity, Timestamp, TimeDuration } from "spacetimedb";
+import { ConnectionId, Timestamp, TimeDuration } from "spacetimedb";
 import { SenderError } from "spacetimedb/server";
 import db, * as mod from "../src/index";
 const auth = (name: string, id: bigint) =>

@@ -80,7 +80,9 @@ export async function localStorage({ directory, secret, publicOrigin }) {
               throw new Error("Upload could not be stored; retry");
             });
             if (existing.sha256 !== metadata.sha256)
-              throw new Error("This upload is already stored with different bytes; request a new upload");
+              throw new Error("This upload is already stored with different bytes; request a new upload", {
+                cause: error,
+              });
           }
           await writeFile(file + ".json", JSON.stringify(metadata), {
             mode: 0o600,

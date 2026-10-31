@@ -39,7 +39,7 @@ stubCanvasDocument();
 
 type Press = "selectstart" | "selectend" | "squeezestart" | "squeezeend";
 /** The controller events the tests dispatch: `connected` with a fake input source; presses carry no data. */
-interface ControllerEvents extends Object3DEventMap, Record<Press, {}> {
+interface ControllerEvents extends Object3DEventMap, Record<Press, object> {
   connected: { data: { handedness: XRHandedness; gamepad: ReturnType<typeof gamepad> } };
 }
 class Headset extends EventDispatcher<WebXRManagerEventMap> {

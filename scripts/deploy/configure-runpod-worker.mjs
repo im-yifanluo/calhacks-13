@@ -3,7 +3,9 @@ import { writeFile, access } from "node:fs/promises";
 import { resolve } from "node:path";
 const [api, output] = process.argv.slice(2);
 if (!api || !output || new URL(api).protocol !== "https:" || new URL(api).origin !== api)
-  throw new Error("Usage: node scripts/deploy/configure-runpod-worker.mjs https://memos.example data/runpod-worker.env");
+  throw new Error(
+    "Usage: node scripts/deploy/configure-runpod-worker.mjs https://memos.example data/runpod-worker.env",
+  );
 const file = resolve(output);
 try {
   await access(file);

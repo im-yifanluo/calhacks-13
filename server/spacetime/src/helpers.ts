@@ -6,9 +6,9 @@ import type { Ctx, Timeline, ObjectRow } from "./schema";
 
 /** A thrown object whose owner sent nothing for this long is abandoned (see `abandoned`). */
 const ABANDONED_AFTER_US = 15_000_000n;
-export const fail = (message: string): never => {
+export function fail(message: string): never {
   throw new SenderError(message);
-};
+}
 export function text(value: string, max = 100) {
   if (!value.trim() || value.length > max) fail("Invalid text length");
   return value.trim();

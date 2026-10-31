@@ -114,7 +114,7 @@ export const saveBranchKeyframes = db.reducer(
     const o = ctx.db.objectState.key.find(`${args.branchId}:${args.objectId}`) ?? fail("Unknown object");
     if (!o?.simOwner?.isEqual(ctx.sender)) fail("Only the simulation owner can record a trajectory");
     if (args.keyframesJson.length > 60000) fail("Chunk too large");
-    let frames: any;
+    let frames: unknown;
     try {
       frames = JSON.parse(args.keyframesJson);
     } catch {

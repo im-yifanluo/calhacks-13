@@ -25,7 +25,8 @@ export function verifySignInKey(input: string, timeoutMs = 15000): Promise<{ acc
       done = true;
       clearTimeout(timer);
       connection?.disconnect();
-      error ? reject(new Error(error)) : resolve({ account, name: name! });
+      if (error) reject(new Error(error));
+      else resolve({ account, name: name! });
     };
     const timer = setTimeout(
       () => finish("Could not verify the password. Check your connection and try again."),

@@ -47,8 +47,8 @@ test("paused, nothing is moved; resuming glides from where you are onto the path
   assert.equal(follower.step(false, 0.5, eyes, 1 / 60, out), null); // paused: roam
   eyes.set(5, 1.6, -3); // walked away
   const dt = 1 / 60;
-  let t = 0.5,
-    first = follower.step(true, t, eyes, dt, out)!.clone(); // resume
+  let t = 0.5;
+  const first = follower.step(true, t, eyes, dt, out)!.clone(); // resume
   vec(first, [5, 1.6, -3]); // the glide starts where you stand
   assert.ok(follower.gliding);
   let frames = 0;
