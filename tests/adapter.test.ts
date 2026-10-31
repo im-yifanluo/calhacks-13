@@ -14,7 +14,7 @@ import {
 } from "../apps/web/src/net/adapter";
 import { initPhysics, STEP } from "../apps/web/src/engine/physics";
 import { Viewer } from "../apps/web/src/engine/viewer";
-import { Notice } from "../apps/web/src/party/session";
+import { Notice } from "../apps/web/src/party/notice";
 import { type FakeClient, RoomServer } from "./room-harness";
 
 const manifest = JSON.parse(readFileSync(new URL("../apps/web/public/mock/memory.json", import.meta.url), "utf8"));

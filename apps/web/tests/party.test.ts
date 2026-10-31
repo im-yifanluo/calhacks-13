@@ -1,24 +1,19 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import * as THREE from "three";
 import { Identity } from "spacetimedb";
+import { Notice, NOTICE_MS } from "../src/party/notice";
+import { Avatars, deviceKind, handVisible, HIDE_NEAR_M, playerColor } from "../src/party/presence";
 import {
-  Avatars,
   claimReload,
-  deviceKind,
-  handVisible,
-  HIDE_NEAR_M,
   loadedManifest,
   normalizeCode,
-  Notice,
-  NOTICE_MS,
-  playerColor,
   RELOAD_GUARD_KEY,
   rememberRoomManifest,
   resolveManifestUrl,
   roomCode,
   roomUrl,
   sameManifest,
-} from "../src/party/session";
+} from "../src/party/routes";
 import type { Player } from "../src/net";
 
 describe("messages", () => {
