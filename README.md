@@ -105,7 +105,7 @@ docs/             guides, reports and the original hackathon plan
 
 ## Team
 
-Built at CalHacks 13 by Jerry, Nikko and Yifan.
+Built at CalHacks 13 by Yifan, Jerry, Nikko, and Andrew.
 
 memos builds on [three.js](https://threejs.org), [Spark](https://sparkjs.dev), [Rapier](https://rapier.rs),
 [SpacetimeDB](https://spacetimedb.com), [NVIDIA ViPE](https://github.com/nv-tlabs/vipe),
