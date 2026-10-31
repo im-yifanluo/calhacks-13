@@ -1,8 +1,8 @@
 import type { Multiplayer } from "../net";
 import { RecordedUpload } from "../upload/recorded";
+import { byId as $ } from "../lib/dom";
 
 export function captureSimulation(net: Multiplayer, onComplete: (requestId: string) => void) {
-  const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
   const canvas = $<HTMLCanvasElement>("sim-canvas"),
     context = canvas.getContext("2d")!;
   const on = $<HTMLButtonElement>("sim-on"),

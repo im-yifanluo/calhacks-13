@@ -24,6 +24,8 @@ import {
   roomUrl,
   sameManifest,
 } from "./routes";
+import { byId as $ } from "../lib/dom";
+import { formatTime } from "../lib/format";
 
 const NAME_KEY = "memreplay-name";
 /** 12.5 Hz: the head-pose rate net.sendPose allows. */
@@ -47,7 +49,6 @@ export interface SessionHost {
   showStatus(message: string): void;
 }
 
-const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const setText = (element: Element | null, text: string) => {
   if (element && element.textContent !== text) element.textContent = text;
 };
@@ -928,8 +929,7 @@ export class Session {
     const link = viewerLink(m, location.origin);
     const current = sameManifest(m.manifestUrl, this.host.manifestUrl, location.href);
     const inParty = !!this.room;
-    const seconds = Math.max(0, Math.floor(Number(m.durationUs) / 1e6));
-    const length = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+    const length = formatTime(Number(m.durationUs) / 1e6);
     const progress = Math.max(0, Math.min(100, Math.round((Number.isFinite(m.progress) ? m.progress : 0) * 100)));
     const state = current
       ? "Now viewing"

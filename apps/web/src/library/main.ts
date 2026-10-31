@@ -6,8 +6,9 @@ import { mountAuth } from "../account/auth";
 import "../styles/library.css";
 import { localMemoryUrls, seedLocalMemories, seedSummary } from "./dev-seed";
 import { mountSceneImport } from "./scene-import";
+import { byId as $ } from "../lib/dom";
+import { formatTime } from "../lib/format";
 
-const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const net = new Multiplayer(true);
 const grid = $("memory-grid"),
   search = $<HTMLInputElement>("search"),
@@ -54,10 +55,9 @@ function memoryCard(memory: Memory) {
   }
   const content = element("div", "memory-content");
   // Title and length; the status badge says the rest, and a sentence only when something needs attention.
-  const seconds = Math.max(0, Math.floor(Number(memory.durationUs) / 1e6));
   content.append(
     element("h3", "", memory.title),
-    element("p", "memory-meta", `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`),
+    element("p", "memory-meta", formatTime(Number(memory.durationUs) / 1e6)),
   );
   if (presentation.tone !== "ready") content.append(element("p", "memory-detail", presentation.detail));
   if (memory.status === "processing") {

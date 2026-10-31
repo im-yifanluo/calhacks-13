@@ -16,10 +16,12 @@ import { PhoneJoystick, isTouchDevice } from "./input/joystick";
 import { PathGuide } from "./camera/guided";
 import { PathFollower, placeHead } from "./camera/follow";
 import { applyExposure, clearExposure } from "./camera/exposure";
-import { AutoHide, formatTime, mountVRButton, percentAt, popover, Toast } from "./ui/overlay";
+import { AutoHide, mountVRButton, percentAt, popover, Toast } from "./ui/overlay";
 import { mountSceneOnly } from "./ui/scene-only";
 import "./styles/viewer.css";
 import { getImportedScene } from "./scenes/store";
+import { byId as element } from "./lib/dom";
+import { formatTime } from "./lib/format";
 
 declare global {
   interface Window {
@@ -28,7 +30,6 @@ declare global {
     __memreplayScene?: unknown;
   }
 }
-const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const status = element("status"),
   loading = element("loading"),
   warning = element("warning");

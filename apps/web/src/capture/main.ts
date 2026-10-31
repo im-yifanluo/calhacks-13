@@ -2,10 +2,10 @@ import { Multiplayer, type Memory } from "../net";
 import { uploadPanel } from "../upload/panel";
 import { captureSimulation } from "./simulation";
 import "../styles/capture.css";
+import { byId as $ } from "../lib/dom";
 const net = new Multiplayer();
 /** A test upload (presign with pipeline:false) is assigned to its uploader, not the worker. */
 const testUpload = (m: Memory) => m.pipelineIdentity.isEqual(m.owner);
-const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const select = $<HTMLSelectElement>("recordings"),
   video = $<HTMLVideoElement>("stored-video");
 let selected = new URLSearchParams(location.search).get("request") || "",

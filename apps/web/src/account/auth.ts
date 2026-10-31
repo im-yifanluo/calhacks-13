@@ -10,6 +10,7 @@ import {
   type AccountKey,
 } from "./key";
 import { accountPassword, createPasswordAccount, isPassword, restorePassword } from "./api";
+import { byId as element } from "../lib/dom";
 
 /** Verify with the configured host before replacing any currently signed-in identity. */
 export function verifySignInKey(input: string, timeoutMs = 15000): Promise<{ account: AccountKey; name: string }> {
@@ -63,7 +64,6 @@ export function verifySignInKey(input: string, timeoutMs = 15000): Promise<{ acc
 }
 
 export function mountAuth(net: Multiplayer): void {
-  const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const status = element("auth-status"),
     notice = element("auth-notice");
   const create = element<HTMLFormElement>("account-create");

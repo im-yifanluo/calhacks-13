@@ -2,12 +2,6 @@ import type * as THREE from "three";
 
 /** Small pieces of the 2D overlay (phone and desktop): time labels, the status toast, auto-hide, popovers, Enter VR. */
 
-/** m:ss for the dock's time labels. */
-export function formatTime(seconds: number): string {
-  const s = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds + 1e-6)) : 0;
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-}
-
 /** Where a time sits along the scrubber, in percent, clamped to the clip. */
 export function percentAt(time: number, duration: number): number {
   return duration > 0 ? Math.min(100, Math.max(0, (time / duration) * 100)) : 0;

@@ -3,9 +3,9 @@ import type { ScenePackage } from "../scenes/bundle";
 import type { Multiplayer } from "../net";
 import { randomUuid } from "../lib/ids";
 import { savedAccount } from "../account/key";
+import { byId as $ } from "../lib/dom";
 
 export function mountSceneImport(net: Multiplayer) {
-  const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const zip = $<HTMLInputElement>("scene-zip"),
     folder = $<HTMLInputElement>("scene-folder");
   const choice = $<HTMLSelectElement>("scene-manifest"),
