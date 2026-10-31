@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateManifest } from "@memreplay/shared";
+import { hosted } from "./hosted";
 import { DbConnection } from "../../apps/web/src/module_bindings";
 import { decodeAccountKey } from "../../apps/web/src/account/key";
 
@@ -16,7 +17,7 @@ const option = (name: string) => {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const api = option("--api") || "https://memos.alightdell64.chatgpt.site";
+const api = option("--api") || hosted.VITE_UPLOAD_API;
 const clip = option("--clip");
 const timeout = Number(option("--timeout-seconds") || 7200) * 1000;
 if (

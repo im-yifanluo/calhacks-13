@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { DbConnection } from "../../apps/web/src/module_bindings";
 import { decodeAccountKey } from "../../apps/web/src/account/key";
+import { hosted } from "./hosted";
 const base = process.argv[2];
 if (!base || new URL(base).protocol !== "https:" || new URL(base).origin !== base)
   throw new Error("Usage: npx tsx tests/e2e/upload-public.ts https://<API-origin>");
@@ -30,8 +31,9 @@ async function call(path: string, body?: object, key?: string, expected = 200) {
   return data;
 }
 const config = await call("/api/account/config");
-assert.equal(config.server, "https://maincloud.spacetimedb.com");
-assert.equal(config.database, "jerry-memory-replay-phone-20261024");
+// The API under test must use the website's database, so a password works on both.
+assert.equal(config.server, hosted.VITE_STDB_URL.replace(/^wss:/, "https:"));
+assert.equal(config.database, hosted.VITE_STDB_DATABASE);
 assert.equal(config.pipelineAvailable, false);
 if (!state.account) {
   state.account = await call("/api/account", { displayName: "Memos upload verification" });
