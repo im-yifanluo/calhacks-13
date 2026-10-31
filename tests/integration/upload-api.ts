@@ -8,11 +8,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
-import { DbConnection } from "../apps/web/src/module_bindings";
-import { decodeAccountKey, encodeAccountKey } from "../apps/web/src/account-key";
+import { DbConnection } from "../../apps/web/src/module_bindings";
+import { decodeAccountKey, encodeAccountKey } from "../../apps/web/src/account-key";
 
 const exec = promisify(execFile),
-  repo = fileURLToPath(new URL("..", import.meta.url));
+  repo = fileURLToPath(new URL("../..", import.meta.url));
 const directory = await mkdtemp(join(tmpdir(), "memos-phone-api-"));
 const database = "memos-phone-api-test",
   processes: ChildProcess[] = [],
@@ -468,7 +468,7 @@ try {
       };
       const processed = await exec(
         "python3",
-        ["scripts/test-pipeline-worker.py", report.memoryId, report.sourceSHA256],
+        ["tests/integration/pipeline_worker.py", report.memoryId, report.sourceSHA256],
         { cwd: repo, timeout: 60000, env: workerEnv },
       );
       console.log(processed.stdout.trim());
@@ -505,7 +505,7 @@ try {
       );
       const failedJob = await call("/api/uploads/complete", { receipt: failedTicket.receipt }, report.personalKey);
       await assert.rejects(
-        exec("python3", ["scripts/test-pipeline-worker.py", failedJob.memory.id, sha(bytes), "--fail"], {
+        exec("python3", ["tests/integration/pipeline_worker.py", failedJob.memory.id, sha(bytes), "--fail"], {
           cwd: repo,
           timeout: 60000,
           env: workerEnv,

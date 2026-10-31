@@ -158,7 +158,7 @@ def _identity_hex(v) -> str:
 
 def _source_check():
     """source_check.py next to this file: only download what the upload service issued. Loaded by path, so this
-    module keeps working when it is itself loaded as a bare file (scripts/test-connection-worker.py)."""
+    module keeps working when it is itself loaded as a bare file (tests/integration/connection_worker.py)."""
     import importlib.util
 
     path = Path(__file__).resolve().with_name("source_check.py")

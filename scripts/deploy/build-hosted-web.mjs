@@ -3,7 +3,7 @@ import { build } from "vite";
 import { cp, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 const destination = process.argv[2];
-if (!destination) throw new Error("Usage: node scripts/build-hosted-web.mjs <hosting-checkout/public>");
+if (!destination) throw new Error("Usage: node scripts/deploy/build-hosted-web.mjs <hosting-checkout/public>");
 process.env.VITE_STDB_URL = "wss://maincloud.spacetimedb.com";
 process.env.VITE_STDB_DATABASE = "jerry-memory-replay-phone-20261024";
 process.env.VITE_ASSET_ORIGIN_ALIASES = "https://jerry-memory-replay-phone.alightdell64.chatgpt.site";

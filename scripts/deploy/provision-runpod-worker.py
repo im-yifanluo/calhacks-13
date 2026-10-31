@@ -14,7 +14,7 @@ import subprocess
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 STATE = ROOT / "data/runpod-account"
 CLI = ROOT / "data/runpod-tools/bin/runpodctl"
 PLAN = json.loads((STATE / "deployment-plan.json").read_text())
@@ -70,7 +70,7 @@ signal.signal(signal.SIGINT, interrupted)
 
 # This runs before /start.sh and survives SSH disconnects. RunPod supplies its
 # pod-scoped runpodctl credential; the account-management key stays on the Mac.
-deadline_source = base64.b64encode((ROOT / "scripts/runpod-deadline.py").read_bytes()).decode()
+deadline_source = base64.b64encode((ROOT / "scripts/deploy/runpod-deadline.py").read_bytes()).decode()
 guard = """set -eu
 mkdir -p /workspace/memos-ops
 printf '%s' REPLACE_DEADLINE_SOURCE | base64 -d > /workspace/memos-ops/deadline.py

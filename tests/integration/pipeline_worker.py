@@ -27,7 +27,7 @@ def stage(name, work):
 
 
 def merge(work, title, memory_id, device, static=False):
-    scene = json.loads((Path(__file__).resolve().parents[1] / "apps/web/public/demo/memory.json").read_text())
+    scene = json.loads((Path(__file__).resolve().parents[2] / "apps/web/public/demo/memory.json").read_text())
     scene["title"] = "Synthetic transport fixture — no reconstruction"
     scene["id"] = memory_id
     path = work / ("memory.static.json" if static else "memory.json")

@@ -9,7 +9,7 @@ if (process.platform !== "darwin")
   throw new Error(
     "The native Swift acceptance test requires macOS and Xcode. Use npm run test:upload-api for the portable API checks.",
   );
-const root = fileURLToPath(new URL("..", import.meta.url));
+const root = fileURLToPath(new URL("../..", import.meta.url));
 const dir = await mkdtemp(join(tmpdir(), "memos-pipeline-test-"));
 const binary = join(dir, "pipeline-upload");
 function run(command, args, env = process.env) {
@@ -36,7 +36,7 @@ try {
     "-o",
     binary,
   ]);
-  await run(process.execPath, ["--import", "tsx", "scripts/test-upload-api.ts"], {
+  await run(process.execPath, ["--import", "tsx", "tests/integration/upload-api.ts"], {
     ...process.env,
     UPLOAD_TEST_R2: "1",
     UPLOAD_TEST_SCENE_BIN: binary,

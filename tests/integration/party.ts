@@ -1,6 +1,6 @@
 // Live test: real WebSocket clients, real reducer permissions, real subscription convergence.
 import assert from "node:assert/strict";
-import { DbConnection } from "../apps/web/src/module_bindings";
+import { DbConnection } from "../../apps/web/src/module_bindings";
 const database = process.env.STDB_DATABASE || "memory-replay";
 const uri = process.env.STDB_WS_URL || `ws://127.0.0.1:${process.env.STDB_PORT || 3055}`;
 const clients: DbConnection[] = [];
@@ -52,7 +52,7 @@ try {
     pipelineIdentity: worker.identity!,
     durationUs: 6_000_000n,
   });
-  const memory = leader.db.memory.requestId.find(requestId)!;
+  const memory = [...leader.db.memory.iter()].find((row) => row.requestId === requestId)!;
   await leader.reducers.createParty({
     memoryId: memory.id,
     name: "Test leader",
@@ -97,7 +97,7 @@ try {
     pipelineIdentity: worker.identity!,
     durationUs: 6_000_000n,
   });
-  const video = leader.db.memory.requestId.find(`${requestId}-video`)!;
+  const video = [...leader.db.memory.iter()].find((row) => row.requestId === `${requestId}-video`)!;
   await assert.rejects(guest.reducers.attachPartyMemory({ memoryId: video.id }), /leader/);
   await leader.reducers.attachPartyMemory({ memoryId: video.id });
   assert.equal(leader.db.room.id.find(roomId)!.memoryId, memory.id);

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
-import { makeHandler } from "../server/upload/src/handler.mjs";
-import { s3Config } from "../server/upload/src/node/s3.mjs";
-import { DbConnection } from "../apps/web/src/module_bindings";
+import { makeHandler } from "../../server/upload/src/handler.mjs";
+import { s3Config } from "../../server/upload/src/node/s3.mjs";
+import { DbConnection } from "../../apps/web/src/module_bindings";
 const database = process.env.STDB_DATABASE || "memory-replay";
 const uri = process.env.STDB_WS_URL || `ws://127.0.0.1:${process.env.STDB_PORT || 3055}`;
 const clients: DbConnection[] = [];
@@ -66,8 +66,8 @@ try {
     pipelineIdentity: a.conn.identity!,
     durationUs: 6_000_000n,
   });
-  await until(() => a.conn.db.memory.requestId.find(requestId));
-  const m = a.conn.db.memory.requestId.find(requestId)!;
+  await until(() => [...a.conn.db.memory.iter()].find((row) => row.requestId === requestId));
+  const m = [...a.conn.db.memory.iter()].find((row) => row.requestId === requestId)!;
   await a.conn.reducers.createRoom({
     memoryId: m.id,
     name: "Alice",
@@ -234,8 +234,8 @@ try {
     await new Promise<void>((r) => uploadServer.close(() => r()));
     throw error;
   }
-  await until(() => a.conn.db.memory.requestId.find(uploadedRequest));
-  const upload = a.conn.db.memory.requestId.find(uploadedRequest)!;
+  await until(() => [...a.conn.db.memory.iter()].find((row) => row.requestId === uploadedRequest));
+  const upload = [...a.conn.db.memory.iter()].find((row) => row.requestId === uploadedRequest)!;
   const callStatus = (token: string, status: string, progress: number, url = "") =>
     fetch(`${http}/v1/database/${database}/call/set_memory_status`, {
       method: "POST",
@@ -297,7 +297,7 @@ try {
     const identity = auto.conn.identity!.toHexString();
     for (const socket of proxy.clients) socket.terminate();
     await until(() => reconnects > 0);
-    await until(() => auto.conn.db.memory.requestId.find(uploadedRequest));
+    await until(() => [...auto.conn.db.memory.iter()].find((row) => row.requestId === uploadedRequest));
     assert.equal(auto.conn.identity!.toHexString(), identity);
     await auto.conn.reducers.sampleClock({
       clientSentUs: BigInt(Date.now()) * 1000n,

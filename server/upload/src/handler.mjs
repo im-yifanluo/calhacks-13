@@ -65,7 +65,7 @@ async function json(req) {
  * @param {string[]} options.allowedOrigins Browser origins allowed by CORS.
  * @param {(identity: string, authorization: string) => Promise<boolean>} options.verify
  * @param {(upload: object) => Promise<string>} [options.sign] Returns a signed PUT URL for an upload ticket.
- * @param {(key: string) => Promise<{ size: number, type?: string } | null>} [options.head]
+ * @param {(key: string) => Promise<{ size?: number, type?: string } | null>} [options.head]
  * @param {(upload: object, authorization: string, assignee: string) => Promise<unknown>} [options.createMemory]
  * @param {string} [options.pipelineIdentity] The GPU worker's SpacetimeDB identity.
  * @param {() => Promise<{ identity: string, token: string }>} [options.registerIdentity]

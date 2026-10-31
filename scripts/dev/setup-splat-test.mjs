@@ -1,9 +1,9 @@
 // Reproduce the local public-splat fixtures without committing binary assets.
-// Run from any directory: node scripts/setup-splat-test.mjs
+// Run from any directory: node scripts/dev/setup-splat-test.mjs
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 
-const directory = new URL("../apps/web/public/splat-test/", import.meta.url);
+const directory = new URL("../../apps/web/public/splat-test/", import.meta.url);
 const source = "https://sparkjs.dev/assets/splats/butterfly.spz";
 const expectedHash = "2e22c9967731bebc0ea74e1747cd42e955dec16a89dba9aac07d62a6c5780e0d";
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");

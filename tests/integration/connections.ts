@@ -8,11 +8,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
-import { createLocalHandler } from "../server/upload/src/node/local.mjs";
-import { DbConnection } from "../apps/web/src/module_bindings";
+import { createLocalHandler } from "../../server/upload/src/node/local.mjs";
+import { DbConnection } from "../../apps/web/src/module_bindings";
 
 const exec = promisify(execFile),
-  repo = fileURLToPath(new URL("..", import.meta.url));
+  repo = fileURLToPath(new URL("../..", import.meta.url));
 const directory = await mkdtemp(join(tmpdir(), "memos-connections-"));
 const database = "memos-connections-test",
   clients: DbConnection[] = [];
@@ -182,7 +182,7 @@ try {
   assert.equal(report.status, 200, JSON.stringify(connections));
   assert.equal(connections.interfaces.I5.transferVerified, false);
   assert.equal(connections.interfaces.I7.websocketVerified, false);
-  await exec(process.execPath, ["scripts/check-connections.mjs", app.origin], { cwd: repo });
+  await exec(process.execPath, ["scripts/dev/check-connections.mjs", app.origin], { cwd: repo });
 
   const leader = await connect(uri, owner.token),
     guest = await connect(uri);
@@ -207,8 +207,11 @@ try {
   };
   const queued = await upload(true),
     skipped = await upload(false);
-  await until(() => guest.db.memory.requestId.find(queued.requestId), "I3 uploaded memory not subscribed");
-  assert.equal(guest.db.memory.requestId.find(queued.requestId)!.status, "uploaded");
+  await until(
+    () => [...guest.db.memory.iter()].find((row) => row.requestId === queued.requestId),
+    "I3 uploaded memory not subscribed",
+  );
+  assert.equal([...guest.db.memory.iter()].find((row) => row.requestId === queued.requestId)!.status, "uploaded");
   console.log("PASS I3: verified PUT → create_memory → one row on completion retries → live subscriber");
 
   const worker = JSON.parse(await readFile(join(uploadDir, ".worker-identity.json"), "utf8"));
@@ -223,7 +226,7 @@ try {
   };
   const python = async (...args: string[]) =>
     (
-      await exec(process.env.PYTHON || "python3", ["-I", "scripts/test-connection-worker.py", ...args], {
+      await exec(process.env.PYTHON || "python3", ["-I", "tests/integration/connection_worker.py", ...args], {
         cwd: repo,
         env: workerEnv,
         timeout: 20000,
@@ -262,7 +265,7 @@ try {
     durationUs: 6000000n,
   });
   await leader.reducers.createParty({
-    memoryId: leader.db.memory.requestId.find(placeholder)!.id,
+    memoryId: [...leader.db.memory.iter()].find((row) => row.requestId === placeholder)!.id,
     name: "Connection leader",
     device: "desktop",
   });
@@ -277,7 +280,7 @@ try {
   assert.equal(published.sha256, createHash("sha256").update(bytes).digest("hex"));
   assert.equal(published.files, 2);
   await until(
-    () => guest.db.memory.requestId.find(queued.requestId)?.status === "processing",
+    () => [...guest.db.memory.iter()].find((row) => row.requestId === queued.requestId)?.status === "processing",
     "I4 processing status not subscribed",
   );
   const manifestReply = await fetch(published.manifestUrl, { headers: { Origin: app.origin } });
@@ -342,21 +345,21 @@ try {
   console.log("PASS I7: two WebSocket clients, party, leader-only clock, poses, exclusive grab/release, clock sample");
 
   const output = join(directory, "worker.env");
-  await exec(process.execPath, ["scripts/local-worker-env.mjs", output], {
+  await exec(process.execPath, ["scripts/dev/local-worker-env.mjs", output], {
     cwd: repo,
     env: { ...process.env, ...settings },
   });
   assert.match(await readFile(output, "utf8"), /MEMREPLAY_PUBLIC_BASE_URL=/);
   assert.equal((await stat(output)).mode & 0o777, 0o600);
   await assert.rejects(
-    exec(process.execPath, ["scripts/local-worker-env.mjs", output], {
+    exec(process.execPath, ["scripts/dev/local-worker-env.mjs", output], {
       cwd: repo,
       env: { ...process.env, ...settings },
     }),
   );
   console.log("PASS setup: private local worker environment generated and token verified");
   if (process.argv.includes("--full")) {
-    for (const script of ["scripts/test-multiplayer.ts", "scripts/test-party.ts"]) {
+    for (const script of ["tests/integration/multiplayer.ts", "tests/integration/party.ts"]) {
       const result = await exec(process.execPath, ["--import", "tsx", script], {
         cwd: repo,
         env: { ...process.env, STDB_DATABASE: database, STDB_WS_URL: uri },

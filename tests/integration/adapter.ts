@@ -5,21 +5,21 @@
 // Run (no npm script needed; any free port and database name):
 //   spacetime start --listen-addr 127.0.0.1:3065                                      # terminal 1
 //   spacetime publish -s http://127.0.0.1:3065 --module-path server/spacetime --anonymous --yes memreplay-adapter
-//   STDB_WS_URL=ws://127.0.0.1:3065 STDB_DATABASE=memreplay-adapter npx tsx scripts/test-adapter.ts
-// (`node --import tsx scripts/test-adapter.ts` works too.) Defaults: ws://127.0.0.1:${STDB_PORT:-3055}, database memory-replay.
+//   STDB_WS_URL=ws://127.0.0.1:3065 STDB_DATABASE=memreplay-adapter npx tsx tests/integration/adapter.ts
+// (`node --import tsx tests/integration/adapter.ts` works too.) Defaults: ws://127.0.0.1:${STDB_PORT:-3055}, database memory-replay.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { Group, Quaternion, Vector3 } from "three";
 import type { Keyframe } from "@memreplay/shared";
-import { DbConnection } from "../apps/web/src/module_bindings";
-import { NetAdapter } from "../apps/web/src/net/adapter";
-import { Multiplayer } from "../apps/web/src/net/index";
-import { initPhysics } from "../apps/web/src/physics";
-import { Viewer } from "../apps/web/src/viewer";
+import { DbConnection } from "../../apps/web/src/module_bindings";
+import { NetAdapter } from "../../apps/web/src/net/adapter";
+import { Multiplayer } from "../../apps/web/src/net/index";
+import { initPhysics } from "../../apps/web/src/physics";
+import { Viewer } from "../../apps/web/src/viewer";
 
 const database = process.env.STDB_DATABASE || "memory-replay";
 const uri = process.env.STDB_WS_URL || `ws://127.0.0.1:${process.env.STDB_PORT || 3055}`;
-const manifest = JSON.parse(readFileSync(new URL("../apps/web/public/mock/memory.json", import.meta.url), "utf8"));
+const manifest = JSON.parse(readFileSync(new URL("../../apps/web/public/mock/memory.json", import.meta.url), "utf8"));
 const original: Keyframe[] = manifest.objects[0].track;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(predicate: () => unknown, what: string, ms = 10_000): Promise<void> {

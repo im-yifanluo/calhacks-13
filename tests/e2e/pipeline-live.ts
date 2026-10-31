@@ -7,9 +7,9 @@ import { mkdtemp, readFile, rm, mkdir, writeFile, stat } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateManifest } from "../apps/web/src/loader";
-import { DbConnection } from "../apps/web/src/module_bindings";
-import { decodeAccountKey } from "../apps/web/src/account-key";
+import { validateManifest } from "../../apps/web/src/loader";
+import { DbConnection } from "../../apps/web/src/module_bindings";
+import { decodeAccountKey } from "../../apps/web/src/account-key";
 
 const args = process.argv.slice(2);
 const option = (name: string) => {
@@ -32,7 +32,7 @@ if (
 if (process.platform !== "darwin")
   throw new Error("Native upload verification requires macOS/Xcode. The pod runs start-worker.sh on Linux.");
 await stat(clip);
-const root = fileURLToPath(new URL("..", import.meta.url));
+const root = fileURLToPath(new URL("../..", import.meta.url));
 const privateDir = await mkdtemp(join(tmpdir(), "memos-live-acceptance-"));
 const outputDir = join(root, "data", "pipeline-acceptance-" + Date.now());
 await mkdir(outputDir, { mode: 0o700, recursive: true });

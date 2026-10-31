@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-repo = Path(__file__).resolve().parents[1]
+repo = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("connection_worker", repo / "pipeline/memreplay/worker.py")
 worker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)

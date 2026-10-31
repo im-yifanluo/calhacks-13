@@ -2,7 +2,7 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { networkInterfaces } from "node:os";
-const root = fileURLToPath(new URL("../", import.meta.url));
+const root = fileURLToPath(new URL("../../", import.meta.url));
 const lan = process.argv.includes("--lan") || process.env.PARTY_LAN === "1";
 const https = process.env.PARTY_HTTPS === "1";
 const port = process.env.VITE_PORT || "5173";
@@ -56,9 +56,9 @@ const children = [
   }),
   spawn(
     process.execPath,
-    [fileURLToPath(new URL("../node_modules/vite/bin/vite.js", import.meta.url)), "--strictPort"],
+    [fileURLToPath(new URL("../../node_modules/vite/bin/vite.js", import.meta.url)), "--strictPort"],
     {
-      cwd: fileURLToPath(new URL("../apps/web/", import.meta.url)),
+      cwd: fileURLToPath(new URL("../../apps/web/", import.meta.url)),
       env,
       stdio: "inherit",
     },

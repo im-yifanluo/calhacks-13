@@ -9,10 +9,10 @@ from pathlib import Path
 
 
 def generate(demo):
-    ROOT = Path(__file__).resolve().parents[1]
-    folder = ROOT / "apps" / "ios" / "SceneCapture"
+    IOS = Path(__file__).resolve().parents[1]
+    folder = IOS / "SceneCapture"
     name = "SceneCaptureDemo" if demo else "SceneCapture"
-    project = ROOT / "apps" / "ios" / f"{name}.xcodeproj"
+    project = IOS / f"{name}.xcodeproj"
     project.mkdir(exist_ok=True)
     # Xcode may have saved a user's signing team or app registration settings.
     # Retain these when regenerating source membership instead of resetting setup.

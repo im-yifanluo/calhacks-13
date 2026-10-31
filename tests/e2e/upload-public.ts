@@ -2,11 +2,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { DbConnection } from "../apps/web/src/module_bindings";
-import { decodeAccountKey } from "../apps/web/src/account-key";
+import { DbConnection } from "../../apps/web/src/module_bindings";
+import { decodeAccountKey } from "../../apps/web/src/account-key";
 const base = process.argv[2];
 if (!base || new URL(base).protocol !== "https:" || new URL(base).origin !== base)
-  throw new Error("Usage: npx tsx scripts/test-upload-public.ts https://<API-origin>");
+  throw new Error("Usage: npx tsx tests/e2e/upload-public.ts https://<API-origin>");
 const statePath = "data/public-upload-test.private.json";
 await mkdir("data", { recursive: true });
 let state: any = {};
@@ -112,7 +112,7 @@ try {
             try {
               assert.equal(c.identity?.toHexString(), account.identity);
               assert.equal(c.db.profile.identity.find(c.identity!)?.displayName, account.displayName);
-              const memory = c.db.memory.requestId.find(state.prepared.requestId);
+              const memory = [...c.db.memory.iter()].find((row) => row.requestId === state.prepared.requestId);
               assert.equal(memory?.id.toString(), completed.memory.id);
               assert.equal(memory?.owner.toHexString(), account.identity);
               assert.equal(memory?.sourceUrl, completed.memory.sourceUrl);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { databaseConfig } from "../server/upload/src/database.mjs";
-import { makeHandler } from "../server/upload/src/handler.mjs";
+import { databaseConfig } from "../../server/upload/src/database.mjs";
+import { makeHandler } from "../../server/upload/src/handler.mjs";
 
 // Deliberately require an explicit local test database; never default to production.
 const database = process.env.STDB_DATABASE;
