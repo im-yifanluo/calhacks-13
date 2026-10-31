@@ -1,4 +1,4 @@
-"""Pipeline worker and publishing (docs/INTEGRATION.md §4, jerry's docs/P4.md "P1/P2 worker contract").
+"""Pipeline worker and publishing (the I4/I5 contract in docs/architecture.md; routes in docs/upload-api.md).
 
   memreplay publish <work> --to <dir>       copy the files the viewer loads into <dir> (e.g. apps/web/public/memories/<id>)
   memreplay publish <work> --to s3          upload them to the S3/R2 bucket from the upload service's env

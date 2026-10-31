@@ -1,4 +1,4 @@
-"""The demo clips scored in docs/VISION_PIPELINE_REPORT.md: five phone samples (img*) and nine Ray-Ban Meta
+"""The demo clips scored in docs/reports/vision-pipeline.md: five phone samples (img*) and nine Ray-Ban Meta
 glasses clips (v* indoors, o* outdoors). Shared by the evaluation tools in this folder."""
 
 TITLES = {

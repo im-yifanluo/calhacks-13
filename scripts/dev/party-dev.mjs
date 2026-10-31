@@ -42,11 +42,11 @@ const env = {
   ...(lan ? { VITE_HOST: "0.0.0.0" } : {}),
 };
 console.log(
-  `Party demo: ${origin}\nDatabase: ${database} on port ${env.STDB_PORT}\nPublish the current module before joining. Six-digit passwords use the upload service; see docs/PARTIES.md.`,
+  `Party demo: ${origin}\nDatabase: ${database} on port ${env.STDB_PORT}\nPublish the current module before joining. Six-digit passwords use the upload service; see docs/multiplayer.md.`,
 );
 if (lan)
   console.log(
-    "Open this same address on the Mac and iPhone using the same Wi-Fi. Keep the Mac awake. Guest parties work over HTTP; account sign-in, camera capture and immersive VR need trusted HTTPS.",
+    "Open this same address on the Mac and iPhone using the same Wi-Fi. Keep the Mac awake. Guest parties work over HTTP; account sign-in, copying links and immersive VR need trusted HTTPS.",
   );
 const children = [
   spawn(process.execPath, ["server/upload/src/node/server.mjs"], {

@@ -2,7 +2,7 @@
 
 Native capture app: record a clip from Ray-Ban Meta glasses (or a simulated camera), keep it on the phone, and upload
 it to the memos upload API with a durable, resumable queue. Setup, testing and the hosted-server flow are in
-[docs/PHONE_APP.md](../../docs/PHONE_APP.md).
+[docs/ios.md](../../docs/ios.md).
 
 | Project | Target | Camera feed | Requirements |
 | --- | --- | --- | --- |

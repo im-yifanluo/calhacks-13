@@ -49,7 +49,7 @@ def _srgb_oetf(x: np.ndarray) -> np.ndarray:
 
 # Fitted (Oct 24) to how macOS/iOS show these clips: AVFoundation's SDR rendering of 16 frames from iPhone HDR,
 # Ray-Ban Meta exports and outdoor clips; mean error 3 levels of 255 (the previous curve, which put HLG reference
-# white at 85 %, was 36 levels too bright and flat). See docs/VISION_PIPELINE_REPORT.md, "Colour of the input".
+# white at 85 %, was 36 levels too bright and flat). See docs/reports/vision-pipeline.md, "Colour of the input".
 HLG_SYSTEM_GAMMA = 0.8478  # OOTF exponent on scene luminance
 HLG_EXPOSURE = 1.0233  # scene-linear 1.0 (full HLG signal) -> SDR white
 HLG_KNEE = 0.9451  # soft shoulder above this (linear)
